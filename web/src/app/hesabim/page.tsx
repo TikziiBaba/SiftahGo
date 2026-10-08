@@ -14,13 +14,14 @@ type Row = Appointment & { businesses: { name: string; slug: string; phone: stri
 
 export default function AccountPage() {
   const router = useRouter();
-  const supabase = createClient();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [lists, setLists] = useState<{ upcoming: Row[]; past: Row[] } | null>(null);
   const [reviewed, setReviewed] = useState<Set<string>>(new Set());
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
+    // İstemci burada oluşturulur: build sırasında (env yokken) sayfa çizilirken değil.
+    const supabase = createClient();
     const { data: auth } = await supabase.auth.getUser();
     if (!auth.user) return router.replace("/giris?next=/hesabim");
     const [p, a, r] = await Promise.all([
@@ -39,7 +40,7 @@ export default function AccountPage() {
     const now = new Date().toISOString();
     const isUpcoming = (r: Row) => r.starts_at >= now && ["pending", "confirmed"].includes(r.status);
     setLists({ upcoming: rows.filter(isUpcoming).reverse(), past: rows.filter((r) => !isUpcoming(r)) });
-  }, [supabase, router]);
+  }, [router]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- veriyi ilk açılışta yükle
@@ -48,13 +49,13 @@ export default function AccountPage() {
 
   async function cancel(id: string) {
     if (!confirm("Randevuyu iptal etmek istediğinize emin misiniz?")) return;
-    const { error } = await supabase.rpc("cancel_appointment", { p_id: id });
+    const { error } = await createClient().rpc("cancel_appointment", { p_id: id });
     if (error) return setError(errorMessage(error));
     load();
   }
 
   async function logout() {
-    await supabase.auth.signOut();
+    await createClient().auth.signOut();
     router.replace("/");
     router.refresh();
   }
