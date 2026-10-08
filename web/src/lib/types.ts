@@ -29,6 +29,8 @@ export type Business = {
   timezone: string;
   rating_avg: number;
   rating_count: number;
+  plan_id: string | null;
+  subscription_ends_at: string | null;
 };
 
 export type Service = {
@@ -50,6 +52,25 @@ export type Staff = {
   avatar_url: string | null;
   is_active: boolean;
   sort_order: number;
+};
+
+export type Plan = {
+  id: string;
+  name: string;
+  price: number;
+  staff_limit: number | null;
+  features: string[];
+  sort_order: number;
+};
+
+export type Payment = {
+  id: string;
+  plan_id: string;
+  merchant_oid: string;
+  amount: number;
+  status: "pending" | "paid" | "failed";
+  created_at: string;
+  paid_at: string | null;
 };
 
 export type StaffService = { staff_id: string; service_id: string };

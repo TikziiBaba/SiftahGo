@@ -92,17 +92,17 @@ export default function SettingsPage() {
             </div>
             <ImageButton label="Logo yükle" busy={uploading === "logo"} onPick={(f) => onPick("logo", f)} />
             {business.logo_url && (
-              <button className="btn btn-ghost text-rose-600" onClick={() => saveImages({ logo_url: null })}>Kaldır</button>
+              <button className="btn btn-ghost text-rose-400" onClick={() => saveImages({ logo_url: null })}>Kaldır</button>
             )}
           </div>
           <div>
-            <div className="h-36 overflow-hidden rounded-2xl bg-gradient-to-br from-brand-700 to-brand-500">
+            <div className="h-36 overflow-hidden rounded-2xl bg-gradient-to-br from-brand-900 to-surface-2">
               {business.cover_url && <img src={business.cover_url} alt="Kapak" className="size-full object-cover" />}
             </div>
             <div className="mt-3 flex gap-2">
               <ImageButton label="Kapak fotoğrafı yükle" busy={uploading === "cover"} onPick={(f) => onPick("cover", f)} />
               {business.cover_url && (
-                <button className="btn btn-ghost text-rose-600" onClick={() => saveImages({ cover_url: null })}>Kaldır</button>
+                <button className="btn btn-ghost text-rose-400" onClick={() => saveImages({ cover_url: null })}>Kaldır</button>
               )}
             </div>
           </div>
@@ -142,7 +142,7 @@ export default function SettingsPage() {
             <div>
               <label className="label">Sayfa adresi</label>
               <input required className="input" value={form.slug} onChange={(e) => setForm({ ...form, slug: slugInput(e.target.value) })} />
-              <p className="mt-1 text-xs text-stone-500">{SITE_DOMAIN}/{slugify(form.slug)}</p>
+              <p className="mt-1 text-xs text-ink-3">{SITE_DOMAIN}/{slugify(form.slug)}</p>
             </div>
             <div>
               <label className="label">Kategori</label>
@@ -196,19 +196,19 @@ export default function SettingsPage() {
               <input type="number" min={1} max={365} className="input" value={form.booking_days} onChange={set("booking_days")} />
             </div>
             <label className="flex items-start gap-2 text-sm sm:col-span-3">
-              <input type="checkbox" className="mt-0.5 size-4 accent-brand-700" checked={form.auto_confirm}
+              <input type="checkbox" className="mt-0.5 size-4 accent-brand-400" checked={form.auto_confirm}
                 onChange={(e) => setForm({ ...form, auto_confirm: e.target.checked })} />
               <span>
                 <b>Randevuları otomatik onayla</b>
-                <span className="block text-stone-500">Kapalıysa her randevuyu panelden sizin onaylamanız gerekir.</span>
+                <span className="block text-ink-3">Kapalıysa her randevuyu panelden sizin onaylamanız gerekir.</span>
               </span>
             </label>
             <label className="flex items-start gap-2 text-sm sm:col-span-3">
-              <input type="checkbox" className="mt-0.5 size-4 accent-brand-700" checked={form.is_published}
+              <input type="checkbox" className="mt-0.5 size-4 accent-brand-400" checked={form.is_published}
                 onChange={(e) => setForm({ ...form, is_published: e.target.checked })} />
               <span>
                 <b>Sayfam yayında</b>
-                <span className="block text-stone-500">Kapalıysa işletmeniz aramada görünmez ve randevu alınamaz.</span>
+                <span className="block text-ink-3">Kapalıysa işletmeniz aramada görünmez ve randevu alınamaz.</span>
               </span>
             </label>
           </div>
@@ -218,7 +218,7 @@ export default function SettingsPage() {
           <button disabled={busy} className="btn btn-primary px-6">
             {busy && <Loader2 className="size-4 animate-spin" />} Kaydet
           </button>
-          {message && <p className={`text-sm ${message.ok ? "text-emerald-700" : "text-rose-600"}`}>{message.text}</p>}
+          {message && <p className={`text-sm ${message.ok ? "text-emerald-400" : "text-rose-400"}`}>{message.text}</p>}
         </div>
       </form>
     </div>

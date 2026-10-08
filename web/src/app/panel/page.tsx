@@ -113,18 +113,18 @@ export default function AppointmentsPage() {
         <Stat label="Onay bekleyen" value={String(pending.length)} />
       </div>
 
-      {error && <p className="mt-4 rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
+      {error && <p className="mt-4 rounded-xl bg-rose-500/10 p-3 text-sm text-rose-300">{error}</p>}
 
       {pending.length > 0 && (
-        <section className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-          <h2 className="font-semibold text-amber-900">Onay bekleyen randevular</h2>
+        <section className="mt-6 rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4">
+          <h2 className="font-semibold text-amber-200">Onay bekleyen randevular</h2>
           <ul className="mt-3 space-y-2">
             {pending.map((r) => (
-              <li key={r.id} className="flex flex-wrap items-center gap-3 rounded-xl bg-white p-3 text-sm">
+              <li key={r.id} className="flex flex-wrap items-center gap-3 rounded-xl bg-surface p-3 text-sm">
                 <span className="font-medium">{formatDate(r.starts_at, { weekday: undefined })} {formatTime(r.starts_at)}</span>
                 <span className="flex-1">{r.customer_name} · {r.service_name}</span>
                 <button className="btn btn-primary py-1.5" onClick={() => setStatus(r.id, "confirmed")}>Onayla</button>
-                <button className="btn btn-ghost py-1.5 text-rose-600" onClick={() => setStatus(r.id, "cancelled")}>Reddet</button>
+                <button className="btn btn-ghost py-1.5 text-rose-400" onClick={() => setStatus(r.id, "cancelled")}>Reddet</button>
               </li>
             ))}
           </ul>
@@ -133,25 +133,25 @@ export default function AppointmentsPage() {
 
       <section className="mt-6">
         {rows === null ? (
-          <div className="card h-32 animate-pulse bg-stone-100" />
+          <div className="card h-32 animate-pulse bg-surface-2" />
         ) : rows.length === 0 ? (
-          <div className="card p-10 text-center text-stone-500">Bu gün için randevu yok.</div>
+          <div className="card p-10 text-center text-ink-3">Bu gün için randevu yok.</div>
         ) : (
           <ul className="space-y-2">
             {rows.map((r) => (
               <li key={r.id} className={`card flex flex-wrap items-center gap-4 p-4 ${r.status === "cancelled" ? "opacity-60" : ""}`}>
                 <div className="w-20 text-center">
                   <p className="text-lg font-bold">{formatTime(r.starts_at)}</p>
-                  <p className="text-xs text-stone-500">{formatTime(r.ends_at)}</p>
+                  <p className="text-xs text-ink-3">{formatTime(r.ends_at)}</p>
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold">{r.customer_name}</p>
-                  <p className="text-sm text-stone-600">
+                  <p className="text-sm text-ink-2">
                     {r.service_name}
                     {r.staff && ` · ${r.staff.name}`} · {formatPrice(r.price)}
                   </p>
                   <div className="mt-0.5 flex flex-wrap gap-x-4 text-sm">
-                    <a href={`tel:${r.customer_phone}`} className="inline-flex items-center gap-1 text-brand-700">
+                    <a href={`tel:${r.customer_phone}`} className="inline-flex items-center gap-1 text-brand-300">
                       <Phone className="size-3.5" /> {r.customer_phone}
                     </a>
                     {["pending", "confirmed"].includes(r.status) && (
@@ -159,13 +159,13 @@ export default function AppointmentsPage() {
                         href={whatsappLink(r.customer_phone, reminderText(r, business.name))}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-emerald-700"
+                        className="inline-flex items-center gap-1 text-emerald-400"
                       >
                         <MessageCircle className="size-3.5" /> WhatsApp ile hatırlat
                       </a>
                     )}
                   </div>
-                  {r.note && <p className="mt-1 text-sm italic text-stone-500">“{r.note}”</p>}
+                  {r.note && <p className="mt-1 text-sm italic text-ink-3">“{r.note}”</p>}
                 </div>
                 <select
                   value={r.status}
@@ -203,7 +203,7 @@ export default function AppointmentsPage() {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="card p-4">
-      <p className="text-xs text-stone-500">{label}</p>
+      <p className="text-xs text-ink-3">{label}</p>
       <p className="mt-1 text-lg font-bold md:text-xl">{value}</p>
     </div>
   );
@@ -268,11 +268,11 @@ function AddAppointment(props: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-end bg-black/40 sm:place-items-center" onClick={props.onClose}>
+    <div className="fixed inset-0 z-50 grid place-items-end bg-black/70 sm:place-items-center" onClick={props.onClose}>
       <form
         onSubmit={submit}
         onClick={(e) => e.stopPropagation()}
-        className="max-h-[90vh] w-full overflow-y-auto rounded-t-3xl bg-white p-6 sm:max-w-lg sm:rounded-3xl"
+        className="max-h-[90vh] w-full overflow-y-auto rounded-t-3xl bg-surface p-6 sm:max-w-lg sm:rounded-3xl"
       >
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold">Randevu ekle</h2>
@@ -280,7 +280,7 @@ function AddAppointment(props: {
             <X className="size-5" />
           </button>
         </div>
-        <p className="mt-1 text-sm text-stone-500">Telefonla veya dükkânda alınan randevuları buraya girin.</p>
+        <p className="mt-1 text-sm text-ink-3">Telefonla veya dükkânda alınan randevuları buraya girin.</p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <label className="label">Hizmet</label>
@@ -329,7 +329,7 @@ function AddAppointment(props: {
             <input className="input" value={form.note} onChange={set("note")} />
           </div>
         </div>
-        {error && <p className="mt-3 text-sm text-rose-600">{error}</p>}
+        {error && <p className="mt-3 text-sm text-rose-400">{error}</p>}
         <button disabled={busy} className="btn btn-primary mt-5 w-full py-3">
           {busy && <Loader2 className="size-4 animate-spin" />} Kaydet
         </button>

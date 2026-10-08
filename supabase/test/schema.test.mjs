@@ -63,6 +63,30 @@ const svc60 = (await as(A, `insert into services (business_id, name, duration_mi
 const slots = async (svc, day, uid = null) =>
   (await as(uid, `select slot_start, staff_id from get_available_slots($1, $2, $3)`, [biz, svc, day])).rows;
 
+// --- abonelik: ödeme yapılmadan işletme kapalı
+ok((await slots(svc30, monday)).length === 0, 'aboneliği olmayan işletmede boş saat yok');
+ok((await as(null, `select id from businesses`)).rows.length === 0, 'aboneliği olmayan işletme aramada görünmez');
+await expectError(() => as(null, `select book_appointment($1, $2, null, $3, 'Cem Yılmaz', '05551112233')`, [biz, svc30, `${monday}T07:00:00Z`]), /randevu almıyor/, 'aboneliği olmayan işletme randevu almaz');
+await expectError(() => as(A, `insert into staff (business_id, name) values ($1, 'Fazla')`, [biz]), /en fazla 1/, 'paketsiz işletmeye 2. personel eklenemez');
+await expectError(() => as(A, `insert into appointments (business_id, service_name, customer_name, customer_phone, starts_at, ends_at) values ($1,'x','x','x',now(),now()+interval '1h')`, [biz]), /row-level security/, 'aboneliksiz işletme elle randevu giremez');
+
+await as(A, `update businesses set subscription_ends_at = now() + interval '1 year', plan_id = 'pro' where id = $1`, [biz]);
+ok((await db.query(`select subscription_ends_at from businesses where id = $1`, [biz])).rows[0].subscription_ends_at === null, 'işletme sahibi aboneliği elle uzatamaz');
+
+await expectError(() => as(C, `select * from create_payment('esnaf')`), /Önce işletmenizi/, 'işletmesi olmayan ödeme başlatamaz');
+await expectError(() => as(A, `select * from create_payment('yok')`), /Paket bulunamadı/, 'olmayan paket reddedildi');
+const pay = (await as(A, `select * from create_payment('esnaf')`)).rows[0];
+ok(/^SG[0-9a-f0-9]+$/i.test(pay.merchant_oid) && Number(pay.amount) === 449, `ödeme kaydı: ${pay.merchant_oid} ₺${pay.amount}`);
+ok((await as(A, `select id from payments`)).rows.length === 1 && (await as(C, `select id from payments`)).rows.length === 0, 'ödemeleri sadece işletme sahibi görür');
+await expectError(() => as(A, `select activate_subscription($1, 449)`, [pay.merchant_oid]), /permission denied/, 'abonelik istemciden onaylanamaz');
+await expectError(() => db.query(`select activate_subscription($1, 400)`, [pay.merchant_oid]), /eksik/, 'eksik tutarla onay reddedildi');
+await db.query(`select activate_subscription($1, 449)`, [pay.merchant_oid]);
+const sub1 = (await db.query(`select plan_id, subscription_ends_at from businesses where id = $1`, [biz])).rows[0];
+const days = (sub1.subscription_ends_at - Date.now()) / 864e5;
+ok(sub1.plan_id === 'esnaf' && days > 29.9 && days < 30.1, `ödeme sonrası 30 gün Esnaf paketi: ${days.toFixed(2)} gün`);
+await db.query(`select activate_subscription($1, 449)`, [pay.merchant_oid]);
+ok((await db.query(`select subscription_ends_at from businesses where id = $1`, [biz])).rows[0].subscription_ends_at.getTime() === sub1.subscription_ends_at.getTime(), 'tekrar gelen bildirim süreyi uzatmaz');
+
 let s = await slots(svc30, monday);
 ok(s.length === 20, `30 dk hizmet için 20 boş saat (09:00-18:30): ${s.length}`);
 ok(s[0].slot_start.toISOString().endsWith('T06:00:00.000Z'), `ilk saat 09:00 İstanbul: ${s[0].slot_start.toISOString()}`);
@@ -148,6 +172,14 @@ await as(A, `insert into time_off (business_id, staff_id, starts_at, ends_at) va
 ok((await slots(svc30, monday)).length === 18, 'personel izinli olunca kapasite düştü');
 await as(A, `insert into time_off (business_id, starts_at, ends_at) values ($1, $2, $3)`, [biz, `${monday}T00:00:00Z`, `${monday}T21:00:00Z`]);
 ok((await slots(svc30, monday)).length === 0, 'işletme kapalı gün');
+
+// paket düşürme: Başlangıç (1 personel) -> fazla personel pasif olur
+const pay2 = (await as(A, `select * from create_payment('baslangic')`)).rows[0];
+await db.query(`select activate_subscription($1, 249)`, [pay2.merchant_oid]);
+const sub2 = (await db.query(`select plan_id, subscription_ends_at from businesses where id = $1`, [biz])).rows[0];
+ok(sub2.plan_id === 'baslangic' && (sub2.subscription_ends_at - Date.now()) / 864e5 > 59.9, 'yeni ödeme kalan süreye eklendi (60 gün)');
+ok((await db.query(`select count(*)::int c from staff where business_id = $1 and is_active`, [biz])).rows[0].c === 1, 'küçük pakete geçince fazla personel pasif oldu');
+await expectError(() => as(A, `select * from get_customers($1)`, [biz]), /paketinizde yok/, 'Başlangıç paketinde müşteri defteri yok');
 
 // yayından kaldırılan işletme
 await as(A, `update businesses set is_published = false where id = $1`, [biz]);

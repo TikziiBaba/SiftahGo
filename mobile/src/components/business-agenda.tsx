@@ -2,8 +2,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, FlatList, Linking, Pressable, RefreshControl, Text, View } from 'react-native';
 
-import { Card, Empty, Loading, StatusBadge, styles } from '@/components/ui';
-import { colors, STATUS } from '@/lib/constants';
+import { Button, Card, Empty, Loading, StatusBadge, styles } from '@/components/ui';
+import { colors, STATUS, WEB_URL } from '@/lib/constants';
 import {
   addDays,
   dayBounds,
@@ -23,12 +23,21 @@ type Row = Appointment & { staff: { name: string } | null };
 /** İşletme sahibi için günlük randevu listesi (detaylı yönetim web panelinde). */
 export function BusinessAgenda({ userId }: { userId: string }) {
   const [business, setBusiness] = useState<Business | null | undefined>(undefined);
+  const [subscribed, setSubscribed] = useState(true);
   const [day, setDay] = useState(todayStr);
   const [rows, setRows] = useState<Row[] | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    supabase.from('businesses').select('*').eq('owner_id', userId).maybeSingle().then(({ data }) => setBusiness(data));
+    supabase
+      .from('businesses')
+      .select('*')
+      .eq('owner_id', userId)
+      .maybeSingle()
+      .then(({ data }) => {
+        setSubscribed(!!data?.subscription_ends_at && new Date(data.subscription_ends_at) > new Date());
+        setBusiness(data);
+      });
   }, [userId]);
 
   const load = useCallback(async () => {
@@ -82,6 +91,16 @@ export function BusinessAgenda({ userId }: { userId: string }) {
     return (
       <View style={styles.content}>
         <Empty text="Henüz işletmenizi oluşturmadınız. İşletme kurulumunu web panelinden yapabilirsiniz." />
+      </View>
+    );
+  }
+
+  if (!subscribed) {
+    return (
+      <View style={styles.content}>
+        <Empty text="Aktif paketiniz yok. Paket seçene kadar sayfanız yayında görünmez ve randevu alınamaz.">
+          <Button title="Paketleri gör" onPress={() => Linking.openURL(`${WEB_URL}/panel/abonelik`)} style={{ alignSelf: 'stretch' }} />
+        </Empty>
       </View>
     );
   }

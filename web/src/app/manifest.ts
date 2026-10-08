@@ -8,8 +8,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Esnaf için online randevu ve takvim yönetimi.",
     start_url: "/panel",
     display: "standalone",
-    background_color: "#fafaf9",
-    theme_color: "#0f766e",
+    background_color: "#060808",
+    theme_color: "#060808",
     lang: "tr",
     icons: [
       { src: "/icon-192.png", sizes: "192x192", type: "image/png" },

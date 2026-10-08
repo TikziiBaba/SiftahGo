@@ -70,7 +70,7 @@ export default function AccountPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold">Merhaba{profile?.full_name ? `, ${profile.full_name.split(" ")[0]}` : ""}</h1>
-            <p className="text-stone-500">Randevularınızı buradan takip edebilirsiniz.</p>
+            <p className="text-ink-3">Randevularınızı buradan takip edebilirsiniz.</p>
           </div>
           <div className="flex gap-2">
             {profile?.role === "business" && (
@@ -80,15 +80,15 @@ export default function AccountPage() {
           </div>
         </div>
 
-        {error && <p className="mt-4 rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
+        {error && <p className="mt-4 rounded-xl bg-rose-500/10 p-3 text-sm text-rose-300">{error}</p>}
 
         <h2 className="mt-8 font-semibold">Yaklaşan randevular</h2>
         {lists === null ? (
-          <div className="card mt-3 h-24 animate-pulse bg-stone-100" />
+          <div className="card mt-3 h-24 animate-pulse bg-surface-2" />
         ) : upcoming.length === 0 ? (
           <div className="card mt-3 flex flex-col items-center p-8 text-center">
-            <CalendarX2 className="size-10 text-stone-300" />
-            <p className="mt-2 text-stone-600">Yaklaşan randevunuz yok.</p>
+            <CalendarX2 className="size-10 text-ink-4" />
+            <p className="mt-2 text-ink-2">Yaklaşan randevunuz yok.</p>
             <Link href="/kesfet" className="btn btn-primary mt-4">Randevu Al</Link>
           </div>
         ) : (
@@ -130,7 +130,7 @@ function AppointmentCard({
   return (
     <li className="card p-4">
       <div className="flex flex-wrap items-center gap-4">
-        <div className="grid w-16 place-items-center rounded-xl bg-brand-50 py-2 text-brand-800">
+        <div className="grid w-16 place-items-center rounded-xl bg-brand-400/10 py-2 text-brand-300">
           <span className="text-lg font-bold">{formatTime(row.starts_at)}</span>
         </div>
         <div className="min-w-0 flex-1">
@@ -139,13 +139,13 @@ function AppointmentCard({
           ) : (
             <p className="font-semibold">İşletme</p>
           )}
-          <p className="text-sm text-stone-600">
+          <p className="text-sm text-ink-2">
             {formatDate(row.starts_at)} · {row.service_name} · {formatPrice(row.price)}
           </p>
         </div>
         <span className={`chip ${status.className}`}>{status.label}</span>
         {onCancel && (
-          <button onClick={onCancel} className="btn btn-ghost text-rose-600">İptal et</button>
+          <button onClick={onCancel} className="btn btn-ghost text-rose-400">İptal et</button>
         )}
         {!onCancel && row.businesses && (
           <Link href={`/${row.businesses.slug}`} className="btn btn-ghost">
@@ -180,16 +180,16 @@ function ReviewForm({ appointmentId, onDone }: { appointmentId: string; onDone: 
   }
 
   return (
-    <form onSubmit={submit} className="mt-4 space-y-3 border-t border-stone-100 pt-4">
+    <form onSubmit={submit} className="mt-4 space-y-3 border-t border-line pt-4">
       <div className="flex gap-1" role="radiogroup" aria-label="Puan">
         {[1, 2, 3, 4, 5].map((i) => (
           <button key={i} type="button" role="radio" aria-checked={rating === i} aria-label={`${i} yıldız`} onClick={() => setRating(i)}>
-            <Star className={`size-7 ${i <= rating ? "fill-amber-400 text-amber-400" : "text-stone-300"}`} />
+            <Star className={`size-7 ${i <= rating ? "fill-amber-400 text-amber-400" : "text-ink-4"}`} />
           </button>
         ))}
       </div>
       <textarea rows={2} maxLength={1000} className="input" placeholder="Deneyiminizi kısaca anlatın (isteğe bağlı)" value={comment} onChange={(e) => setComment(e.target.value)} />
-      {error && <p className="text-sm text-rose-600">{error}</p>}
+      {error && <p className="text-sm text-rose-400">{error}</p>}
       <button disabled={busy} className="btn btn-primary">
         {busy && <Loader2 className="size-4 animate-spin" />} Gönder
       </button>

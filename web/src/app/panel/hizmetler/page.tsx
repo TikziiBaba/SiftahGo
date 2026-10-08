@@ -54,14 +54,14 @@ export default function ServicesPage() {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold">Hizmetler</h1>
-          <p className="text-sm text-stone-500">Müşterilerin randevu alabileceği hizmetler, süreleri ve fiyatları.</p>
+          <p className="text-sm text-ink-3">Müşterilerin randevu alabileceği hizmetler, süreleri ve fiyatları.</p>
         </div>
         <button className="btn btn-primary" onClick={() => setEditing({ id: null, values: EMPTY })}>
           <Plus className="size-4" /> Ekle
         </button>
       </div>
 
-      {error && <p className="mt-4 rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
+      {error && <p className="mt-4 rounded-xl bg-rose-500/10 p-3 text-sm text-rose-300">{error}</p>}
 
       {editing && (
         <form onSubmit={save} className="card mt-6 grid gap-3 p-5 sm:grid-cols-2">
@@ -86,7 +86,7 @@ export default function ServicesPage() {
               onChange={(e) => setEditing({ ...editing, values: { ...editing.values, description: e.target.value } })} />
           </div>
           <label className="flex items-center gap-2 text-sm sm:col-span-2">
-            <input type="checkbox" className="size-4 accent-brand-700" checked={editing.values.is_active}
+            <input type="checkbox" className="size-4 accent-brand-400" checked={editing.values.is_active}
               onChange={(e) => setEditing({ ...editing, values: { ...editing.values, is_active: e.target.checked } })} />
             Online randevuda göster
           </label>
@@ -98,17 +98,17 @@ export default function ServicesPage() {
       )}
 
       <ul className="mt-6 space-y-2">
-        {services === null && <li className="card h-20 animate-pulse bg-stone-100" />}
+        {services === null && <li className="card h-20 animate-pulse bg-surface-2" />}
         {services?.length === 0 && !editing && (
-          <li className="card p-10 text-center text-stone-500">Henüz hizmet yok. İlk hizmetinizi ekleyin.</li>
+          <li className="card p-10 text-center text-ink-3">Henüz hizmet yok. İlk hizmetinizi ekleyin.</li>
         )}
         {services?.map((s) => (
           <li key={s.id} className={`card flex items-center gap-4 p-4 ${s.is_active ? "" : "opacity-60"}`}>
             <div className="min-w-0 flex-1">
               <p className="font-semibold">
-                {s.name} {!s.is_active && <span className="chip ml-1 bg-stone-200 text-stone-600">Gizli</span>}
+                {s.name} {!s.is_active && <span className="chip ml-1 bg-surface-3 text-ink-2">Gizli</span>}
               </p>
-              <p className="text-sm text-stone-500">
+              <p className="text-sm text-ink-3">
                 {formatDuration(s.duration_minutes)} · {formatPrice(s.price)}
                 {s.description && ` · ${s.description}`}
               </p>
@@ -117,7 +117,7 @@ export default function ServicesPage() {
               onClick={() => setEditing({ id: s.id, values: { name: s.name, description: s.description, duration_minutes: s.duration_minutes, price: Number(s.price), is_active: s.is_active } })}>
               <Pencil className="size-4" />
             </button>
-            <button className="btn btn-ghost px-2.5 text-rose-600" aria-label="Sil" onClick={() => remove(s)}>
+            <button className="btn btn-ghost px-2.5 text-rose-400" aria-label="Sil" onClick={() => remove(s)}>
               <Trash2 className="size-4" />
             </button>
           </li>

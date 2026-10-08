@@ -8,13 +8,13 @@ const geist = Geist({ variable: "--font-geist-sans", subsets: ["latin", "latin-e
 export const metadata: Metadata = {
   title: { default: `${SITE_NAME} — Esnaf için online randevu`, template: `%s | ${SITE_NAME}` },
   description:
-    "Berber, kuaför, güzellik salonu, oto yıkama, halı saha ve tüm esnaf için ücretsiz online randevu ve takvim yönetimi.",
+    "Berber, kuaför, güzellik salonu, oto yıkama, halı saha ve tüm esnaf için online randevu, takvim ve müşteri yönetimi.",
   applicationName: SITE_NAME,
-  appleWebApp: { capable: true, title: SITE_NAME, statusBarStyle: "default" },
+  appleWebApp: { capable: true, title: SITE_NAME, statusBarStyle: "black-translucent" },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0f766e",
+  themeColor: "#060808",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

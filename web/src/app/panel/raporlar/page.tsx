@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useBusiness } from "@/components/panel-context";
+import { PlanGate } from "@/components/plan-gate";
 import { createClient } from "@/lib/supabase/client";
 import { addDays, dayBounds, dayOf, formatDate, formatPrice, todayStr } from "@/lib/format";
 import type { AppointmentStatus } from "@/lib/types";
@@ -31,6 +32,14 @@ function range(period: string) {
 const counts = (r: Row) => r.status !== "cancelled" && r.status !== "no_show";
 
 export default function ReportsPage() {
+  return (
+    <PlanGate feature="reports" title="Raporlar">
+      <Reports />
+    </PlanGate>
+  );
+}
+
+function Reports() {
   const { business } = useBusiness();
   const [period, setPeriod] = useState<string>("30");
   const [result, setResult] = useState<{ period: string; rows: Row[] } | null>(null);
@@ -100,7 +109,7 @@ export default function ReportsPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold">Raporlar</h1>
-          <p className="text-sm text-stone-500">
+          <p className="text-sm text-ink-3">
             {formatDate(from, { weekday: undefined })} – {formatDate(to, { weekday: undefined })} · iptal ve gelmeyenler ciroya dahil değil
           </p>
         </div>
@@ -110,7 +119,7 @@ export default function ReportsPage() {
       </div>
 
       {!stats ? (
-        <div className="card mt-6 h-72 animate-pulse bg-stone-100" />
+        <div className="card mt-6 h-72 animate-pulse bg-surface-2" />
       ) : (
         <>
           <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -138,9 +147,9 @@ export default function ReportsPage() {
 function Tile({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="card p-4">
-      <p className="text-xs text-stone-500">{label}</p>
+      <p className="text-xs text-ink-3">{label}</p>
       <p className="mt-1 text-2xl font-bold tracking-tight">{value}</p>
-      {hint && <p className="text-xs text-stone-500">{hint}</p>}
+      {hint && <p className="text-xs text-ink-3">{hint}</p>}
     </div>
   );
 }
@@ -152,25 +161,25 @@ function DailyChart({ days }: { days: { day: string; revenue: number; count: num
   const short = (day: string) => formatDate(day, { weekday: undefined, month: "short" });
 
   if (days.every((d) => d.count === 0)) {
-    return <p className="py-10 text-center text-sm text-stone-500">Bu dönemde randevu yok.</p>;
+    return <p className="py-10 text-center text-sm text-ink-3">Bu dönemde randevu yok.</p>;
   }
 
   return (
     <div className="mt-3">
-      <p className="h-5 text-sm text-stone-600" aria-live="polite">
+      <p className="h-5 text-sm text-ink-2" aria-live="polite">
         {shown ? (
           <>
-            <b className="text-stone-900">{formatDate(shown.day)}</b> · {formatPrice(shown.revenue)} · {shown.count} randevu
+            <b className="text-ink">{formatDate(shown.day)}</b> · {formatPrice(shown.revenue)} · {shown.count} randevu
           </>
         ) : (
-          <span className="text-stone-400">Ayrıntı için bir güne gelin</span>
+          <span className="text-ink-3">Ayrıntı için bir güne gelin</span>
         )}
       </p>
       <div className="relative mt-3 h-44">
         {/* Hafif ızgara: üst değer ve sıfır çizgisi */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 border-t border-dashed border-stone-200" />
-        <span className="pointer-events-none absolute -top-2.5 right-0 bg-white pl-1 text-[11px] text-stone-400">{formatPrice(max)}</span>
-        <div className="absolute inset-0 flex items-end gap-[2px] border-b border-stone-300" onMouseLeave={() => setActive(null)}>
+        <div className="pointer-events-none absolute inset-x-0 top-0 border-t border-dashed border-line" />
+        <span className="pointer-events-none absolute -top-2.5 right-0 bg-surface pl-1 text-[11px] text-ink-3">{formatPrice(max)}</span>
+        <div className="absolute inset-0 flex items-end gap-[2px] border-b border-line-strong" onMouseLeave={() => setActive(null)}>
           {days.map((d, i) => (
             <button
               key={d.day}
@@ -182,22 +191,22 @@ function DailyChart({ days }: { days: { day: string; revenue: number; count: num
               aria-label={`${formatDate(d.day)}: ${formatPrice(d.revenue)}, ${d.count} randevu`}
             >
               <span
-                className={`block w-full rounded-t-[4px] transition-colors ${active === i ? "bg-brand-800" : "bg-brand-600"} group-focus-visible:ring-2 group-focus-visible:ring-brand-500`}
+                className={`block w-full rounded-t-[4px] transition-colors ${active === i ? "bg-brand-300" : "bg-brand-500"} group-focus-visible:ring-2 group-focus-visible:ring-brand-500`}
                 style={{ height: `${(d.revenue / max) * 100}%` }}
               />
             </button>
           ))}
         </div>
       </div>
-      <div className="mt-1.5 flex justify-between text-[11px] text-stone-400">
+      <div className="mt-1.5 flex justify-between text-[11px] text-ink-3">
         <span>{short(days[0].day)}</span>
         {days.length > 2 && <span>{short(days[Math.floor(days.length / 2)].day)}</span>}
         <span>{short(days[days.length - 1].day)}</span>
       </div>
       <details className="mt-4 text-sm">
-        <summary className="cursor-pointer text-stone-500">Tablo olarak göster</summary>
+        <summary className="cursor-pointer text-ink-3">Tablo olarak göster</summary>
         <table className="mt-2 w-full text-left">
-          <thead className="text-xs text-stone-500">
+          <thead className="text-xs text-ink-3">
             <tr>
               <th className="py-1 font-medium">Gün</th>
               <th className="py-1 text-right font-medium">Randevu</th>
@@ -206,7 +215,7 @@ function DailyChart({ days }: { days: { day: string; revenue: number; count: num
           </thead>
           <tbody>
             {days.filter((d) => d.count > 0).map((d) => (
-              <tr key={d.day} className="border-t border-stone-100">
+              <tr key={d.day} className="border-t border-line">
                 <td className="py-1.5">{formatDate(d.day)}</td>
                 <td className="py-1.5 text-right tabular-nums">{d.count}</td>
                 <td className="py-1.5 text-right tabular-nums">{formatPrice(d.revenue)}</td>
@@ -225,19 +234,19 @@ function Breakdown({ title, items }: { title: string; items: { name: string; cou
     <section className="card p-5">
       <h2 className="font-semibold">{title}</h2>
       {items.length === 0 ? (
-        <p className="mt-3 text-sm text-stone-500">Veri yok.</p>
+        <p className="mt-3 text-sm text-ink-3">Veri yok.</p>
       ) : (
         <ul className="mt-3 space-y-3">
           {items.slice(0, 8).map((i) => (
             <li key={i.name} title={`${i.name}: ${formatPrice(i.revenue)}, ${i.count} randevu`}>
               <div className="flex justify-between gap-2 text-sm">
                 <span className="truncate">{i.name}</span>
-                <span className="shrink-0 tabular-nums text-stone-600">
-                  {i.count} · <b className="text-stone-900">{formatPrice(i.revenue)}</b>
+                <span className="shrink-0 tabular-nums text-ink-2">
+                  {i.count} · <b className="text-ink">{formatPrice(i.revenue)}</b>
                 </span>
               </div>
-              <div className="mt-1 h-2 rounded-full bg-stone-100">
-                <div className="h-2 rounded-full bg-brand-600" style={{ width: `${(i.revenue / max) * 100}%` }} />
+              <div className="mt-1 h-2 rounded-full bg-surface-2">
+                <div className="h-2 rounded-full bg-brand-500" style={{ width: `${(i.revenue / max) * 100}%` }} />
               </div>
             </li>
           ))}

@@ -23,16 +23,16 @@ export default function QrPage() {
   return (
     <div className="mx-auto max-w-3xl">
       <h1 className="text-xl font-bold print:hidden">QR kod ve bağlantı</h1>
-      <p className="text-sm text-stone-500 print:hidden">
+      <p className="text-sm text-ink-3 print:hidden">
         QR kodu yazdırıp dükkânınıza asın; bağlantıyı Instagram, WhatsApp ve Google profilinize ekleyin.
       </p>
 
       <div className="card mt-6 flex flex-col items-center p-8 text-center print:border-0">
         <p className="text-2xl font-bold">{business.name}</p>
-        <p className="mt-1 text-stone-500">Randevu almak için kodu okutun</p>
-        {qr ? <img src={qr} alt="QR kod" className="mt-6 size-64" /> : <div className="mt-6 size-64 animate-pulse rounded-xl bg-stone-100" />}
+        <p className="mt-1 text-ink-3">Randevu almak için kodu okutun</p>
+        {qr ? <img src={qr} alt="QR kod" className="mt-6 size-64" /> : <div className="mt-6 size-64 animate-pulse rounded-xl bg-surface-2" />}
         <p className="mt-4 font-mono text-sm">{url}</p>
-        <p className="mt-6 text-xs text-stone-400">{SITE_NAME}</p>
+        <p className="mt-6 text-xs text-ink-3">{SITE_NAME}</p>
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2 print:hidden">

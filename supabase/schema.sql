@@ -11,6 +11,7 @@
 drop trigger if exists on_auth_user_created on auth.users;
 
 drop table if exists
+  public.payments,
   public.reviews,
   public.staff_services,
   public.payment_history,
@@ -21,7 +22,8 @@ drop table if exists
   public.staff,
   public.services,
   public.businesses,
-  public.profiles
+  public.profiles,
+  public.plans
 cascade;
 
 do $$
@@ -35,7 +37,9 @@ begin
         'handle_new_user', 'update_updated_at_column', 'check_appointment_overlap',
         'get_available_slots', 'book_appointment', 'cancel_appointment',
         'is_business_owner', 'business_after_insert', 'add_review',
-        'refresh_business_rating', 'get_customers', 'protect_business_rating'
+        'refresh_business_rating', 'get_customers', 'protect_business_rating',
+        'protect_business_columns', 'is_bookable', 'enforce_staff_limit', 'create_payment',
+        'activate_subscription', 'fail_payment', 'plan_has_feature'
       )
   loop
     execute 'drop function if exists ' || r.sig || ' cascade';
@@ -61,6 +65,21 @@ create table public.profiles (
   role        text not null default 'customer' check (role in ('customer', 'business')),
   created_at  timestamptz not null default now()
 );
+
+-- Ücretli paketler. Fiyatları buradan değiştirin (aylık, TL).
+create table public.plans (
+  id          text primary key,
+  name        text not null,
+  price       numeric(10, 2) not null check (price > 0),
+  staff_limit int check (staff_limit > 0), -- boş = sınırsız
+  features    text[] not null default '{}', -- 'customers', 'reports'
+  sort_order  int not null default 0
+);
+
+insert into public.plans (id, name, price, staff_limit, features, sort_order) values
+  ('baslangic', 'Başlangıç', 249, 1, '{}', 1),
+  ('esnaf', 'Esnaf', 449, 5, '{customers,reports}', 2),
+  ('pro', 'Pro', 749, null, '{customers,reports}', 3);
 
 create table public.businesses (
   id                 uuid primary key default gen_random_uuid(),
@@ -91,6 +110,9 @@ create table public.businesses (
   -- Değerlendirmelerden tetikleyiciyle hesaplanır.
   rating_avg         numeric(2, 1) not null default 0,
   rating_count       int not null default 0,
+  -- Abonelik: sadece ödeme bildirimiyle (activate_subscription) değişir.
+  plan_id              text references public.plans (id),
+  subscription_ends_at timestamptz,
   created_at         timestamptz not null default now()
 );
 create index businesses_city_category_idx on public.businesses (city, category);
@@ -190,6 +212,19 @@ create table public.reviews (
 );
 create index reviews_business_idx on public.reviews (business_id, created_at desc);
 
+-- PayTR ödemeleri
+create table public.payments (
+  id           uuid primary key default gen_random_uuid(),
+  business_id  uuid not null references public.businesses (id) on delete cascade,
+  plan_id      text not null references public.plans (id),
+  merchant_oid text not null unique,
+  amount       numeric(10, 2) not null,
+  status       text not null default 'pending' check (status in ('pending', 'paid', 'failed')),
+  created_at   timestamptz not null default now(),
+  paid_at      timestamptz
+);
+create index payments_business_idx on public.payments (business_id, created_at desc);
+
 -- ---------------------------------------------------------------------
 -- 2) Yardımcı fonksiyonlar ve tetikleyiciler
 -- ---------------------------------------------------------------------
@@ -199,6 +234,27 @@ language sql stable security definer set search_path = ''
 as $$
   select exists (
     select 1 from public.businesses where id = bid and owner_id = auth.uid()
+  );
+$$;
+
+-- İşletme herkese açık mı: yayında ve aboneliği süren.
+create function public.is_bookable(bid uuid)
+returns boolean
+language sql stable security definer set search_path = ''
+as $$
+  select exists (
+    select 1 from public.businesses
+    where id = bid and is_published and subscription_ends_at > now()
+  );
+$$;
+
+create function public.plan_has_feature(bid uuid, feature text)
+returns boolean
+language sql stable security definer set search_path = ''
+as $$
+  select exists (
+    select 1 from public.businesses b join public.plans p on p.id = b.plan_id
+    where b.id = bid and b.subscription_ends_at > now() and feature = any (p.features)
   );
 $$;
 
@@ -283,7 +339,7 @@ declare
   v_today    date;
 begin
   select * into b from public.businesses
-  where id = p_business_id and (is_published or owner_id = auth.uid());
+  where id = p_business_id and public.is_bookable(id);
   if not found then return; end if;
 
   select make_interval(mins => s.duration_minutes) into v_duration
@@ -356,8 +412,8 @@ begin
     raise exception 'Lütfen geçerli bir telefon numarası girin.';
   end if;
 
-  select * into b from public.businesses where id = p_business_id and is_published;
-  if not found then raise exception 'İşletme bulunamadı.'; end if;
+  select * into b from public.businesses where id = p_business_id and public.is_bookable(id);
+  if not found then raise exception 'Bu işletme şu an online randevu almıyor.'; end if;
 
   select * into s from public.services
   where id = p_service_id and business_id = p_business_id and is_active;
@@ -461,8 +517,9 @@ create trigger reviews_refresh_rating
   after insert or delete on public.reviews
   for each row execute function public.refresh_business_rating();
 
--- İşletme sahibi puan alanlarını elle değiştiremez; sadece refresh_business_rating yazar.
-create function public.protect_business_rating()
+-- İşletme sahibi puan ve abonelik alanlarını elle değiştiremez;
+-- bunları sadece refresh_business_rating ve activate_subscription yazar.
+create function public.protect_business_columns()
 returns trigger
 language plpgsql
 as $$
@@ -471,18 +528,122 @@ begin
     if tg_op = 'INSERT' then
       new.rating_avg := 0;
       new.rating_count := 0;
+      new.plan_id := null;
+      new.subscription_ends_at := null;
     else
       new.rating_avg := old.rating_avg;
       new.rating_count := old.rating_count;
+      new.plan_id := old.plan_id;
+      new.subscription_ends_at := old.subscription_ends_at;
     end if;
   end if;
   return new;
 end;
 $$;
 
-create trigger businesses_protect_rating
+create trigger businesses_protect_columns
   before insert or update on public.businesses
-  for each row execute function public.protect_business_rating();
+  for each row execute function public.protect_business_columns();
+
+-- Paketin personel sınırı (paket yoksa 1 kabul edilir).
+create function public.enforce_staff_limit()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  v_limit int;
+  v_count int;
+begin
+  if not new.is_active or (tg_op = 'UPDATE' and old.is_active) then
+    return new;
+  end if;
+  select case when b.plan_id is null then 1 else p.staff_limit end into v_limit
+  from public.businesses b left join public.plans p on p.id = b.plan_id
+  where b.id = new.business_id;
+  if v_limit is null then return new; end if;
+  select count(*) into v_count from public.staff
+  where business_id = new.business_id and is_active and id <> new.id;
+  if v_count >= v_limit then
+    raise exception 'Paketiniz en fazla % aktif personele izin veriyor. Daha fazlası için paketinizi yükseltin.', v_limit;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger staff_enforce_limit
+  before insert or update of is_active on public.staff
+  for each row execute function public.enforce_staff_limit();
+
+-- İşletme sahibi ödeme başlatır; tutar paketten alınır (istemciden değil).
+create function public.create_payment(p_plan_id text)
+returns table (merchant_oid text, amount numeric, plan_name text)
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  v_business uuid;
+  v_plan public.plans;
+  v_oid text;
+begin
+  select id into v_business from public.businesses where owner_id = auth.uid();
+  if v_business is null then raise exception 'Önce işletmenizi oluşturun.'; end if;
+  select * into v_plan from public.plans where id = p_plan_id;
+  if not found then raise exception 'Paket bulunamadı.'; end if;
+
+  v_oid := 'SG' || to_char(clock_timestamp(), 'YYMMDDHH24MISS') || substr(md5(gen_random_uuid()::text), 1, 10);
+  insert into public.payments (business_id, plan_id, merchant_oid, amount)
+  values (v_business, v_plan.id, v_oid, v_plan.price);
+
+  return query select v_oid, v_plan.price, v_plan.name;
+end;
+$$;
+
+-- PayTR "başarılı" bildirimi: sadece sunucu (service_role) çağırır.
+-- Aynı bildirim tekrar gelirse bir şey yapmaz.
+create function public.activate_subscription(p_merchant_oid text, p_total_amount numeric)
+returns void
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  pay public.payments;
+  v_limit int;
+begin
+  select * into pay from public.payments where merchant_oid = p_merchant_oid for update;
+  if not found then raise exception 'Ödeme bulunamadı: %', p_merchant_oid; end if;
+  if pay.status <> 'pending' then return; end if;
+  if p_total_amount < pay.amount then
+    raise exception 'Ödenen tutar eksik: % < %', p_total_amount, pay.amount;
+  end if;
+
+  update public.payments set status = 'paid', paid_at = now() where id = pay.id;
+
+  update public.businesses
+  set plan_id = pay.plan_id,
+      subscription_ends_at = greatest(coalesce(subscription_ends_at, now()), now()) + interval '30 days'
+  where id = pay.business_id;
+
+  -- Daha küçük pakete geçildiyse fazla personeli pasif yap (en eskiler kalır).
+  select staff_limit into v_limit from public.plans where id = pay.plan_id;
+  if v_limit is not null then
+    update public.staff set is_active = false
+    where id in (
+      select id from public.staff
+      where business_id = pay.business_id and is_active
+      order by sort_order, created_at
+      offset v_limit
+    );
+  end if;
+end;
+$$;
+
+create function public.fail_payment(p_merchant_oid text)
+returns void
+language sql volatile security definer set search_path = ''
+as $$
+  update public.payments set status = 'failed' where merchant_oid = p_merchant_oid and status = 'pending';
+$$;
+
+revoke execute on function public.activate_subscription(text, numeric) from public, anon, authenticated;
+revoke execute on function public.fail_payment(text) from public, anon, authenticated;
 
 -- İşletmenin müşteri listesi: telefon numarasına göre gruplanır.
 create function public.get_customers(p_business_id uuid)
@@ -502,6 +663,9 @@ as $$
 begin
   if not public.is_business_owner(p_business_id) then
     raise exception 'Yetkiniz yok.';
+  end if;
+  if not public.plan_has_feature(p_business_id, 'customers') then
+    raise exception 'Müşteri defteri paketinizde yok.';
   end if;
 
   return query
@@ -535,6 +699,8 @@ alter table public.time_off      enable row level security;
 alter table public.appointments  enable row level security;
 alter table public.staff_services enable row level security;
 alter table public.reviews        enable row level security;
+alter table public.plans          enable row level security;
+alter table public.payments       enable row level security;
 
 -- profiles
 create policy "profil: kendini okur" on public.profiles
@@ -544,7 +710,7 @@ create policy "profil: kendini günceller" on public.profiles
 
 -- businesses
 create policy "işletme: yayındakileri herkes okur" on public.businesses
-  for select using (is_published or owner_id = auth.uid());
+  for select using ((is_published and subscription_ends_at > now()) or owner_id = auth.uid());
 create policy "işletme: sahibi oluşturur" on public.businesses
   for insert with check (owner_id = auth.uid());
 create policy "işletme: sahibi günceller" on public.businesses
@@ -554,22 +720,14 @@ create policy "işletme: sahibi siler" on public.businesses
 
 -- services
 create policy "hizmet: herkes okur" on public.services
-  for select using (
-    is_active and exists (
-      select 1 from public.businesses b where b.id = business_id and b.is_published
-    )
-  );
+  for select using (is_active and public.is_bookable(business_id));
 create policy "hizmet: sahibi yönetir" on public.services
   for all using (public.is_business_owner(business_id))
   with check (public.is_business_owner(business_id));
 
 -- staff
 create policy "personel: herkes okur" on public.staff
-  for select using (
-    is_active and exists (
-      select 1 from public.businesses b where b.id = business_id and b.is_published
-    )
-  );
+  for select using (is_active and public.is_bookable(business_id));
 create policy "personel: sahibi yönetir" on public.staff
   for all using (public.is_business_owner(business_id))
   with check (public.is_business_owner(business_id));
@@ -578,8 +736,8 @@ create policy "personel: sahibi yönetir" on public.staff
 create policy "personel hizmeti: herkes okur" on public.staff_services
   for select using (
     exists (
-      select 1 from public.staff s join public.businesses b on b.id = s.business_id
-      where s.id = staff_id and (b.is_published or b.owner_id = auth.uid())
+      select 1 from public.staff s
+      where s.id = staff_id and (public.is_bookable(s.business_id) or public.is_business_owner(s.business_id))
     )
   );
 create policy "personel hizmeti: sahibi yönetir" on public.staff_services
@@ -597,11 +755,15 @@ create policy "personel hizmeti: sahibi yönetir" on public.staff_services
 create policy "değerlendirme: herkes okur" on public.reviews
   for select using (true);
 
+-- plans / payments
+create policy "paket: herkes okur" on public.plans
+  for select using (true);
+create policy "ödeme: işletme kendi ödemelerini okur" on public.payments
+  for select using (public.is_business_owner(business_id));
+
 -- working_hours
 create policy "çalışma saati: herkes okur" on public.working_hours
-  for select using (
-    exists (select 1 from public.businesses b where b.id = business_id and b.is_published)
-  );
+  for select using (public.is_bookable(business_id));
 create policy "çalışma saati: sahibi yönetir" on public.working_hours
   for all using (public.is_business_owner(business_id))
   with check (public.is_business_owner(business_id));
@@ -615,7 +777,10 @@ create policy "izin: sahibi yönetir" on public.time_off
 create policy "randevu: müşteri ve işletme okur" on public.appointments
   for select using (customer_id = auth.uid() or public.is_business_owner(business_id));
 create policy "randevu: işletme manuel ekler" on public.appointments
-  for insert with check (public.is_business_owner(business_id));
+  for insert with check (
+    public.is_business_owner(business_id)
+    and exists (select 1 from public.businesses b where b.id = business_id and b.subscription_ends_at > now())
+  );
 create policy "randevu: işletme günceller" on public.appointments
   for update using (public.is_business_owner(business_id))
   with check (public.is_business_owner(business_id));

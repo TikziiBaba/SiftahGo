@@ -79,7 +79,7 @@ export default function StaffPage() {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold">Personel</h1>
-          <p className="text-sm text-stone-500">
+          <p className="text-sm text-ink-3">
             Her personelin ayrı takvimi olur; aynı saatte her biri ayrı randevu alabilir.
           </p>
         </div>
@@ -89,11 +89,11 @@ export default function StaffPage() {
       </div>
 
       {activeCount === 0 && (
-        <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
+        <p className="mt-4 rounded-xl bg-amber-400/10 p-3 text-sm text-amber-300">
           Aktif personel olmadığı için müşteriler randevu alamaz.
         </p>
       )}
-      {error && <p className="mt-4 rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
+      {error && <p className="mt-4 rounded-xl bg-rose-500/10 p-3 text-sm text-rose-300">{error}</p>}
 
       {editing && (
         <form onSubmit={save} className="card mt-6 grid gap-3 p-5 sm:grid-cols-2">
@@ -110,7 +110,7 @@ export default function StaffPage() {
           {services.length > 0 && (
             <fieldset className="sm:col-span-2">
               <legend className="label">Verdiği hizmetler</legend>
-              <p className="mb-2 text-xs text-stone-500">Hiçbirini seçmezseniz tüm hizmetleri verebilir.</p>
+              <p className="mb-2 text-xs text-ink-3">Hiçbirini seçmezseniz tüm hizmetleri verebilir.</p>
               <div className="flex flex-wrap gap-2">
                 {services.map((sv) => {
                   const on = editing.values.service_ids.includes(sv.id);
@@ -127,7 +127,7 @@ export default function StaffPage() {
                           },
                         })
                       }
-                      className={`rounded-full border px-3 py-1.5 text-sm transition ${on ? "border-brand-600 bg-brand-700 text-white" : "border-stone-300 hover:bg-stone-50"}`}
+                      className={`rounded-full border px-3 py-1.5 text-sm transition ${on ? "border-brand-400 bg-brand-700 text-white" : "border-line-strong hover:bg-white/5"}`}
                     >
                       {sv.name}
                     </button>
@@ -137,7 +137,7 @@ export default function StaffPage() {
             </fieldset>
           )}
           <label className="flex items-center gap-2 text-sm sm:col-span-2">
-            <input type="checkbox" className="size-4 accent-brand-700" checked={editing.values.is_active}
+            <input type="checkbox" className="size-4 accent-brand-400" checked={editing.values.is_active}
               onChange={(e) => setEditing({ ...editing, values: { ...editing.values, is_active: e.target.checked } })} />
             Randevu alabilir
           </label>
@@ -149,17 +149,17 @@ export default function StaffPage() {
       )}
 
       <ul className="mt-6 space-y-2">
-        {staff === null && <li className="card h-20 animate-pulse bg-stone-100" />}
+        {staff === null && <li className="card h-20 animate-pulse bg-surface-2" />}
         {staff?.map((s) => (
           <li key={s.id} className={`card flex items-center gap-4 p-4 ${s.is_active ? "" : "opacity-60"}`}>
-            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-brand-100 font-semibold text-brand-800">
+            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-brand-400/15 font-semibold text-brand-300">
               {s.name.charAt(0)}
             </span>
             <div className="min-w-0 flex-1">
               <p className="font-semibold">
-                {s.name} {!s.is_active && <span className="chip ml-1 bg-stone-200 text-stone-600">Pasif</span>}
+                {s.name} {!s.is_active && <span className="chip ml-1 bg-surface-3 text-ink-2">Pasif</span>}
               </p>
-              <p className="text-sm text-stone-500">
+              <p className="text-sm text-ink-3">
                 {[
                   s.title,
                   links.some((l) => l.staff_id === s.id)
@@ -182,7 +182,7 @@ export default function StaffPage() {
               }>
               <Pencil className="size-4" />
             </button>
-            <button className="btn btn-ghost px-2.5 text-rose-600" aria-label="Sil" onClick={() => remove(s)}>
+            <button className="btn btn-ghost px-2.5 text-rose-400" aria-label="Sil" onClick={() => remove(s)}>
               <Trash2 className="size-4" />
             </button>
           </li>

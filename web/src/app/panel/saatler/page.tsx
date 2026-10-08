@@ -75,24 +75,24 @@ export default function HoursPage() {
     <div className="mx-auto max-w-3xl space-y-8">
       <section>
         <h1 className="text-xl font-bold">Çalışma saatleri</h1>
-        <p className="text-sm text-stone-500">Müşteriler sadece açık olduğunuz saatlerde randevu alabilir.</p>
+        <p className="text-sm text-ink-3">Müşteriler sadece açık olduğunuz saatlerde randevu alabilir.</p>
 
-        <div className="card mt-4 divide-y divide-stone-100">
-          {hours === null && <div className="h-64 animate-pulse bg-stone-100" />}
+        <div className="card mt-4 divide-y divide-line">
+          {hours === null && <div className="h-64 animate-pulse bg-surface-2" />}
           {hours?.map((h) => (
             <div key={h.weekday} className="flex flex-wrap items-center gap-3 p-4">
               <label className="flex w-36 items-center gap-2 font-medium">
-                <input type="checkbox" className="size-4 accent-brand-700" checked={h.is_open} onChange={(e) => update(h.weekday, { is_open: e.target.checked })} />
+                <input type="checkbox" className="size-4 accent-brand-400" checked={h.is_open} onChange={(e) => update(h.weekday, { is_open: e.target.checked })} />
                 {WEEKDAYS[h.weekday - 1]}
               </label>
               {h.is_open ? (
                 <div className="flex items-center gap-2">
                   <input type="time" className="input w-auto py-2" value={h.open_time.slice(0, 5)} onChange={(e) => update(h.weekday, { open_time: e.target.value })} />
-                  <span className="text-stone-400">–</span>
+                  <span className="text-ink-3">–</span>
                   <input type="time" className="input w-auto py-2" value={h.close_time.slice(0, 5)} onChange={(e) => update(h.weekday, { close_time: e.target.value })} />
                 </div>
               ) : (
-                <span className="text-sm text-stone-400">Kapalı</span>
+                <span className="text-sm text-ink-3">Kapalı</span>
               )}
             </div>
           ))}
@@ -101,7 +101,7 @@ export default function HoursPage() {
           <button disabled={busy || !hours} onClick={saveHours} className="btn btn-primary">
             {busy && <Loader2 className="size-4 animate-spin" />} Kaydet
           </button>
-          {message && <p className={`text-sm ${message.ok ? "text-emerald-700" : "text-rose-600"}`}>{message.text}</p>}
+          {message && <p className={`text-sm ${message.ok ? "text-emerald-400" : "text-rose-400"}`}>{message.text}</p>}
         </div>
       </section>
 
@@ -109,7 +109,7 @@ export default function HoursPage() {
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="text-xl font-bold">İzin ve tatiller</h2>
-            <p className="text-sm text-stone-500">Bu aralıklarda randevu alınamaz (öğle arası, tatil, izin günü vb.).</p>
+            <p className="text-sm text-ink-3">Bu aralıklarda randevu alınamaz (öğle arası, tatil, izin günü vb.).</p>
           </div>
           <button className="btn btn-secondary" onClick={() => setOffForm({ staff_id: "", start: "", end: "", reason: "" })}>
             <Plus className="size-4" /> Ekle
@@ -145,19 +145,19 @@ export default function HoursPage() {
         )}
 
         <ul className="mt-4 space-y-2">
-          {timeOff.length === 0 && !offForm && <li className="card p-6 text-center text-sm text-stone-500">Planlanmış izin yok.</li>}
+          {timeOff.length === 0 && !offForm && <li className="card p-6 text-center text-sm text-ink-3">Planlanmış izin yok.</li>}
           {timeOff.map((t) => (
             <li key={t.id} className="card flex items-center gap-3 p-4 text-sm">
               <div className="flex-1">
                 <p className="font-medium">
                   {formatDate(t.starts_at, { weekday: undefined })} {formatTime(t.starts_at)} → {formatDate(t.ends_at, { weekday: undefined })} {formatTime(t.ends_at)}
                 </p>
-                <p className="text-stone-500">
+                <p className="text-ink-3">
                   {t.staff_id ? staff.find((s) => s.id === t.staff_id)?.name : "Tüm işletme"}
                   {t.reason && ` · ${t.reason}`}
                 </p>
               </div>
-              <button className="btn btn-ghost px-2.5 text-rose-600" aria-label="Sil" onClick={() => removeTimeOff(t.id)}>
+              <button className="btn btn-ghost px-2.5 text-rose-400" aria-label="Sil" onClick={() => removeTimeOff(t.id)}>
                 <Trash2 className="size-4" />
               </button>
             </li>

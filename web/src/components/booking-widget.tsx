@@ -108,7 +108,7 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
 
   if (services.length === 0) {
     return (
-      <section className="card p-8 text-center text-stone-500">
+      <section className="card p-8 text-center text-ink-3">
         Bu işletme henüz online randevuya hizmet eklememiş.
       </section>
     );
@@ -117,12 +117,12 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
   if (booked && service && time) {
     return (
       <section className="card p-8 text-center">
-        <CheckCircle2 className="mx-auto size-14 text-emerald-600" />
+        <CheckCircle2 className="mx-auto size-14 text-emerald-400" />
         <h2 className="mt-4 text-xl font-bold">Randevunuz alındı!</h2>
-        <p className="mt-2 text-stone-600">
+        <p className="mt-2 text-ink-2">
           {formatDate(time)} saat <b>{formatTime(time)}</b> · {service.name}
         </p>
-        <p className="mt-1 text-sm text-stone-500">
+        <p className="mt-1 text-sm text-ink-3">
           {business.auto_confirm ? "Randevunuz onaylandı." : "İşletme randevunuzu onayladığında kesinleşecek."}
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
@@ -175,12 +175,12 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
                   setTime(null);
                 }}
                 className={`flex w-full items-center justify-between gap-3 rounded-xl border p-3.5 text-left transition ${
-                  s.id === serviceId ? "border-brand-600 bg-brand-50 ring-2 ring-brand-100" : "border-stone-200 hover:border-stone-300"
+                  s.id === serviceId ? "border-brand-400 bg-brand-400/10 ring-2 ring-brand-400/20" : "border-line hover:border-line-strong"
                 }`}
               >
                 <span>
                   <span className="block font-medium">{s.name}</span>
-                  <span className="text-sm text-stone-500">
+                  <span className="text-sm text-ink-3">
                     {formatDuration(s.duration_minutes)}
                     {s.description && ` · ${s.description}`}
                   </span>
@@ -204,7 +204,7 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
                   setTime(null);
                 }}
                 className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
-                  p.id === staffId ? "border-brand-600 bg-brand-700 text-white" : "border-stone-300 hover:bg-stone-50"
+                  p.id === staffId ? "border-brand-400 bg-brand-700 text-white" : "border-line-strong hover:bg-white/5"
                 }`}
               >
                 {p.name}
@@ -229,7 +229,7 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
                     setTime(null);
                   }}
                   className={`flex w-16 shrink-0 flex-col items-center rounded-xl border py-2 text-sm transition disabled:opacity-40 ${
-                    d === day ? "border-brand-600 bg-brand-700 text-white" : "border-stone-200 hover:border-stone-300"
+                    d === day ? "border-brand-400 bg-brand-700 text-white" : "border-line hover:border-line-strong"
                   }`}
                 >
                   <span className="text-xs">{date.toLocaleDateString("tr-TR", { weekday: "short", timeZone: "UTC" })}</span>
@@ -242,11 +242,11 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
 
           <div className="mt-3">
             {times === null ? (
-              <div className="flex items-center gap-2 py-4 text-sm text-stone-500">
+              <div className="flex items-center gap-2 py-4 text-sm text-ink-3">
                 <Loader2 className="size-4 animate-spin" /> Boş saatler yükleniyor…
               </div>
             ) : times.length === 0 ? (
-              <p className="rounded-xl bg-stone-50 p-4 text-sm text-stone-500">
+              <p className="rounded-xl bg-surface-2 p-4 text-sm text-ink-3">
                 Bu gün için boş saat yok. Lütfen başka bir gün seçin.
               </p>
             ) : (
@@ -257,7 +257,7 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
                     type="button"
                     onClick={() => setTime(t)}
                     className={`rounded-lg border py-2 text-sm font-medium transition ${
-                      t === time ? "border-brand-600 bg-brand-700 text-white" : "border-stone-200 hover:border-brand-500"
+                      t === time ? "border-brand-400 bg-brand-700 text-white" : "border-line hover:border-brand-400"
                     }`}
                   >
                     {formatTime(t)}
@@ -270,8 +270,8 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
       )}
 
       {service && time && (
-        <form onSubmit={submit} className="mt-6 rounded-2xl bg-stone-50 p-4 md:p-5">
-          <button type="button" onClick={() => setTime(null)} className="mb-3 flex items-center gap-1 text-sm text-stone-500">
+        <form onSubmit={submit} className="mt-6 rounded-2xl bg-surface-2 p-4 md:p-5">
+          <button type="button" onClick={() => setTime(null)} className="mb-3 flex items-center gap-1 text-sm text-ink-3">
             <ChevronLeft className="size-4" /> Saati değiştir
           </button>
           <p className="font-medium">
@@ -299,12 +299,12 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
               <textarea id="note" rows={2} maxLength={500} className="input" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
             </div>
           </div>
-          {error && <p className="mt-3 text-sm text-rose-600">{error}</p>}
+          {error && <p className="mt-3 text-sm text-rose-400">{error}</p>}
           <button disabled={busy} className="btn btn-primary mt-4 w-full py-3 text-base">
             {busy && <Loader2 className="size-4 animate-spin" />} Randevuyu Onayla
           </button>
           {!loggedIn && (
-            <p className="mt-3 text-center text-xs text-stone-500">
+            <p className="mt-3 text-center text-xs text-ink-3">
               Randevularınızı takip etmek için <Link href="/giris" className="underline">giriş yapabilirsiniz</Link>.
             </p>
           )}
@@ -317,8 +317,8 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
 function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (
     <div className="mt-5">
-      <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-stone-700">
-        <span className="grid size-6 place-items-center rounded-full bg-brand-100 text-xs text-brand-800">{n}</span>
+      <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink-2">
+        <span className="grid size-6 place-items-center rounded-full bg-brand-400/15 text-xs text-brand-300">{n}</span>
         {title}
       </h3>
       {children}

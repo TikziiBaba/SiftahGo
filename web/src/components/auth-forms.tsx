@@ -43,17 +43,17 @@ export function LoginForm() {
       <div>
         <div className="mb-1.5 flex items-center justify-between">
           <label className="label mb-0" htmlFor="password">Şifre</label>
-          <Link href="/sifremi-unuttum" className="text-sm text-brand-700 hover:underline">Şifremi unuttum</Link>
+          <Link href="/sifremi-unuttum" className="text-sm text-brand-300 hover:underline">Şifremi unuttum</Link>
         </div>
         <input id="password" type="password" required autoComplete="current-password" className="input" value={password} onChange={(e) => setPassword(e.target.value)} />
       </div>
-      {error && <p className="text-sm text-rose-600">{error}</p>}
+      {error && <p className="text-sm text-rose-400">{error}</p>}
       <button disabled={busy} className="btn btn-primary w-full py-3">
         {busy && <Loader2 className="size-4 animate-spin" />} Giriş Yap
       </button>
-      <p className="text-center text-sm text-stone-500">
+      <p className="text-center text-sm text-ink-3">
         Hesabın yok mu?{" "}
-        <Link href="/kayit" className="font-medium text-brand-700 hover:underline">Kayıt ol</Link>
+        <Link href="/kayit" className="font-medium text-brand-300 hover:underline">Kayıt ol</Link>
       </p>
     </form>
   );
@@ -92,9 +92,9 @@ export function SignupForm() {
   if (checkEmail) {
     return (
       <div className="text-center">
-        <MailCheck className="mx-auto size-12 text-brand-700" />
+        <MailCheck className="mx-auto size-12 text-brand-300" />
         <h2 className="mt-3 text-lg font-semibold">E-postanızı kontrol edin</h2>
-        <p className="mt-2 text-sm text-stone-600">
+        <p className="mt-2 text-sm text-ink-2">
           <b>{form.email}</b> adresine bir doğrulama bağlantısı gönderdik. Bağlantıya tıkladıktan sonra hesabınız açılacak.
         </p>
       </div>
@@ -115,7 +115,7 @@ export function SignupForm() {
             type="button"
             onClick={() => setRole(value)}
             className={`flex flex-col items-center gap-1.5 rounded-xl border p-3 text-sm font-medium transition ${
-              role === value ? "border-brand-600 bg-brand-50 text-brand-800 ring-2 ring-brand-100" : "border-stone-200 text-stone-600"
+              role === value ? "border-brand-400 bg-brand-400/10 text-brand-300 ring-2 ring-brand-400/20" : "border-line text-ink-2"
             }`}
           >
             <Icon className="size-5" /> {text}
@@ -138,13 +138,13 @@ export function SignupForm() {
         <label className="label" htmlFor="password">Şifre</label>
         <input id="password" type="password" required minLength={6} autoComplete="new-password" className="input" value={form.password} onChange={set("password")} />
       </div>
-      {error && <p className="text-sm text-rose-600">{error}</p>}
+      {error && <p className="text-sm text-rose-400">{error}</p>}
       <button disabled={busy} className="btn btn-primary w-full py-3">
         {busy && <Loader2 className="size-4 animate-spin" />} {role === "business" ? "İşletme Hesabı Aç" : "Hesap Aç"}
       </button>
-      <p className="text-center text-sm text-stone-500">
+      <p className="text-center text-sm text-ink-3">
         Zaten hesabın var mı?{" "}
-        <Link href="/giris" className="font-medium text-brand-700 hover:underline">Giriş yap</Link>
+        <Link href="/giris" className="font-medium text-brand-300 hover:underline">Giriş yap</Link>
       </p>
     </form>
   );
@@ -171,8 +171,8 @@ export function ForgotPasswordForm() {
   if (sent) {
     return (
       <div className="text-center">
-        <MailCheck className="mx-auto size-12 text-brand-700" />
-        <p className="mt-3 text-sm text-stone-600">
+        <MailCheck className="mx-auto size-12 text-brand-300" />
+        <p className="mt-3 text-sm text-ink-2">
           <b>{email}</b> adresine şifre yenileme bağlantısı gönderdik. Bağlantıyı bu cihazda açın.
         </p>
       </div>
@@ -181,17 +181,17 @@ export function ForgotPasswordForm() {
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <p className="text-sm text-stone-600">Hesabınızın e-posta adresini girin, size şifre yenileme bağlantısı gönderelim.</p>
+      <p className="text-sm text-ink-2">Hesabınızın e-posta adresini girin, size şifre yenileme bağlantısı gönderelim.</p>
       <div>
         <label className="label" htmlFor="email">E-posta</label>
         <input id="email" type="email" required autoComplete="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} />
       </div>
-      {error && <p className="text-sm text-rose-600">{error}</p>}
+      {error && <p className="text-sm text-rose-400">{error}</p>}
       <button disabled={busy} className="btn btn-primary w-full py-3">
         {busy && <Loader2 className="size-4 animate-spin" />} Bağlantı Gönder
       </button>
       <p className="text-center text-sm">
-        <Link href="/giris" className="font-medium text-brand-700 hover:underline">Girişe dön</Link>
+        <Link href="/giris" className="font-medium text-brand-300 hover:underline">Girişe dön</Link>
       </p>
     </form>
   );
@@ -226,7 +226,7 @@ export function ResetPasswordForm() {
         <input id="password" type="password" required minLength={6} autoComplete="new-password" className="input" value={password} onChange={(e) => setPassword(e.target.value)} />
       </div>
       {error && (
-        <p className="text-sm text-rose-600">
+        <p className="text-sm text-rose-400">
           {error} <Link href="/sifremi-unuttum" className="underline">Yeni bağlantı iste</Link>
         </p>
       )}

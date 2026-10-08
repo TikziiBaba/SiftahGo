@@ -43,6 +43,17 @@ npm run dev
 R2 bucket'ı için herkese açık erişim (r2.dev veya özel alan adı) açık olmalı ve adresi
 `CLOUDFLARE_R2_PUBLIC_URL` değişkenine yazılmalı. Görseller sunucu üzerinden yüklendiği için CORS ayarı gerekmez.
 
+### Paketler ve PayTR
+
+İşletmeler ücretli paketle çalışır; aktif paketi olmayan işletme yayında görünmez ve randevu almaz.
+Paket adları, fiyatları ve personel sınırları veritabanındaki `plans` tablosundadır
+(Supabase > Table Editor > plans); değiştirdiğinizde site ve ödeme tutarı birlikte güncellenir.
+
+1. Ortam değişkenleri: `SUPABASE_SERVICE_ROLE_KEY`, `PAYTR_MERCHANT_ID`, `PAYTR_MERCHANT_KEY`, `PAYTR_MERCHANT_SALT`,
+   `PAYTR_TEST_MODE` (`1` = test ödemesi, canlıda `0`).
+2. PayTR Mağaza Paneli > Ayarlar > **Bildirim URL**: `https://ALAN-ADINIZ/api/paytr/callback`
+3. Her başarılı ödeme 30 gün ekler; aynı bildirim tekrar gelirse süre iki kez uzamaz.
+
 ### 3. Mobil
 
 ```bash

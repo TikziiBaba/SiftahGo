@@ -21,7 +21,7 @@ export default function AccountScreen() {
         <Button title="Hesap Aç" variant="secondary" onPress={() => router.push('/kayit')} />
         <Card style={{ gap: 8, marginTop: 12 }}>
           <Text style={styles.h2}>İşletmeniz mi var?</Text>
-          <Text style={styles.muted}>Ücretsiz işletme hesabı açın, müşterileriniz 7/24 online randevu alsın.</Text>
+          <Text style={styles.muted}>İşletme hesabı açın, müşterileriniz 7/24 online randevu alsın.</Text>
           <Button title="İşletme Hesabı Aç" variant="secondary" onPress={() => router.push({ pathname: '/kayit', params: { rol: 'isletme' } })} />
         </Card>
       </ScrollView>

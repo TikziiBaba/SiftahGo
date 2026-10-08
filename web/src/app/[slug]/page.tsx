@@ -58,12 +58,13 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
 
   return (
     <main className="w-full">
-      <div className="h-44 bg-gradient-to-br from-brand-700 to-brand-500 md:h-64">
+      <div className="relative h-44 overflow-hidden bg-gradient-to-br from-brand-900 via-surface-2 to-bg md:h-64">
+        <div className="absolute -left-20 -top-20 size-80 rounded-full bg-brand-400/20 blur-3xl" />
         {business.cover_url && <img src={business.cover_url} alt="" className="size-full object-cover" />}
       </div>
       <div className="mx-auto max-w-6xl px-4">
         <div className="-mt-12 flex flex-col gap-4 sm:flex-row sm:items-end">
-          <div className="size-24 shrink-0 overflow-hidden rounded-2xl border-4 border-white bg-brand-700 shadow-lg">
+          <div className="size-24 shrink-0 overflow-hidden rounded-2xl border-4 border-bg bg-brand-700 shadow-lg">
             {business.logo_url ? (
               <img src={business.logo_url} alt={business.name} className="size-full object-cover" />
             ) : (
@@ -72,21 +73,21 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
           </div>
           <div className="pb-1">
             <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{business.name}</h1>
-            <p className="flex flex-wrap items-center gap-x-2 text-stone-500">
+            <p className="flex flex-wrap items-center gap-x-2 text-ink-3">
               {categoryLabel(business.category)}
               {business.city && ` · ${business.city}`}
               {business.rating_count > 0 && (
-                <a href="#yorumlar" className="flex items-center gap-1 font-medium text-stone-800">
+                <a href="#yorumlar" className="flex items-center gap-1 font-medium text-ink">
                   <Star className="size-4 fill-amber-400 text-amber-400" />
                   {Number(business.rating_avg).toFixed(1)}{" "}
-                  <span className="font-normal text-stone-500">({business.rating_count} değerlendirme)</span>
+                  <span className="font-normal text-ink-3">({business.rating_count} değerlendirme)</span>
                 </a>
               )}
             </p>
           </div>
         </div>
         {!business.is_published && (
-          <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
+          <p className="mt-4 rounded-xl bg-amber-400/10 p-3 text-sm text-amber-300">
             Bu sayfa şu an yayında değil; sadece siz görebilirsiniz. Ayarlardan yayına alabilirsiniz.
           </p>
         )}
@@ -104,7 +105,7 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
             {business.description && (
               <section className="card p-5">
                 <h2 className="font-semibold">Hakkında</h2>
-                <p className="mt-2 whitespace-pre-line text-sm text-stone-600">{business.description}</p>
+                <p className="mt-2 whitespace-pre-line text-sm text-ink-2">{business.description}</p>
               </section>
             )}
             <section className="card space-y-3 p-5 text-sm">
@@ -113,13 +114,13 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
                   href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${business.name} ${location}`)}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex gap-2.5 text-stone-700 hover:text-brand-700"
+                  className="flex gap-2.5 text-ink-2 hover:text-brand-300"
                 >
                   <MapPin className="size-4 shrink-0 translate-y-0.5" /> {location}
                 </a>
               )}
               {business.phone && (
-                <a href={`tel:${business.phone}`} className="flex gap-2.5 text-stone-700 hover:text-brand-700">
+                <a href={`tel:${business.phone}`} className="flex gap-2.5 text-ink-2 hover:text-brand-300">
                   <Phone className="size-4 shrink-0 translate-y-0.5" /> {business.phone}
                 </a>
               )}
@@ -131,8 +132,8 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
               <ul className="mt-3 space-y-1.5 text-sm">
                 {hourList.map((h) => (
                   <li key={h.weekday} className="flex justify-between">
-                    <span className="text-stone-600">{WEEKDAYS[h.weekday - 1]}</span>
-                    <span className={h.is_open ? "font-medium" : "text-stone-400"}>
+                    <span className="text-ink-2">{WEEKDAYS[h.weekday - 1]}</span>
+                    <span className={h.is_open ? "font-medium" : "text-ink-3"}>
                       {h.is_open ? `${h.open_time.slice(0, 5)} – ${h.close_time.slice(0, 5)}` : "Kapalı"}
                     </span>
                   </li>
@@ -143,7 +144,7 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
               <section id="yorumlar" className="card p-5">
                 <h2 className="flex items-center gap-2 font-semibold">
                   <Star className="size-4 fill-amber-400 text-amber-400" /> {Number(business.rating_avg).toFixed(1)}
-                  <span className="font-normal text-stone-500">· {business.rating_count} değerlendirme</span>
+                  <span className="font-normal text-ink-3">· {business.rating_count} değerlendirme</span>
                 </h2>
                 <ul className="mt-3 space-y-4">
                   {reviewList.map((r) => (
@@ -152,8 +153,8 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
                         <span className="font-medium">{r.customer_name}</span>
                         <Stars value={r.rating} />
                       </div>
-                      {r.comment && <p className="mt-1 text-stone-600">{r.comment}</p>}
-                      <p className="mt-0.5 text-xs text-stone-400">{formatDate(r.created_at, { weekday: undefined, year: "numeric" })}</p>
+                      {r.comment && <p className="mt-1 text-ink-2">{r.comment}</p>}
+                      <p className="mt-0.5 text-xs text-ink-3">{formatDate(r.created_at, { weekday: undefined, year: "numeric" })}</p>
                     </li>
                   ))}
                 </ul>
@@ -182,7 +183,7 @@ function Stars({ value }: { value: number }) {
   return (
     <span className="flex" aria-label={`${value} yıldız`}>
       {[1, 2, 3, 4, 5].map((i) => (
-        <Star key={i} className={`size-3.5 ${i <= value ? "fill-amber-400 text-amber-400" : "text-stone-300"}`} />
+        <Star key={i} className={`size-3.5 ${i <= value ? "fill-amber-400 text-amber-400" : "text-ink-4"}`} />
       ))}
     </span>
   );

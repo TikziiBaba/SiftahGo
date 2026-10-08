@@ -42,14 +42,31 @@ export const CITIES = [
 export const WEEKDAYS = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"];
 
 export const STATUS: Record<AppointmentStatus, { label: string; className: string }> = {
-  pending: { label: "Onay bekliyor", className: "bg-amber-100 text-amber-800" },
-  confirmed: { label: "Onaylandı", className: "bg-emerald-100 text-emerald-800" },
-  completed: { label: "Tamamlandı", className: "bg-sky-100 text-sky-800" },
-  cancelled: { label: "İptal", className: "bg-stone-200 text-stone-600" },
-  no_show: { label: "Gelmedi", className: "bg-rose-100 text-rose-700" },
+  pending: { label: "Onay bekliyor", className: "bg-amber-400/10 text-amber-300 ring-1 ring-amber-400/20" },
+  confirmed: { label: "Onaylandı", className: "bg-emerald-400/10 text-emerald-300 ring-1 ring-emerald-400/20" },
+  completed: { label: "Tamamlandı", className: "bg-sky-400/10 text-sky-300 ring-1 ring-sky-400/20" },
+  cancelled: { label: "İptal", className: "bg-white/5 text-ink-3 ring-1 ring-line" },
+  no_show: { label: "Gelmedi", className: "bg-rose-400/10 text-rose-300 ring-1 ring-rose-400/20" },
 };
 
 // Veritabanındaki kısıtla aynı olmalı (supabase/schema.sql).
 export const RESERVED_SLUGS = [
   "panel", "kesfet", "giris", "kayit", "hesabim", "api", "auth", "admin", "sifremi-unuttum", "sifre-yenile",
 ];
+
+// Paket kartlarında gösterilen özellik metinleri (fiyat ve limitler veritabanındaki plans tablosundan gelir).
+export const PLAN_FEATURES: Record<string, string> = {
+  customers: "Müşteri defteri",
+  reports: "Ciro raporları",
+};
+export const BASE_FEATURES = [
+  "7/24 online randevu sayfası",
+  "Çakışmasız takvim, izin ve tatil günleri",
+  "WhatsApp ile hatırlatma",
+  "QR kod ve kendi adresiniz",
+  "Müşteri yorumları",
+];
+
+export function isSubscribed(b: { subscription_ends_at: string | null }) {
+  return !!b.subscription_ends_at && new Date(b.subscription_ends_at) > new Date();
+}

@@ -43,13 +43,13 @@ export default function SetupPage() {
   }
 
   return (
-    <main className="grid flex-1 place-items-center bg-gradient-to-b from-brand-50 to-stone-50 px-4 py-12">
+    <main className="grid flex-1 place-items-center relative overflow-hidden bg-[radial-gradient(ellipse_at_top,rgb(20_184_166/0.15),transparent_60%)] px-4 py-12">
       <div className="w-full max-w-lg">
         <div className="mb-6 flex justify-center"><Logo /></div>
         <form onSubmit={submit} className="card space-y-4 p-6 md:p-8">
           <div>
             <h1 className="text-xl font-bold">İşletmenizi oluşturalım</h1>
-            <p className="mt-1 text-sm text-stone-500">Bu bilgileri daha sonra Ayarlar’dan değiştirebilirsiniz.</p>
+            <p className="mt-1 text-sm text-ink-3">Bu bilgileri daha sonra Ayarlar’dan değiştirebilirsiniz.</p>
           </div>
           <div>
             <label className="label" htmlFor="name">İşletme adı</label>
@@ -57,12 +57,12 @@ export default function SetupPage() {
           </div>
           <div>
             <label className="label" htmlFor="slug">Sayfa adresi</label>
-            <div className="flex items-center overflow-hidden rounded-xl border border-stone-300 bg-stone-50 focus-within:border-brand-600 focus-within:ring-2 focus-within:ring-brand-100">
-              <span className="pl-3.5 text-sm text-stone-500">{SITE_DOMAIN}/</span>
+            <div className="flex items-center overflow-hidden rounded-xl border border-line-strong bg-surface-2 focus-within:border-brand-400 focus-within:ring-2 focus-within:ring-brand-400/20">
+              <span className="pl-3.5 text-sm text-ink-3">{SITE_DOMAIN}/</span>
               <input
                 id="slug"
                 required
-                className="w-full bg-white px-2 py-2.5 text-sm outline-none"
+                className="w-full bg-surface px-2 py-2.5 text-sm outline-none"
                 value={slug}
                 onChange={(e) => {
                   setSlugTouched(true);
@@ -90,7 +90,7 @@ export default function SetupPage() {
             <label className="label" htmlFor="phone">İşletme telefonu</label>
             <input id="phone" type="tel" className="input" placeholder="0212 xxx xx xx" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           </div>
-          {error && <p className="text-sm text-rose-600">{error}</p>}
+          {error && <p className="text-sm text-rose-400">{error}</p>}
           <button disabled={busy} className="btn btn-primary w-full py-3">
             {busy && <Loader2 className="size-4 animate-spin" />} İşletmeyi Oluştur
           </button>

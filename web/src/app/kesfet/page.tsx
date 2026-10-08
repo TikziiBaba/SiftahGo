@@ -18,7 +18,7 @@ export default function DiscoverPage({ searchParams }: PageProps<"/kesfet">) {
       <SiteHeader />
       <main className="mx-auto w-full max-w-6xl px-4 py-10">
         <h1 className="text-3xl font-bold tracking-tight">İşletme bul, randevunu al</h1>
-        <p className="mt-2 text-stone-600">Kategori ve şehir seçin, size uygun saati hemen ayırtın.</p>
+        <p className="mt-2 text-ink-2">Kategori ve şehir seçin, size uygun saati hemen ayırtın.</p>
         <Suspense fallback={<ResultsSkeleton />}>
           <Results searchParams={searchParams} />
         </Suspense>
@@ -53,7 +53,7 @@ async function Results({ searchParams }: { searchParams: PageProps<"/kesfet">["s
     <>
       <form className="card mt-6 grid gap-3 p-4 md:grid-cols-[1fr_200px_200px_auto]">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-stone-400" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" />
           <input name="q" defaultValue={q} placeholder="İşletme adı ara" className="input pl-9" />
         </div>
         <select name="kategori" defaultValue={category} className="input">
@@ -73,20 +73,20 @@ async function Results({ searchParams }: { searchParams: PageProps<"/kesfet">["s
 
       {businesses.length === 0 ? (
         <div className="card mt-6 grid place-items-center p-12 text-center">
-          <Store className="size-10 text-stone-300" />
+          <Store className="size-10 text-ink-4" />
           <p className="mt-3 font-medium">Aramanıza uygun işletme bulunamadı</p>
-          <p className="mt-1 text-sm text-stone-500">Filtreleri değiştirmeyi deneyin.</p>
+          <p className="mt-1 text-sm text-ink-3">Filtreleri değiştirmeyi deneyin.</p>
         </div>
       ) : (
         <ul className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {businesses.map((b) => (
             <li key={b.id}>
               <Link href={`/${b.slug}`} className="card block overflow-hidden transition hover:shadow-lg">
-                <div className="h-32 bg-gradient-to-br from-brand-100 to-brand-50">
+                <div className="h-32 bg-gradient-to-br from-brand-900/60 to-surface-2">
                   {b.cover_url && <img src={b.cover_url} alt="" className="size-full object-cover" />}
                 </div>
                 <div className="flex gap-3 p-4">
-                  <div className="-mt-10 size-14 shrink-0 overflow-hidden rounded-xl border-4 border-white bg-brand-700 shadow">
+                  <div className="-mt-10 size-14 shrink-0 overflow-hidden rounded-xl border-4 border-bg bg-brand-700 shadow">
                     {b.logo_url ? (
                       <img src={b.logo_url} alt="" className="size-full object-cover" />
                     ) : (
@@ -97,16 +97,16 @@ async function Results({ searchParams }: { searchParams: PageProps<"/kesfet">["s
                   </div>
                   <div className="min-w-0">
                     <p className="truncate font-semibold">{b.name}</p>
-                    <p className="flex items-center gap-1.5 text-sm text-stone-500">
+                    <p className="flex items-center gap-1.5 text-sm text-ink-3">
                       {categoryLabel(b.category)}
                       {b.rating_count > 0 && (
-                        <span className="flex items-center gap-0.5 font-medium text-stone-700">
+                        <span className="flex items-center gap-0.5 font-medium text-ink-2">
                           · <Star className="size-3.5 fill-amber-400 text-amber-400" /> {Number(b.rating_avg).toFixed(1)}
                         </span>
                       )}
                     </p>
                     {b.city && (
-                      <p className="mt-1 flex items-center gap-1 text-xs text-stone-500">
+                      <p className="mt-1 flex items-center gap-1 text-xs text-ink-3">
                         <MapPin className="size-3.5" /> {[b.district, b.city].filter(Boolean).join(", ")}
                       </p>
                     )}
@@ -125,7 +125,7 @@ function ResultsSkeleton() {
   return (
     <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {Array.from({ length: 6 }, (_, i) => (
-        <div key={i} className="card h-52 animate-pulse bg-stone-100" />
+        <div key={i} className="card h-52 animate-pulse bg-surface-2" />
       ))}
     </div>
   );
