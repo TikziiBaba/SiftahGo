@@ -1,0 +1,10 @@
+{
+  "name": "siftahgo",
+  "private": true,
+  "scripts": {
+    "test:db": "node supabase/test/schema.test.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8"
+  }
+}
