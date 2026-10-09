@@ -40,7 +40,8 @@ gerçek kullanıcılar için Resend SMTP kullanın:
    Username `resend`, Password: Resend API anahtarı, Sender email: `EMAIL_FROM`'daki adres, Sender name `SiftahGo`.
 2. **Authentication > Emails > Templates**: `supabase/email-templates` içindeki dosyaları yapıştırın
    (*Confirm signup* → `confirm-signup.html`, *Reset password* → `reset-password.html`,
-   *Change email address* → `change-email.html`). Bağlantılar `/auth/confirm`'e gider; e-posta başka cihazda
+   *Change email address* → `change-email.html`; güvenlik bildirimleri: *Password changed* → `password-changed.html`,
+   *Email address changed* → `email-changed.html`). Bağlantılar `/auth/confirm`'e gider; e-posta başka cihazda
    veya mobil uygulamadan kayıttan sonra açılsa da çalışır.
 3. **Authentication > Rate Limits**: saatlik e-posta sınırını ihtiyaca göre artırın.
 
