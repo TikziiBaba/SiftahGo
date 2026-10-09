@@ -969,10 +969,27 @@ async function qrSvg(text: string) {
   return QRCode.toString(text, { type: "svg", margin: 0, color: { dark: "#042f2e", light: "#ffffff" } });
 }
 
+// Adres verilmemişse R2'deki app/siftahgo.apk kullanılır (yüklenmişse).
+async function getApkUrl() {
+  "use cache";
+  cacheLife("minutes");
+  if (APP_LINKS.apk) return APP_LINKS.apk;
+  const base = process.env.CLOUDFLARE_R2_PUBLIC_URL;
+  if (!base) return null;
+  const url = `${base.replace(/\/$/, "")}/app/siftahgo.apk`;
+  try {
+    const res = await fetch(url, { method: "HEAD" });
+    return res.ok ? url : null;
+  } catch {
+    return null;
+  }
+}
+
 async function AppDownload() {
   const site = process.env.NEXT_PUBLIC_APP_URL ?? `https://${SITE_DOMAIN}`;
+  const apk = await getApkUrl();
   // Telefonla okutulunca doğrudan indirsin; APK yoksa bu bölüme gelsin.
-  const qr = await qrSvg(APP_LINKS.apk ?? `${site}/#uygulama`);
+  const qr = await qrSvg(apk ?? `${site}/#uygulama`);
   const stores = [
     { href: APP_LINKS.playStore, icon: Play, small: "Google Play’den", big: "Edinin" },
     { href: APP_LINKS.appStore, icon: Apple, small: "App Store’dan", big: "İndirin" },
@@ -994,8 +1011,8 @@ async function AppDownload() {
             </p>
 
             <div className="mt-8 flex flex-wrap gap-3">
-              {APP_LINKS.apk ? (
-                <a href={APP_LINKS.apk} download className="group btn btn-primary py-2.5 pl-5 pr-1.5">
+              {apk ? (
+                <a href={apk} download className="group btn btn-primary py-2.5 pl-5 pr-1.5">
                   <Download className="size-4" /> Android için indir (APK)
                   <span className="btn-icon">
                     <ArrowUpRight className="size-4" />
@@ -1036,7 +1053,7 @@ async function AppDownload() {
                 ),
               )}
             </div>
-            {APP_LINKS.apk && (
+            {apk && (
               <p className="mt-4 max-w-md text-xs text-ink-3">
                 APK’yı açarken telefonunuz “bilinmeyen kaynak” izni isteyebilir. Uygulama mağazaya çıkınca güncellemeler oradan gelir.
               </p>
