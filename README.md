@@ -31,6 +31,19 @@ Supabase ayarları:
   `https://ALAN-ADINIZ/auth/callback` ve geliştirme için `http://localhost:3000/auth/callback` ekleyin.
 - E-posta doğrulamasını geliştirme sırasında kapatmak isterseniz: **Authentication > Sign In / Providers > Email > Confirm email**.
 
+#### Hesap e-postaları (doğrulama, şifre sıfırlama)
+
+Supabase'in kendi e-posta servisi saatte birkaç e-posta gönderir ve sadece proje ekibine teslim eder;
+gerçek kullanıcılar için Resend SMTP kullanın:
+
+1. **Authentication > Emails > SMTP Settings** → *Enable custom SMTP*: Host `smtp.resend.com`, Port `465`,
+   Username `resend`, Password: Resend API anahtarı, Sender email: `EMAIL_FROM`'daki adres, Sender name `SiftahGo`.
+2. **Authentication > Emails > Templates**: `supabase/email-templates` içindeki dosyaları yapıştırın
+   (*Confirm signup* → `confirm-signup.html`, *Reset password* → `reset-password.html`,
+   *Change email address* → `change-email.html`). Bağlantılar `/auth/confirm`'e gider; e-posta başka cihazda
+   veya mobil uygulamadan kayıttan sonra açılsa da çalışır.
+3. **Authentication > Rate Limits**: saatlik e-posta sınırını ihtiyaca göre artırın.
+
 ### 2. Web
 
 ```bash
