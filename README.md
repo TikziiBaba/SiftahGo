@@ -54,6 +54,37 @@ Paket adları, fiyatları ve personel sınırları veritabanındaki `plans` tabl
 2. PayTR Mağaza Paneli > Ayarlar > **Bildirim URL**: `https://ALAN-ADINIZ/api/paytr/callback`
 3. Her başarılı ödeme 30 gün ekler; aynı bildirim tekrar gelirse süre iki kez uzamaz.
 
+### E-posta bildirimleri (Resend)
+
+Randevu alınınca işletmeye ve müşteriye, işletme onaylayınca veya iptal edince müşteriye, müşteri iptal edince
+işletmeye e-posta gider; müşteriye randevudan önce hatırlatma gönderilir (önceden alınan randevuya 24 saat,
+aynı gün alınana 2 saat kala). Müşteri e-postası girişli kullanıcıda hesap e-postasıdır; misafir randevu
+formunda isteğe bağlı yazar. E-postalar veritabanındaki `notifications` kuyruğuna girer, `/api/notifications`
+kuyruğu boşaltır.
+
+1. [resend.com](https://resend.com)'da alan adınızı doğrulayın ve bir API anahtarı oluşturun.
+2. Ortam değişkenleri: `RESEND_API_KEY`, `EMAIL_FROM` (örn. `SiftahGo <bildirim@siftahgo.com>`),
+   `CRON_SECRET` (uzun, rastgele bir metin), `NEXT_PUBLIC_APP_URL`.
+3. Supabase > Database > Extensions'tan **pg_cron** ve **pg_net**'i açın, SQL Editor'de şunu çalıştırın
+   (adresi ve anahtarı kendi değerlerinizle değiştirin). Kuyruk dakikada bir boşaltılır:
+
+```sql
+select cron.schedule(
+  'siftahgo-bildirimler',
+  '* * * * *',
+  $$
+  select net.http_get(
+    url := 'https://ALAN-ADINIZ/api/notifications',
+    headers := jsonb_build_object('Authorization', 'Bearer CRON_SECRET_DEĞERİNİZ'),
+    timeout_milliseconds := 30000
+  );
+  $$
+);
+```
+
+Görevi kaldırmak için: `select cron.unschedule('siftahgo-bildirimler');`. Gönderilemeyen e-postalar
+5 kez denenir; durumlarını Table Editor > notifications'ta (`status`, `last_error`) görebilirsiniz.
+
 ### 3. Mobil
 
 ```bash
@@ -63,18 +94,43 @@ npm install
 npx expo start
 ```
 
-Telefonda **Expo Go** ile QR kodu okutarak deneyebilirsiniz. Mağaza derlemesi için:
-`npx eas-cli@latest build --platform android` (veya `ios`).
+Telefonda **Expo Go** ile QR kodu okutarak deneyebilirsiniz. `.env.local` web ile **aynı** Supabase projesini göstermeli.
+
+Derlemeler (`mobile/eas.json`; Supabase adresi ve canlı site adresi profilde yazılı):
+
+```bash
+npx eas-cli@latest login
+npx eas-cli@latest build --platform android --profile preview      # siteden indirilecek APK
+npx eas-cli@latest build --platform android --profile production   # Play Store (AAB)
+npx eas-cli@latest build --platform ios --profile production       # App Store
+```
+
+#### Siteye indirme bağlantıları
+
+Ana sayfadaki "Mobil uygulama" bölümü (`/#uygulama`) şu ortam değişkenlerini kullanır; boş olan "Yakında" görünür:
+`NEXT_PUBLIC_ANDROID_APK_URL`, `NEXT_PUBLIC_PLAY_STORE_URL`, `NEXT_PUBLIC_APP_STORE_URL`.
+APK'yı EAS'ten indirip herkese açık bir yere (örn. R2 bucket'ında `app/siftahgo.apk`) koyun ve adresini
+`NEXT_PUBLIC_ANDROID_APK_URL`'e yazın. Vercel'de değişkeni değiştirdikten sonra yeniden deploy gerekir.
+
+### 4. Yönetim paneli
+
+`/admin`: platform özeti, işletmeler (paket tanımlama/süre uzatma, aboneliği bitirme, askıya alma), kullanıcılar,
+ödemeler, randevular ve paket fiyatları. Yöneticiler `admins` tablosundaki e-postalardır (şemada
+`dedyusuf99@gmail.com`); hesabın e-postası doğrulanmış olmalı. Yeni yönetici eklemek için SQL Editor'de:
+`insert into public.admins (email) values ('ornek@alan.com');`
+
+Askıya alınan işletme sitede ve uygulamada görünmez, randevu almaz; sahibi bunu ayarlardan geri açamaz.
+Yöneticinin tanımladığı paketler ödeme geçmişinde `ADM` ile başlayan kayıt olarak görünür.
 
 ## Özellikler
 
 **Müşteri:** işletme arama (kategori, şehir, puan), hizmet → personel → gün → saat seçerek randevu,
-misafir veya hesapla randevu, Google Takvim'e ekleme, randevularım, iptal, tekrar randevu,
+misafir veya hesapla randevu, e-posta ile onay/iptal bildirimi ve hatırlatma, Google Takvim'e ekleme, randevularım, iptal, tekrar randevu,
 tamamlanan randevuya puan ve yorum, şifremi unuttum.
 
 **İşletme (web paneli):**
 - Randevular: günlük liste, durum yönetimi (onay, tamamlandı, gelmedi, iptal), elle randevu ekleme,
-  WhatsApp ile hatırlatma, yeni randevular anında görünür
+  WhatsApp ile hatırlatma, yeni randevular anında görünür, yeni randevu ve iptallerde e-posta
 - Müşteriler: telefon numarasına göre müşteri defteri (ziyaret, harcama, gelmeme, son/sıradaki randevu)
 - Raporlar: ciro, randevu sayısı, ortalama sepet, gelmeme oranı, günlük ciro grafiği, hizmet ve personel dağılımı
 - Hizmetler, personel (hangi personelin hangi hizmeti verdiği), çalışma saatleri, izin/tatil günleri

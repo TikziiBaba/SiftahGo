@@ -26,7 +26,7 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
   const [day, setDay] = useState(todayStr);
   const [slotResult, setSlotResult] = useState<{ key: string; times: string[] } | null>(null);
   const [time, setTime] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: "", phone: "", note: "" });
+  const [form, setForm] = useState({ name: "", phone: "", email: "", note: "" });
   const [loggedIn, setLoggedIn] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -93,6 +93,8 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
       p_customer_name: form.name,
       p_customer_phone: form.phone,
       p_note: form.note,
+      // Girişli müşteride boş bırakılır; hesap e-postası kullanılır.
+      p_customer_email: form.email || null,
     });
     setBusy(false);
     if (error) {
@@ -294,6 +296,20 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
                 onChange={(e) => setForm({ ...form, phone: e.target.value })}
               />
             </div>
+            {!loggedIn && (
+              <div className="sm:col-span-2">
+                <label className="label" htmlFor="email">E-posta (isteğe bağlı)</label>
+                <input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="Onay ve hatırlatma e-postası için"
+                  className="input"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                />
+              </div>
+            )}
             <div className="sm:col-span-2">
               <label className="label" htmlFor="note">Not (isteğe bağlı)</label>
               <textarea id="note" rows={2} maxLength={500} className="input" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />

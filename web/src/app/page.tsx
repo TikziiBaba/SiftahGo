@@ -2,12 +2,16 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { cacheLife } from "next/cache";
 import { createClient as createSupabase } from "@supabase/supabase-js";
+import QRCode from "qrcode";
 import {
+  Apple,
   ArrowUpRight,
   BellRing,
   Check,
+  Download,
   MessageCircle,
   Monitor,
+  Play,
   QrCode,
   Smartphone,
   Sparkles,
@@ -19,6 +23,7 @@ import { Coin } from "@/components/three/coin";
 import { Tilt } from "@/components/tilt";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
 import {
+  APP_LINKS,
   BASE_FEATURES,
   CATEGORIES,
   PLAN_FEATURES,
@@ -42,6 +47,9 @@ export default function Home() {
           <Pricing />
         </Suspense>
         <Facts />
+        <Suspense fallback={<div className="h-[36rem]" />}>
+          <AppDownload />
+        </Suspense>
         <Faq />
         <FinalCta />
       </main>
@@ -949,6 +957,105 @@ function Facts() {
           </Reveal>
         ))}
       </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Mobil uygulama indirme                                               */
+/* ------------------------------------------------------------------ */
+async function qrSvg(text: string) {
+  "use cache";
+  return QRCode.toString(text, { type: "svg", margin: 0, color: { dark: "#042f2e", light: "#ffffff" } });
+}
+
+async function AppDownload() {
+  const site = process.env.NEXT_PUBLIC_APP_URL ?? `https://${SITE_DOMAIN}`;
+  // Telefonla okutulunca doğrudan indirsin; APK yoksa bu bölüme gelsin.
+  const qr = await qrSvg(APP_LINKS.apk ?? `${site}/#uygulama`);
+  const stores = [
+    { href: APP_LINKS.playStore, icon: Play, small: "Google Play’den", big: "Edinin" },
+    { href: APP_LINKS.appStore, icon: Apple, small: "App Store’dan", big: "İndirin" },
+  ];
+  return (
+    <section className="mx-auto max-w-6xl px-4 py-24">
+      <Reveal className="bezel">
+        <div className="bezel-core relative grid items-center gap-10 overflow-hidden p-8 md:grid-cols-[1.3fr_1fr] md:p-14">
+          <div className="absolute -left-24 -top-24 size-72 rounded-full bg-brand-400/15 blur-3xl" />
+          <div className="relative">
+            <span id="uygulama" className="eyebrow scroll-mt-32">
+              <Smartphone className="size-3.5" /> Mobil uygulama
+            </span>
+            <h2 className="mt-5 text-4xl font-semibold leading-tight tracking-[-0.03em] md:text-5xl">
+              Randevular <span className="text-gradient">cebinizde.</span>
+            </h2>
+            <p className="mt-4 max-w-md text-lg text-ink-2">
+              Müşteriler saniyeler içinde randevu alır, esnaf günün listesini görür, durumu değiştirir ve WhatsApp’tan hatırlatır.
+            </p>
+
+            <div className="mt-8 flex flex-wrap gap-3">
+              {APP_LINKS.apk ? (
+                <a href={APP_LINKS.apk} download className="group btn btn-primary py-2.5 pl-5 pr-1.5">
+                  <Download className="size-4" /> Android için indir (APK)
+                  <span className="btn-icon">
+                    <ArrowUpRight className="size-4" />
+                  </span>
+                </a>
+              ) : (
+                <span className="btn btn-secondary cursor-default opacity-60">
+                  <Download className="size-4" /> Android APK yakında
+                </span>
+              )}
+              {stores.map((s) =>
+                s.href ? (
+                  <a
+                    key={s.small}
+                    href={s.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-3 rounded-2xl bg-black px-4 py-2 ring-1 ring-line-strong transition hover:ring-brand-400/50"
+                  >
+                    <s.icon className="size-6" />
+                    <span className="leading-tight">
+                      <span className="block text-[10px] text-ink-3">{s.small}</span>
+                      <span className="block text-sm font-semibold">{s.big}</span>
+                    </span>
+                  </a>
+                ) : (
+                  <span
+                    key={s.small}
+                    className="flex cursor-default items-center gap-3 rounded-2xl bg-black/40 px-4 py-2 opacity-60 ring-1 ring-line"
+                    title="Yakında"
+                  >
+                    <s.icon className="size-6" />
+                    <span className="leading-tight">
+                      <span className="block text-[10px] text-ink-3">{s.small}</span>
+                      <span className="block text-sm font-semibold">Yakında</span>
+                    </span>
+                  </span>
+                ),
+              )}
+            </div>
+            {APP_LINKS.apk && (
+              <p className="mt-4 max-w-md text-xs text-ink-3">
+                APK’yı açarken telefonunuz “bilinmeyen kaynak” izni isteyebilir. Uygulama mağazaya çıkınca güncellemeler oradan gelir.
+              </p>
+            )}
+          </div>
+
+          <div className="relative mx-auto flex flex-col items-center gap-4">
+            <div
+              className="size-48 rounded-3xl bg-white p-4 shadow-[0_20px_60px_-20px_rgb(45_212_191/0.5)] [&_svg]:size-full"
+              role="img"
+              aria-label="Uygulamayı indirmek için QR kod"
+              dangerouslySetInnerHTML={{ __html: qr }}
+            />
+            <p className="flex items-center gap-2 text-sm text-ink-3">
+              <QrCode className="size-4" /> Telefonunuzun kamerasıyla okutun
+            </p>
+          </div>
+        </div>
+      </Reveal>
     </section>
   );
 }

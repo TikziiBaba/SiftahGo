@@ -17,7 +17,8 @@ const expectError = async (fn, re, msg) => {
 await db.exec(`
   create schema auth; create schema extensions;
   create role anon nologin; create role authenticated nologin;
-  create table auth.users (id uuid primary key, email text, raw_user_meta_data jsonb default '{}');
+  create table auth.users (id uuid primary key, email text, raw_user_meta_data jsonb default '{}',
+    email_confirmed_at timestamptz default now(), created_at timestamptz default now(), last_sign_in_at timestamptz);
   create function auth.uid() returns uuid language sql stable as
     $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
   grant usage on schema auth, extensions, public to anon, authenticated;
@@ -132,6 +133,64 @@ ok((await slots(svc30, monday)).length === 19, 'iptal sonrası saat tekrar boş 
 await expectError(() => as(A, `insert into appointments (business_id, staff_id, service_name, customer_name, customer_phone, starts_at, ends_at) values ($1, $2, 'x', 'x', 'x', $3, $3::timestamptz + interval '30 min')`, [biz, staff[0].id, `${monday}T08:15:00Z`]), /appointments_no_overlap/, 'manuel çakışan randevu reddedildi');
 ok((await as(A, `insert into appointments (business_id, staff_id, service_name, customer_name, customer_phone, starts_at, ends_at) values ($1, $2, 'x', 'x', 'x', $3, $3::timestamptz + interval '30 min') returning id`, [biz, staff[0].id, `${monday}T12:00:00Z`])).rows.length === 1, 'işletme manuel randevu ekledi');
 
+// e-posta bildirimleri
+const notes = async (id) =>
+  (await db.query(`select kind, recipient, email from notifications where appointment_id = $1 order by kind, recipient`, [id])).rows
+    .map((r) => `${r.kind}:${r.recipient}:${r.email}`).join(' ');
+let n = await notes(apptId);
+ok(n === 'booked:business:a@x.com booked:customer:c@x.com cancelled:business:a@x.com', `girişli müşteri: hesap e-postasına bildirim, iptali işletmeye: ${n}`);
+ok(await notes(guest) === 'booked:business:a@x.com', 'e-postasız misafire bildirim yok, işletmeye var');
+ok((await db.query(`select count(*)::int c from notifications n join appointments a on a.id = n.appointment_id where a.customer_name = 'x'`)).rows[0].c === 0, 'işletmenin elle eklediği randevuya bildirim yok');
+ok((await as(A, `select id from notifications`)).rows.length === 0 && (await as(C, `select id from notifications`)).rows.length === 0, 'bildirim kuyruğu istemciye kapalı');
+
+const wednesday = new Date(new Date(`${monday}T12:00:00Z`).getTime() + 2 * 864e5).toISOString().slice(0, 10);
+const bookMail = (t, email) =>
+  as(null, `select book_appointment($1, $2, null, $3, 'Misafir Kişi', '05551112244', '', $4) as id`, [biz, svc30, t, email]);
+await expectError(() => bookMail(`${wednesday}T06:00:00Z`, 'yanlis-eposta'), /e-posta/, 'geçersiz e-posta reddedildi');
+await as(A, `update businesses set auto_confirm = false where id = $1`, [biz]);
+const mailed = (await bookMail(`${wednesday}T06:00:00Z`, ' Misafir@Ornek.com ')).rows[0].id;
+ok((await db.query(`select customer_email from appointments where id = $1`, [mailed])).rows[0].customer_email === 'misafir@ornek.com', 'misafir e-postası küçük harfle kaydedildi');
+await as(A, `update appointments set status = 'confirmed' where id = $1`, [mailed]);
+await as(A, `update appointments set status = 'cancelled' where id = $1`, [mailed]);
+await as(A, `update businesses set auto_confirm = true where id = $1`, [biz]);
+n = await notes(mailed);
+ok(n === 'booked:business:a@x.com booked:customer:misafir@ornek.com cancelled:customer:misafir@ornek.com confirmed:customer:misafir@ornek.com',
+  `onay ve işletmenin iptali müşteriye gider: ${n}`);
+
+// hatırlatma: elle (servis olarak) eklenen yakın randevular
+const remind = (startsIn, createdAgo, email = 'r@x.com') =>
+  db.query(`insert into appointments (business_id, service_name, customer_name, customer_phone, customer_email, starts_at, ends_at, status, created_at)
+            values ($1, 'Saç Kesimi', 'Rıza', '05550000000', $2, now() + $3::interval, now() + $3::interval + interval '30 min', 'confirmed', now() - $4::interval) returning id`,
+    [biz, email, startsIn, createdAgo]).then((r) => r.rows[0].id);
+const r24 = await remind('20 hours', '2 days');
+const r2 = await remind('90 minutes', '2 hours');
+const rSoon = await remind('5 hours', '10 hours'); // 24 saatten kısa kala alındı, 2 saat kala hatırlatılacak
+const rLate = await remind('150 minutes', '0 minutes'); // 3 saatten az kala alındı
+await remind('20 hours', '2 days', null);
+await expectError(() => as(A, `select queue_due_reminders()`), /permission denied/, 'hatırlatma kuyruğu istemciden çalıştırılamaz');
+ok((await db.query(`select queue_due_reminders() c`)).rows[0].c === 2, 'zamanı gelen 2 hatırlatma kuyruğa girdi');
+ok((await db.query(`select queue_due_reminders() c`)).rows[0].c === 0, 'hatırlatma ikinci kez eklenmez');
+const hasReminder = async (id) => (await notes(id)).includes('reminder:customer:r@x.com');
+ok(await hasReminder(r24) && await hasReminder(r2) && !(await hasReminder(rSoon)) && !(await hasReminder(rLate)), 'hatırlatma zamanlaması doğru');
+
+// gönderim
+await expectError(() => as(A, `select * from claim_notifications()`), /permission denied/, 'kuyruk istemciden alınamaz');
+const claimed = (await db.query(`select * from claim_notifications(100)`)).rows;
+const skipped = (await db.query(`select kind, status from notifications where appointment_id = $1 order by kind, recipient`, [apptId])).rows.map((r) => r.status).join(',');
+ok(skipped === 'skipped,skipped,pending' && !claimed.some((c) => c.kind !== 'cancelled' && c.status === 'cancelled'), `iptal edilen randevunun "alındı" e-postası atlandı, iptal e-postası gider: ${skipped}`);
+const rc = claimed.find((c) => c.kind === 'reminder' && c.email === 'r@x.com');
+ok(rc && rc.business_name === 'Ahmet Berber' && rc.business_slug === 'ahmet-berber' && rc.service_name === 'Saç Kesimi', 'e-posta için randevu ve işletme bilgisi geldi');
+ok((await db.query(`select * from claim_notifications(100)`)).rows.length === 0, 'alınan e-postalar kilitli, ikinci istek almaz');
+await db.query(`select finish_notification($1, 'Resend 500')`, [rc.id]);
+await db.query(`select finish_notification($1)`, [claimed[0].id]);
+const st = (await db.query(`select id, status, attempts, last_error from notifications where id = any($1)`, [[rc.id, claimed[0].id]])).rows;
+ok(st.find((x) => x.id === rc.id).status === 'pending' && st.find((x) => x.id === rc.id).last_error === 'Resend 500', 'hatalı gönderim tekrar denenecek');
+ok(st.find((x) => x.id === claimed[0].id).status === 'sent', 'başarılı gönderim işaretlendi');
+await db.query(`update notifications set attempts = 5 where id = $1`, [rc.id]);
+await db.query(`select finish_notification($1, 'Resend 500')`, [rc.id]);
+ok((await db.query(`select status from notifications where id = $1`, [rc.id])).rows[0].status === 'failed', '5 denemeden sonra bırakıldı');
+await db.query(`delete from appointments where customer_name = 'Rıza'`);
+
 // ikinci personel -> kapasite artar, izin düşer
 const st2 = (await as(A, `insert into staff (business_id, name) values ($1, 'Mehmet') returning id`, [biz])).rows[0].id;
 s = await slots(svc30, monday);
@@ -186,6 +245,63 @@ await as(A, `update businesses set is_published = false where id = $1`, [biz]);
 ok((await as(null, `select id from businesses`)).rows.length === 0, 'yayında olmayan işletme gizli');
 ok((await as(null, `select id from services`)).rows.length === 0, 'yayında olmayan işletmenin hizmetleri gizli');
 ok((await as(A, `select id from businesses`)).rows.length === 1, 'sahibi kendi işletmesini görür');
+await as(A, `update businesses set is_published = true where id = $1`, [biz]);
+
+// yönetici
+const ADM = '00000000-0000-0000-0000-0000000000ad';
+const FAKE = '00000000-0000-0000-0000-0000000000af';
+await db.exec(`
+  insert into auth.users values ('${ADM}', 'DedYusuf99@gmail.com', '{"full_name":"Yönetici"}');
+  insert into auth.users (id, email, raw_user_meta_data, email_confirmed_at) values ('${FAKE}', 'dedyusuf99@gmail.com', '{}', null);
+`);
+ok((await as(ADM, `select is_admin() a`)).rows[0].a === true, 'admin e-postası (büyük/küçük harf fark etmez) yönetici');
+ok((await as(FAKE, `select is_admin() a`)).rows[0].a === false, 'e-postası doğrulanmamış hesap yönetici olamaz');
+ok((await as(A, `select is_admin() a`)).rows[0].a === false && (await as(null, `select is_admin() a`)).rows[0].a === false, 'diğerleri yönetici değil');
+ok((await as(A, `select * from admins`)).rows.length === 0, 'yönetici listesi istemciye kapalı');
+
+for (const [sql, label] of [
+  [`select admin_stats()`, 'istatistik'],
+  [`select * from admin_users()`, 'kullanıcı listesi'],
+  [`select admin_grant_subscription('${biz}', 'pro', 365)`, 'paket verme'],
+  [`select admin_end_subscription('${biz}')`, 'abonelik bitirme'],
+  [`select admin_set_suspended('${biz}', true)`, 'askıya alma'],
+]) await expectError(() => as(A, sql), /Yetkiniz yok/, `işletme sahibi admin ${label} yapamaz`);
+ok((await as(A, `update plans set price = 1 where id = 'pro' returning id`)).rows.length === 0, 'işletme sahibi paket fiyatı değiştiremez');
+
+ok((await as(ADM, `select id from businesses`)).rows.length === 1 && (await as(ADM, `select id from appointments`)).rows.length > 0
+  && (await as(ADM, `select id from payments`)).rows.length === 2 && (await as(ADM, `select id from profiles`)).rows.length === 5,
+  'yönetici tüm işletme, randevu, ödeme ve profilleri görür');
+const users = (await as(ADM, `select * from admin_users()`)).rows;
+ok(users.length === 5 && users.find((u) => u.id === A).business_name === 'Ahmet Berber' && users.find((u) => u.id === ADM).is_admin, `kullanıcı listesi: ${users.length} kişi, işletme ve admin bilgisiyle`);
+
+const before = (await db.query(`select subscription_ends_at from businesses where id = $1`, [biz])).rows[0].subscription_ends_at;
+await expectError(() => as(ADM, `select admin_grant_subscription($1, 'pro', 0)`, [biz]), /1 ile 3650/, 'geçersiz süre reddedildi');
+await expectError(() => as(ADM, `select admin_grant_subscription($1, 'yok', 30)`, [biz]), /Paket bulunamadı/, 'olmayan paket reddedildi');
+await as(ADM, `select admin_grant_subscription($1, 'pro', 90, 1500)`, [biz]);
+const g = (await db.query(`select plan_id, subscription_ends_at from businesses where id = $1`, [biz])).rows[0];
+ok(g.plan_id === 'pro' && Math.round((g.subscription_ends_at - before) / 864e5) === 90, 'yönetici Pro paketi verdi, 90 gün kalan süreye eklendi');
+const admPay = (await db.query(`select merchant_oid, amount::text, status from payments where merchant_oid like 'ADM%'`)).rows;
+ok(admPay.length === 1 && admPay[0].amount === '1500.00' && admPay[0].status === 'paid', 'yönetici işlemi ödeme geçmişine yazıldı');
+
+const stats = (await as(ADM, `select admin_stats() s`)).rows[0].s;
+ok(stats.users === 5 && stats.businesses === 1 && stats.active === 1 && Number(stats.mrr) === 749 && Number(stats.revenue_total) === 449 + 249 + 1500
+  && stats.daily.length === 30 && stats.by_plan.find((p) => p.id === 'pro').count === 1,
+  `istatistikler: ${JSON.stringify({ u: stats.users, b: stats.businesses, mrr: stats.mrr, rev: stats.revenue_total, days: stats.daily.length })}`);
+
+await as(ADM, `select admin_set_suspended($1, true)`, [biz]);
+ok((await as(null, `select id from businesses`)).rows.length === 0 && (await slots(svc30, tuesday)).length === 0, 'askıdaki işletme gizli ve randevu almaz');
+await as(A, `update businesses set is_suspended = false where id = $1`, [biz]);
+ok((await db.query(`select is_suspended from businesses where id = $1`, [biz])).rows[0].is_suspended === true, 'işletme sahibi askıyı kaldıramaz');
+await as(ADM, `select admin_set_suspended($1, false)`, [biz]);
+ok((await as(null, `select id from businesses`)).rows.length === 1, 'askıdan çıkınca tekrar görünür');
+
+await as(ADM, `select admin_end_subscription($1)`, [biz]);
+ok((await as(null, `select id from businesses`)).rows.length === 0, 'yönetici aboneliği bitirince işletme yayından düştü');
+
+await as(ADM, `update plans set price = 999, staff_limit = 10 where id = 'pro'`);
+await as(ADM, `insert into plans (id, name, price, staff_limit, sort_order) values ('kurumsal', 'Kurumsal', 1999, null, 4)`);
+ok((await as(null, `select price::int p from plans where id = 'pro'`)).rows[0].p === 999 && (await as(null, `select id from plans`)).rows.length === 4, 'yönetici paket fiyatını değiştirdi ve yeni paket ekledi');
+await expectError(() => as(ADM, `update plans set price = 0 where id = 'pro'`), /check constraint/, 'sıfır fiyat reddedildi');
 
 console.log(failures ? `\n${failures} TEST BAŞARISIZ` : '\nTÜM TESTLER GEÇTİ');
 process.exit(failures ? 1 : 0);

@@ -36,7 +36,11 @@ export function SiteHeader() {
     const supabase = createClient();
     async function load(userId: string | undefined) {
       if (!userId) return setAccount(null);
-      const { data } = await supabase.from("profiles").select("role").eq("id", userId).maybeSingle();
+      const [{ data }, { data: admin }] = await Promise.all([
+        supabase.from("profiles").select("role").eq("id", userId).maybeSingle(),
+        supabase.rpc("is_admin"),
+      ]);
+      if (admin === true) return setAccount({ href: "/admin", label: "Yönetim" });
       setAccount(data?.role === "business" ? { href: "/panel", label: "Panel" } : { href: "/hesabim", label: "Hesabım" });
     }
     supabase.auth.getSession().then(({ data }) => load(data.session?.user.id));
@@ -131,6 +135,7 @@ export function SiteFooter() {
           links={[
             ["İşletme bul", "/kesfet"],
             ["Randevularım", "/hesabim"],
+            ["Mobil uygulama", "/#uygulama"],
             ["Hesap aç", "/kayit"],
           ]}
         />

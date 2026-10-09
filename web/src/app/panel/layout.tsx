@@ -123,6 +123,11 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
               </button>
             </div>
           </header>
+          {business.is_suspended && (
+            <p className="border-b border-rose-400/20 bg-rose-500/10 px-4 py-2 text-center text-sm text-rose-200 print:hidden">
+              İşletmeniz yönetici tarafından yayından kaldırıldı; sayfanız görünmüyor ve randevu alınamıyor. Bilgi için bizimle iletişime geçin.
+            </p>
+          )}
           {subscribed && daysLeft <= 5 && pathname !== "/panel/abonelik" && (
             <Link
               href="/panel/abonelik"

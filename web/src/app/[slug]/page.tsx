@@ -86,6 +86,11 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
             </p>
           </div>
         </div>
+        {business.is_suspended && (
+          <p className="mt-4 rounded-xl bg-rose-500/10 p-3 text-sm text-rose-300">
+            Bu sayfa yönetici tarafından yayından kaldırıldı; sadece siz görebilirsiniz.
+          </p>
+        )}
         {!business.is_published && (
           <p className="mt-4 rounded-xl bg-amber-400/10 p-3 text-sm text-amber-300">
             Bu sayfa şu an yayında değil; sadece siz görebilirsiniz. Ayarlardan yayına alabilirsiniz.

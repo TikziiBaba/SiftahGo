@@ -36,8 +36,8 @@ export default function BusinessScreen() {
   const [slotResult, setSlotResult] = useState<{ key: string; times: string[] } | null>(null);
   const [time, setTime] = useState<string | null>(null);
   // null = kullanıcı henüz yazmadı; profil bilgisiyle doldurulur.
-  const [input, setInput] = useState<{ name: string | null; phone: string | null; note: string }>({ name: null, phone: null, note: '' });
-  const form = { name: input.name ?? profile?.full_name ?? '', phone: input.phone ?? profile?.phone ?? '', note: input.note };
+  const [input, setInput] = useState<{ name: string | null; phone: string | null; email: string; note: string }>({ name: null, phone: null, email: '', note: '' });
+  const form = { name: input.name ?? profile?.full_name ?? '', phone: input.phone ?? profile?.phone ?? '', email: input.email, note: input.note };
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [booked, setBooked] = useState(false);
@@ -117,6 +117,8 @@ export default function BusinessScreen() {
       p_customer_name: form.name,
       p_customer_phone: form.phone,
       p_note: form.note,
+      // Girişli müşteride boş bırakılır; hesap e-postası kullanılır.
+      p_customer_email: form.email || null,
     });
     setBusy(false);
     if (error) {
@@ -288,6 +290,17 @@ export default function BusinessScreen() {
             </Text>
             <Field label="Adınız Soyadınız" value={form.name} onChangeText={(name) => setInput({ ...input, name })} autoComplete="name" />
             <Field label="Telefon" value={form.phone} onChangeText={(phone) => setInput({ ...input, phone })} keyboardType="phone-pad" placeholder="05xx xxx xx xx" autoComplete="tel" />
+            {!session && (
+              <Field
+                label="E-posta (isteğe bağlı)"
+                value={form.email}
+                onChangeText={(email) => setInput({ ...input, email })}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+                placeholder="Onay ve hatırlatma e-postası için"
+              />
+            )}
             <Field label="Not (isteğe bağlı)" value={form.note} onChangeText={(note) => setInput({ ...input, note })} maxLength={500} />
             {error ? <Text style={styles.error}>{error}</Text> : null}
             <Button title="Randevuyu Onayla" onPress={book} loading={busy} />

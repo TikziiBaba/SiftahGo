@@ -70,3 +70,10 @@ export const BASE_FEATURES = [
 export function isSubscribed(b: { subscription_ends_at: string | null }) {
   return !!b.subscription_ends_at && new Date(b.subscription_ends_at) > new Date();
 }
+
+// Mobil uygulama indirme bağlantıları (.env). Boş olan "Yakında" gösterilir.
+export const APP_LINKS = {
+  apk: process.env.NEXT_PUBLIC_ANDROID_APK_URL || null,
+  playStore: process.env.NEXT_PUBLIC_PLAY_STORE_URL || null,
+  appStore: process.env.NEXT_PUBLIC_APP_STORE_URL || null,
+};

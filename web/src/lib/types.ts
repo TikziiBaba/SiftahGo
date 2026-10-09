@@ -26,6 +26,7 @@ export type Business = {
   min_notice_minutes: number;
   auto_confirm: boolean;
   is_published: boolean;
+  is_suspended: boolean;
   timezone: string;
   rating_avg: number;
   rating_count: number;
@@ -114,6 +115,7 @@ export type Appointment = {
   service_name: string;
   customer_name: string;
   customer_phone: string;
+  customer_email: string | null;
   note: string;
   price: number;
   starts_at: string;

@@ -29,8 +29,11 @@ export function LoginForm() {
       setBusy(false);
       return setError(errorMessage(error));
     }
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", data.user.id).maybeSingle();
-    router.replace(safeNext(params.get("next")) ?? (profile?.role === "business" ? "/panel" : "/hesabim"));
+    const [{ data: profile }, { data: admin }] = await Promise.all([
+      supabase.from("profiles").select("role").eq("id", data.user.id).maybeSingle(),
+      supabase.rpc("is_admin"),
+    ]);
+    router.replace(safeNext(params.get("next")) ?? (admin === true ? "/admin" : profile?.role === "business" ? "/panel" : "/hesabim"));
     router.refresh();
   }
 

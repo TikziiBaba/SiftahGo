@@ -26,7 +26,7 @@ export async function proxy(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const path = request.nextUrl.pathname;
 
-  if (!data?.claims && (path.startsWith("/panel") || path.startsWith("/hesabim"))) {
+  if (!data?.claims && (path.startsWith("/panel") || path.startsWith("/hesabim") || path.startsWith("/admin"))) {
     const url = request.nextUrl.clone();
     url.pathname = "/giris";
     url.search = `?next=${encodeURIComponent(path)}`;
