@@ -8,7 +8,7 @@
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://pbvcftuznlorwaaydxqi.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBidmNmdHV6bmxvcndhYXlkeHFpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0ODA2MTYsImV4cCI6MjEwNzA1NjYxNn0.Ss2AEvedFsY1it1mjVWpaGeffoamF0iCE8WnNwDTdQE",
-        "EXPO_PUBLIC_WEB_URL": "https://siftah-go.vercel.app"
+        "EXPO_PUBLIC_WEB_URL": "https://siftahgo.bekirr.dev"
       }
     },
     "development": {
