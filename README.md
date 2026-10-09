@@ -123,8 +123,13 @@ npx eas-cli@latest build --platform ios --profile production       # App Store
 
 Ana sayfadaki "Mobil uygulama" bölümü (`/#uygulama`) şu ortam değişkenlerini kullanır; boş olan "Yakında" görünür:
 `NEXT_PUBLIC_ANDROID_APK_URL`, `NEXT_PUBLIC_PLAY_STORE_URL`, `NEXT_PUBLIC_APP_STORE_URL`.
-APK'yı EAS'ten indirip herkese açık bir yere (örn. R2 bucket'ında `app/siftahgo.apk`) koyun ve adresini
-`NEXT_PUBLIC_ANDROID_APK_URL`'e yazın. Vercel'de değişkeni değiştirdikten sonra yeniden deploy gerekir.
+APK GitHub Releases'ta yayınlanır; `NEXT_PUBLIC_ANDROID_APK_URL` her zaman en yeni sürümü veren
+`https://github.com/TikziiBaba/SiftahGo/releases/latest/download/siftahgo.apk` adresidir. Yeni sürüm için
+`preview` derlemesinin APK'sını indirip dosya adı `siftahgo.apk` olacak şekilde yayınlayın (site değişmeden yeni dosyayı verir):
+
+```bash
+gh release create v1.0.1 siftahgo.apk --title "SiftahGo 1.0.1" --notes "..."
+```
 
 ### 4. Yönetim paneli
 
