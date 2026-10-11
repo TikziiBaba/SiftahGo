@@ -2,11 +2,11 @@
   "expo": {
     "name": "SiftahGo",
     "slug": "siftahgo",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "siftahgo",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "ios": {
       "bundleIdentifier": "com.siftahgo.app",
       "supportsTablet": true
@@ -19,7 +19,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.siftahgo.app"
+      "package": "com.siftahgo.app",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "output": "single",
@@ -30,12 +31,35 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#0f766e",
+          "backgroundColor": "#060808",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "İşletmenizin logo, kapak ve galeri fotoğraflarını seçmek için fotoğraflarınıza erişim gerekir.",
+          "cameraPermission": false,
+          "microphonePermission": false,
+          "colors": {
+            "cropToolbarColor": "#060808",
+            "cropToolbarIconColor": "#f1f5f4",
+            "cropToolbarActionTextColor": "#5eead4",
+            "cropBackButtonIconColor": "#f1f5f4",
+            "cropBackgroundColor": "#060808"
+          }
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#2dd4bf",
+          "defaultChannel": "default"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
@@ -46,6 +70,7 @@
         "projectId": "4975df46-249a-4549-b30d-1fdf94332db8"
       }
     },
-    "owner": "siftahgo"
+    "owner": "siftahgo",
+    "backgroundColor": "#060808"
   }
 }

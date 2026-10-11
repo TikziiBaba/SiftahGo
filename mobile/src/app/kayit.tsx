@@ -1,11 +1,20 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
-import { Button, Card, Field, styles } from '@/components/ui';
-import { colors, WEB_URL } from '@/lib/constants';
+import { AuthShell, GoogleButton, PasswordField } from '@/components/auth-shell';
+import { Banner, Button, Empty, Field, styles, Text } from '@/components/ui';
+import { WEB_URL, type IconName } from '@/lib/constants';
 import { errorMessage } from '@/lib/format';
+import { haptic } from '@/lib/haptics';
 import { supabase } from '@/lib/supabase';
+import { colors, radius } from '@/lib/theme';
+
+const ROLES: { value: 'customer' | 'business'; title: string; text: string; icon: IconName }[] = [
+  { value: 'customer', title: 'Randevu alacağım', text: 'Müşteri hesabı', icon: 'person-outline' },
+  { value: 'business', title: 'İşletmem var', text: 'Randevu kabul edin', icon: 'storefront-outline' },
+];
 
 export default function SignupScreen() {
   const params = useLocalSearchParams<{ rol?: string }>();
@@ -13,9 +22,12 @@ export default function SignupScreen() {
   const [form, setForm] = useState({ full_name: '', phone: '', email: '', password: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [result, setResult] = useState<'check-email' | 'business-ready' | null>(null);
+  const [sentTo, setSentTo] = useState('');
 
   async function submit() {
+    if (form.full_name.trim().length < 2) return setError('Adınızı ve soyadınızı yazın.');
+    if (!form.email.trim()) return setError('E-posta adresinizi yazın.');
+    if (form.password.length < 6) return setError('Şifre en az 6 karakter olmalı.');
     setBusy(true);
     setError('');
     const { data, error } = await supabase.auth.signUp({
@@ -27,24 +39,21 @@ export default function SignupScreen() {
       },
     });
     setBusy(false);
-    if (error) return setError(errorMessage(error));
-    if (!data.session) return setResult('check-email');
-    if (role === 'business') return setResult('business-ready');
+    if (error) {
+      haptic.error();
+      return setError(errorMessage(error));
+    }
+    if (!data.session) return setSentTo(form.email.trim());
+    // Oturum açıldı: işletme hesabı kurulum ekranına kendiliğinden yönlenir.
     router.back();
   }
 
-  if (result) {
+  if (sentTo) {
     return (
-      <View style={[styles.content, { paddingTop: 32 }]}>
-        <Card style={{ gap: 10 }}>
-          <Text style={styles.h2}>{result === 'check-email' ? 'E-postanızı kontrol edin' : 'Hesabınız hazır'}</Text>
-          <Text style={styles.muted}>
-            {result === 'check-email'
-              ? `${form.email} adresine doğrulama bağlantısı gönderdik. Doğruladıktan sonra giriş yapabilirsiniz.`
-              : 'İşletme bilgilerinizi, hizmetlerinizi ve çalışma saatlerinizi web panelinden ekleyin. Randevularınızı bu uygulamadan takip edebilirsiniz.'}
-          </Text>
-          <Button title="Tamam" onPress={() => router.back()} />
-        </Card>
+      <View style={[styles.screen, { justifyContent: 'center' }]}>
+        <Empty icon="mail-unread-outline" title="E-postanızı kontrol edin" text={`${sentTo} adresine doğrulama bağlantısı gönderdik. Doğruladıktan sonra uygulamadan giriş yapabilirsiniz.`}>
+          <Button title="Giriş ekranına git" onPress={() => router.replace('/giris')} />
+        </Empty>
       </View>
     );
   }
@@ -52,29 +61,67 @@ export default function SignupScreen() {
   const set = (k: keyof typeof form) => (v: string) => setForm({ ...form, [k]: v });
 
   return (
-    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={[styles.content, { gap: 14 }]} keyboardShouldPersistTaps="handled">
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          {([
-            ['customer', 'Randevu almak istiyorum'],
-            ['business', 'İşletmem var'],
-          ] as const).map(([value, text]) => (
+    <AuthShell title="Hesap oluşturun" subtitle="Birkaç bilgiyle bir dakikada hazır.">
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        {ROLES.map((r) => {
+          const on = role === r.value;
+          return (
             <Pressable
-              key={value}
-              onPress={() => setRole(value)}
-              style={[styles.card, { flex: 1, alignItems: 'center' }, role === value && { borderColor: colors.brand, backgroundColor: colors.brandLight }]}>
-              <Text style={{ fontWeight: '600', color: role === value ? colors.brandDark : colors.muted, textAlign: 'center' }}>{text}</Text>
+              key={r.value}
+              onPress={() => {
+                haptic.select();
+                setRole(r.value);
+              }}
+              accessibilityRole="radio"
+              aria-checked={on}
+              style={[s.role, on && s.roleOn]}>
+              <Ionicons name={r.icon} size={22} color={on ? colors.brand300 : colors.ink3} />
+              <Text variant="bodyStrong" tone={on ? 'default' : 'secondary'}>
+                {r.title}
+              </Text>
+              <Text variant="caption" tone="muted">
+                {r.text}
+              </Text>
             </Pressable>
-          ))}
-        </View>
-        <Field label="Ad Soyad" value={form.full_name} onChangeText={set('full_name')} autoComplete="name" />
-        <Field label="Telefon" value={form.phone} onChangeText={set('phone')} keyboardType="phone-pad" placeholder="05xx xxx xx xx" />
-        <Field label="E-posta" value={form.email} onChangeText={set('email')} autoCapitalize="none" keyboardType="email-address" autoComplete="email" />
-        <Field label="Şifre (en az 6 karakter)" value={form.password} onChangeText={set('password')} secureTextEntry autoComplete="new-password" />
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-        <Button title={role === 'business' ? 'İşletme Hesabı Aç' : 'Hesap Aç'} onPress={submit} loading={busy} />
-        <Button title="Zaten hesabın var mı? Giriş yap" variant="ghost" onPress={() => router.replace('/giris')} />
-      </ScrollView>
-    </KeyboardAvoidingView>
+          );
+        })}
+      </View>
+      <GoogleButton business={role === 'business'} />
+      <Field label="Ad Soyad" icon="person-outline" value={form.full_name} onChangeText={set('full_name')} autoComplete="name" textContentType="name" />
+      <Field label="Telefon" icon="call-outline" value={form.phone} onChangeText={set('phone')} keyboardType="phone-pad" placeholder="05xx xxx xx xx" autoComplete="tel" />
+      <Field
+        label="E-posta"
+        icon="mail-outline"
+        value={form.email}
+        onChangeText={set('email')}
+        autoCapitalize="none"
+        keyboardType="email-address"
+        autoComplete="email"
+        textContentType="emailAddress"
+      />
+      <PasswordField label="Şifre" value={form.password} onChangeText={set('password')} autoComplete="new-password" textContentType="newPassword" hint="En az 6 karakter" />
+      {role === 'business' && (
+        <Banner icon="storefront-outline" text="Sonraki adımda işletmenizin adını, kategorisini ve şehrini girip sayfanızı oluşturacaksınız." />
+      )}
+      {error ? <Banner tone="danger" icon="alert-circle-outline" text={error} /> : null}
+      <Button title={role === 'business' ? 'İşletme hesabı aç' : 'Hesap aç'} size="lg" onPress={submit} loading={busy} />
+      <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 4, marginTop: 8 }}>
+        <Text tone="muted">Zaten hesabınız var mı?</Text>
+        <Button title="Giriş yapın" variant="ghost" size="sm" onPress={() => router.replace('/giris')} />
+      </View>
+    </AuthShell>
   );
 }
+
+const s = StyleSheet.create({
+  role: {
+    flex: 1,
+    gap: 4,
+    padding: 14,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.surface,
+  },
+  roleOn: { borderColor: colors.brandRing, backgroundColor: colors.brandSoft },
+});

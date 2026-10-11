@@ -41,3 +41,6 @@ example
 # generated native folders
 /ios
 /android
+
+# Firebase istemci dosyası: depoya girmez, EAS'ta GOOGLE_SERVICES_JSON dosya değişkeni olarak durur
+google-services.json

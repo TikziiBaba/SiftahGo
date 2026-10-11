@@ -1,17 +1,40 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Glow, Wordmark } from '@/components/brand';
 import { Logo } from '@/components/business-logo';
-import { Empty, Loading, styles } from '@/components/ui';
-import { CATEGORIES, categoryLabel, colors } from '@/lib/constants';
+import { OptionSheet } from '@/components/pickers';
+import { Avatar, Badge, Button, Card, Chip, Empty, Field, Skeleton, styles, Text } from '@/components/ui';
+import { useAuth } from '@/lib/auth';
+import { CATEGORIES, categoryLabel, CITIES } from '@/lib/constants';
 import { supabase } from '@/lib/supabase';
+import { colors } from '@/lib/theme';
 import type { Business } from '@/lib/types';
 
+type Item = Pick<Business, 'id' | 'slug' | 'name' | 'category' | 'city' | 'district' | 'logo_url' | 'rating_avg' | 'rating_count'>;
+
+const CITY_KEY = 'siftahgo.city';
+const CITY_OPTIONS = [{ value: '', label: 'Tüm şehirler' }, ...CITIES.map((c) => ({ value: c, label: c }))];
+
+function savedCity() {
+  try {
+    return localStorage.getItem(CITY_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
 export default function DiscoverScreen() {
+  const { session, profile } = useAuth();
+  const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('');
-  const [items, setItems] = useState<Business[] | null>(null);
+  const [city, setCity] = useState(savedCity);
+  const [cityOpen, setCityOpen] = useState(false);
+  const [items, setItems] = useState<Item[] | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [reload, setReload] = useState(0);
 
@@ -27,26 +50,42 @@ export default function DiscoverScreen() {
       const term = query.trim().replace(/[%_\\]/g, '');
       if (term) q = q.ilike('name', `%${term}%`);
       if (category) q = q.eq('category', category);
+      if (city) q = q.eq('city', city);
       const { data } = await q;
       if (!active) return;
-      setItems((data ?? []) as Business[]);
+      setItems((data ?? []) as Item[]);
       setRefreshing(false);
     }, 250);
     return () => {
       active = false;
       clearTimeout(timer);
     };
-  }, [query, category, reload]);
+  }, [query, category, city, reload]);
+
+  function chooseCity(value: string) {
+    setCity(value);
+    try {
+      localStorage.setItem(CITY_KEY, value);
+    } catch {}
+  }
+
+  const firstName = profile?.full_name.split(' ')[0];
 
   return (
     <View style={styles.screen}>
+      <Glow />
       <FlatList
         data={items ?? []}
         keyExtractor={(b) => b.id}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + 12 }]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
+            tintColor={colors.brand}
+            colors={[colors.brand]}
+            progressBackgroundColor={colors.surface2}
             onRefresh={() => {
               setRefreshing(true);
               setReload((r) => r + 1);
@@ -54,41 +93,148 @@ export default function DiscoverScreen() {
           />
         }
         ListHeaderComponent={
-          <View style={{ gap: 12 }}>
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              placeholder="İşletme adı ara"
-              placeholderTextColor="#a8a29e"
-              style={styles.input}
-              returnKeyType="search"
-            />
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-              {[{ id: '', label: 'Tümü' }, ...CATEGORIES].map((c) => (
-                <Pressable key={c.id} onPress={() => setCategory(c.id)} style={[styles.chip, category === c.id && styles.chipActive]}>
-                  <Text style={{ color: category === c.id ? '#fff' : colors.text, fontWeight: '500' }}>{c.label}</Text>
+          <View style={{ gap: 16, marginBottom: 4 }}>
+            <View style={s.top}>
+              <Wordmark />
+              {session ? (
+                <Pressable onPress={() => router.navigate('/hesap')} accessibilityRole="button" accessibilityLabel="Hesabım" hitSlop={8}>
+                  <Avatar name={profile?.full_name || session.user.email || '?'} size={38} />
                 </Pressable>
+              ) : (
+                <Button title="Giriş" variant="secondary" size="sm" onPress={() => router.push('/giris')} />
+              )}
+            </View>
+
+            <View style={{ gap: 6, marginTop: 4 }}>
+              <Text variant="display">{firstName ? `Merhaba ${firstName},` : 'Randevun bir dokunuşta.'}</Text>
+              <Text tone="muted">{firstName ? 'bugün nereden randevu alıyoruz?' : 'Berberden halı sahaya, yakınındaki esnafı bul.'}</Text>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <Field
+                containerStyle={{ flex: 1 }}
+                icon="search-outline"
+                value={query}
+                onChangeText={setQuery}
+                placeholder="İşletme ara"
+                returnKeyType="search"
+                autoCorrect={false}
+              />
+              <Pressable
+                onPress={() => setCityOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel={`Şehir: ${city || 'Tüm şehirler'}`}
+                style={({ pressed }) => [s.city, city && s.cityOn, pressed && { opacity: 0.75 }]}>
+                <Ionicons name="location-outline" size={18} color={city ? colors.brand300 : colors.ink2} />
+                <Text variant="label" tone={city ? 'brand' : 'secondary'} numberOfLines={1} style={{ maxWidth: 96 }}>
+                  {city || 'Şehir'}
+                </Text>
+              </Pressable>
+            </View>
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }} style={{ marginHorizontal: -16 }}>
+              <Chip label="Tümü" icon="apps-outline" selected={category === ''} onPress={() => setCategory('')} />
+              {CATEGORIES.map((c) => (
+                <Chip key={c.id} label={c.label} icon={c.icon} selected={category === c.id} onPress={() => setCategory(category === c.id ? '' : c.id)} />
               ))}
             </ScrollView>
+
+            {items && items.length > 0 && (
+              <Text variant="overline" tone="muted" style={{ marginTop: 4 }}>
+                {items.length === 60 ? '60+' : items.length} işletme{city ? ` · ${city}` : ''}
+              </Text>
+            )}
           </View>
         }
-        ListEmptyComponent={items === null ? <Loading /> : <Empty text="Aramanıza uygun işletme bulunamadı." />}
-        renderItem={({ item }) => (
-          <Pressable
-            onPress={() => router.push({ pathname: '/isletme/[slug]', params: { slug: item.slug } })}
-            style={({ pressed }) => [styles.card, { flexDirection: 'row', gap: 12, alignItems: 'center' }, pressed && { opacity: 0.7 }]}>
-            <Logo business={item} size={52} />
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 16, fontWeight: '600', color: colors.text }}>{item.name}</Text>
-              <Text style={styles.muted}>
-                {categoryLabel(item.category)}
-                {item.city ? ` · ${[item.district, item.city].filter(Boolean).join(', ')}` : ''}
-                {item.rating_count > 0 ? `  ★ ${Number(item.rating_avg).toFixed(1)}` : ''}
-              </Text>
+        ListEmptyComponent={
+          items === null ? (
+            <View style={{ gap: 10 }}>
+              {[0, 1, 2, 3].map((i) => (
+                <Skeleton key={i} height={84} />
+              ))}
             </View>
-          </Pressable>
-        )}
+          ) : (
+            <Empty
+              icon="search-outline"
+              title="İşletme bulunamadı"
+              text={city ? `${city} için aramanıza uygun işletme yok. Filtreleri değiştirmeyi deneyin.` : 'Aramanıza uygun işletme yok.'}>
+              {!!(city || category || query) && (
+                <Button
+                  title="Filtreleri temizle"
+                  variant="secondary"
+                  onPress={() => {
+                    setQuery('');
+                    setCategory('');
+                    chooseCity('');
+                  }}
+                />
+              )}
+            </Empty>
+          )
+        }
+        renderItem={({ item }) => <BusinessCard item={item} />}
+      />
+      <OptionSheet
+        visible={cityOpen}
+        onClose={() => setCityOpen(false)}
+        title="Şehir seçin"
+        options={CITY_OPTIONS}
+        value={city}
+        onSelect={chooseCity}
+        searchable
       />
     </View>
   );
 }
+
+function BusinessCard({ item }: { item: Item }) {
+  const place = [item.district, item.city].filter(Boolean).join(', ');
+  return (
+    <Card
+      onPress={() => router.push({ pathname: '/isletme/[slug]', params: { slug: item.slug } })}
+      accessibilityLabel={item.name}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14 }}>
+      <Logo business={item} size={56} />
+      <View style={{ flex: 1, gap: 3 }}>
+        <Text variant="bodyStrong" style={{ fontSize: 16 }} numberOfLines={1}>
+          {item.name}
+        </Text>
+        <Text variant="caption" tone="muted" numberOfLines={1}>
+          {categoryLabel(item.category)}
+          {place ? ` · ${place}` : ''}
+        </Text>
+        {item.rating_count > 0 ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+            <Ionicons name="star" size={13} color={colors.gold} />
+            <Text variant="label" tone="gold">
+              {Number(item.rating_avg).toFixed(1)}
+            </Text>
+            <Text variant="caption" tone="muted">
+              ({item.rating_count})
+            </Text>
+          </View>
+        ) : (
+          <View style={{ marginTop: 2 }}>
+            <Badge label="Yeni" fg={colors.brand300} bg={colors.brandTint} />
+          </View>
+        )}
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={colors.ink3} />
+    </Card>
+  );
+}
+
+const s = StyleSheet.create({
+  top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  city: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.surface2,
+  },
+  cityOn: { borderColor: colors.brandRing, backgroundColor: colors.brandTint },
+});

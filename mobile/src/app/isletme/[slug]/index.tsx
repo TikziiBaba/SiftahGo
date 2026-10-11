@@ -1,33 +1,30 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
-import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { Linking, Pressable, ScrollView, Text, View } from 'react-native';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Linking, Modal, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Cover } from '@/components/brand';
 import { Logo } from '@/components/business-logo';
-import { Button, Card, Field, Loading, styles } from '@/components/ui';
-import { useAuth } from '@/lib/auth';
-import { categoryLabel, colors, WEEKDAYS } from '@/lib/constants';
-import {
-  addDays,
-  errorMessage,
-  formatDate,
-  formatDuration,
-  formatPrice,
-  formatTime,
-  googleCalendarLink,
-  isoWeekday,
-  shortDay,
-  todayStr,
-} from '@/lib/format';
+import { CalendarSheet, DayStrip } from '@/components/pickers';
+import { Avatar, Badge, Button, Card, Chip, Empty, IconButton, Loading, SectionTitle, Skeleton, styles, Text } from '@/components/ui';
+import { AccentProvider, useAccent } from '@/lib/accent';
+import { categoryIcon, categoryLabel, isSubscribed, WEB_URL, WEEKDAYS, type IconName } from '@/lib/constants';
+import { addDays, formatDate, formatDuration, formatPrice, formatTime, isoWeekday, mapsLink, todayStr, whatsappLink } from '@/lib/format';
+import { haptic } from '@/lib/haptics';
 import { supabase } from '@/lib/supabase';
+import { accentOf, alpha, colors, radius } from '@/lib/theme';
 import type { Business, Review, Service, Staff, StaffService, WorkingHour } from '@/lib/types';
 
-type Data = { business: Business; services: Service[]; staff: Staff[]; links: StaffService[]; hours: WorkingHour[]; reviews: Review[] };
+type Data = { business: Business; services: Service[]; staff: Staff[]; links: StaffService[]; hours: WorkingHour[]; reviews: Review[]; features: string[] };
+
+const COVER = 230;
 
 export default function BusinessScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
-  const { session, profile } = useAuth();
+  const insets = useSafeAreaInsets();
   const [data, setData] = useState<Data | null | undefined>(undefined);
 
   const [serviceId, setServiceId] = useState<string | null>(null);
@@ -35,31 +32,41 @@ export default function BusinessScreen() {
   const [day, setDay] = useState(todayStr);
   const [slotResult, setSlotResult] = useState<{ key: string; times: string[] } | null>(null);
   const [time, setTime] = useState<string | null>(null);
-  // null = kullanıcı henüz yazmadı; profil bilgisiyle doldurulur.
-  const [input, setInput] = useState<{ name: string | null; phone: string | null; email: string; note: string }>({ name: null, phone: null, email: '', note: '' });
-  const form = { name: input.name ?? profile?.full_name ?? '', phone: input.phone ?? profile?.phone ?? '', email: input.email, note: input.note };
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [booked, setBooked] = useState(false);
   const [reload, setReload] = useState(0);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [allReviews, setAllReviews] = useState(false);
+  const [photo, setPhoto] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       const { data: business } = await supabase.from('businesses').select('*').eq('slug', slug).maybeSingle();
       if (!business) return setData(null);
-      const [s, st, h, r] = await Promise.all([
+      const [s, st, h, r, plan] = await Promise.all([
         supabase.from('services').select('*').eq('business_id', business.id).eq('is_active', true).order('sort_order').order('created_at'),
         supabase.from('staff').select('*').eq('business_id', business.id).eq('is_active', true).order('sort_order').order('created_at'),
         supabase.from('working_hours').select('*').eq('business_id', business.id).order('weekday'),
-        supabase.from('reviews').select('*').eq('business_id', business.id).order('created_at', { ascending: false }).limit(10),
+        supabase.from('reviews').select('*').eq('business_id', business.id).order('created_at', { ascending: false }).limit(20),
+        supabase.from('plans').select('features').eq('id', business.plan_id ?? '').maybeSingle(),
       ]);
       const staff = st.data ?? [];
       const { data: links } = staff.length
         ? await supabase.from('staff_services').select('*').in('staff_id', staff.map((x) => x.id))
         : { data: [] };
-      setData({ business, services: s.data ?? [], staff, links: links ?? [], hours: h.data ?? [], reviews: r.data ?? [] });
+      setData({ business, services: s.data ?? [], staff, links: links ?? [], hours: h.data ?? [], reviews: r.data ?? [], features: plan.data?.features ?? [] });
+      // Bugün kapalıysa ilk açık gün seçili gelir.
+      const open = (d: string) => (h.data ?? []).find((x) => x.weekday === isoWeekday(d))?.is_open ?? false;
+      const firstOpen = Array.from({ length: Math.min(business.booking_days, 30) + 1 }, (_, i) => addDays(todayStr(), i)).find(open);
+      if (firstOpen) setDay(firstOpen);
     })();
   }, [slug]);
+
+  // Randevu ekranından dönüldüğünde (ör. saat dolmuşsa) boş saatleri tazele.
+  useFocusEffect(
+    useCallback(() => {
+      setReload((n) => n + 1);
+    }, []),
+  );
 
   const slotKey = `${serviceId}|${staffId}|${day}|${reload}`;
   const times = slotResult?.key === slotKey ? slotResult.times : null;
@@ -79,272 +86,416 @@ export default function BusinessScreen() {
     };
   }, [data, serviceId, staffId, day, reload]);
 
+  const isOpen = useCallback((d: string) => data?.hours.find((h) => h.weekday === isoWeekday(d))?.is_open ?? false, [data]);
+
   const days = useMemo(() => {
     if (!data) return [];
     const start = todayStr();
     return Array.from({ length: Math.min(data.business.booking_days, 30) + 1 }, (_, i) => {
       const d = addDays(start, i);
-      return { day: d, open: data.hours.find((h) => h.weekday === isoWeekday(d))?.is_open ?? false };
+      return { day: d, disabled: !isOpen(d) };
     });
-  }, [data]);
+  }, [data, isOpen]);
 
-  if (data === undefined) return <Loading />;
+  if (data === undefined) return <Loading full />;
   if (data === null) {
     return (
-      <View style={[styles.content, { alignItems: 'center' }]}>
-        <Text style={styles.h2}>İşletme bulunamadı</Text>
+      <View style={[styles.screen, { paddingTop: insets.top + 56 }]}>
+        <BackButton top={insets.top + 8} />
+        <Empty icon="storefront-outline" title="İşletme bulunamadı" text="Bu işletme şu an online randevu almıyor veya adresi değişmiş olabilir.">
+          <Button title="Keşfete dön" variant="secondary" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
+        </Empty>
       </View>
     );
   }
 
   const { business, services, hours, links, reviews } = data;
-  const service = services.find((s) => s.id === serviceId);
+  const service = services.find((x) => x.id === serviceId);
   // Kaydı olmayan personel tüm hizmetleri verir.
   const staff = data.staff.filter(
     (p) => !links.some((l) => l.staff_id === p.id) || links.some((l) => l.staff_id === p.id && l.service_id === serviceId),
   );
   const location = [business.address, business.district, business.city].filter(Boolean).join(', ');
+  const today = isoWeekday(todayStr());
+  const lastDay = addDays(todayStr(), business.booking_days);
 
-  async function book() {
-    if (!service || !time) return;
-    setBusy(true);
-    setError('');
-    const { error } = await supabase.rpc('book_appointment', {
-      p_business_id: business.id,
-      p_service_id: service.id,
-      p_staff_id: staffId || null,
-      p_starts_at: time,
-      p_customer_name: form.name,
-      p_customer_phone: form.phone,
-      p_note: form.note,
-      // Girişli müşteride boş bırakılır; hesap e-postası kullanılır.
-      p_customer_email: form.email || null,
-    });
-    setBusy(false);
-    if (error) {
-      setError(errorMessage(error));
-      if (error.message.includes('müsait değil')) {
-        setTime(null);
-        setReload((r) => r + 1);
-      }
-      return;
+  // Paketteki özelliğe göre görünen özelleştirmeler; paket düşerse ayarlar saklanır ama gösterilmez.
+  const features = isSubscribed(business) ? data.features : [];
+  const accent = accentOf(features.includes('theme') ? business.accent : undefined);
+  const announcement = features.includes('announcement') ? (business.announcement ?? '').trim() : '';
+  const custom = features.includes('links');
+  const shortcuts: { icon: IconName; label: string; onPress: () => void }[] = [
+    ...(business.phone ? [{ icon: 'call-outline' as const, label: 'Ara', onPress: () => Linking.openURL(`tel:${business.phone}`) }] : []),
+    ...(custom && business.whatsapp
+      ? [{ icon: 'logo-whatsapp' as const, label: 'WhatsApp', onPress: () => Linking.openURL(whatsappLink(business.whatsapp, `Merhaba ${business.name}, `)) }]
+      : []),
+    ...(custom && business.instagram
+      ? [{ icon: 'logo-instagram' as const, label: 'Instagram', onPress: () => Linking.openURL(`https://instagram.com/${business.instagram}`) }]
+      : []),
+    ...(location ? [{ icon: 'navigate-outline' as const, label: 'Yol tarifi', onPress: () => Linking.openURL(mapsLink(`${business.name} ${location}`)) }] : []),
+    ...(custom && business.website ? [{ icon: 'globe-outline' as const, label: 'Web sitesi', onPress: () => Linking.openURL(business.website) }] : []),
+    {
+      icon: 'share-social-outline',
+      label: 'Paylaş',
+      onPress: () => Share.share({ message: `${business.name} — online randevu: ${WEB_URL}/${business.slug}` }),
+    },
+  ];
+
+  function selectService(id: string) {
+    setServiceId(id === serviceId ? null : id);
+    setStaffId('');
+    setTime(null);
+    // Seçili gün kapalıysa ilk açık güne geç.
+    if (!isOpen(day)) {
+      const first = days.find((d) => !d.disabled);
+      if (first) setDay(first.day);
     }
-    setBooked(true);
   }
 
-  if (booked && service && time) {
-    return (
-      <View style={[styles.content, { alignItems: 'center', paddingTop: 48, gap: 14 }]}>
-        <Ionicons name="checkmark-circle" size={72} color="#059669" />
-        <Text style={styles.h1}>Randevunuz alındı!</Text>
-        <Text style={[styles.muted, { textAlign: 'center', fontSize: 16 }]}>
-          {business.name}{'\n'}
-          {formatDate(time)} · {formatTime(time)}{'\n'}
-          {service.name}
-        </Text>
-        <Text style={styles.muted}>
-          {business.auto_confirm ? 'Randevunuz onaylandı.' : 'İşletme onayladığında kesinleşecek.'}
-        </Text>
-        <Button
-          title="Takvime ekle"
-          variant="secondary"
-          style={{ alignSelf: 'stretch' }}
-          onPress={() =>
-            Linking.openURL(
-              googleCalendarLink(
-                `${business.name} — ${service.name}`,
-                time,
-                new Date(new Date(time).getTime() + service.duration_minutes * 60000).toISOString(),
-                location,
-              ),
-            )
-          }
-        />
-        {session ? (
-          <Button title="Randevularım" onPress={() => router.replace('/randevular')} style={{ alignSelf: 'stretch' }} />
-        ) : (
-          <Button title="Hesap aç, randevularını takip et" onPress={() => router.push('/kayit')} style={{ alignSelf: 'stretch' }} />
-        )}
-      </View>
-    );
+  function chooseDay(d: string) {
+    setDay(d);
+    setTime(null);
   }
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={{ paddingBottom: 48 }} keyboardShouldPersistTaps="handled">
-      <Stack.Screen options={{ title: business.name }} />
-      <View style={{ height: 150, backgroundColor: colors.brand }}>
-        {business.cover_url && <Image source={business.cover_url} style={{ flex: 1 }} contentFit="cover" />}
-      </View>
-      <View style={[styles.content, { marginTop: -40 }]}>
-        <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 12 }}>
-          <View style={{ borderWidth: 4, borderColor: '#fff', borderRadius: 22 }}>
-            <Logo business={business} size={76} />
-          </View>
-          <View style={{ flex: 1, paddingBottom: 4 }}>
-            <Text style={styles.h1} numberOfLines={2}>{business.name}</Text>
-            <Text style={styles.muted}>
-              {categoryLabel(business.category)}
-              {business.city ? ` · ${business.city}` : ''}
-              {business.rating_count > 0 ? `  ★ ${Number(business.rating_avg).toFixed(1)} (${business.rating_count})` : ''}
-            </Text>
-          </View>
-        </View>
+    <AccentProvider value={accent}>
+      <View style={styles.screen}>
+        <ScrollView contentContainerStyle={{ paddingBottom: service ? 150 : 48 }} keyboardShouldPersistTaps="handled">
+          <Cover uri={business.cover_url} height={COVER + insets.top} />
+          <View style={s.fade} />
 
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          {business.phone ? (
-            <Button title="Ara" variant="secondary" style={{ flex: 1 }} onPress={() => Linking.openURL(`tel:${business.phone}`)} />
-          ) : null}
-          {location ? (
-            <Button
-              title="Yol tarifi"
-              variant="secondary"
-              style={{ flex: 1 }}
-              onPress={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${business.name} ${location}`)}`)}
-            />
-          ) : null}
-        </View>
-
-        {business.description ? <Text style={{ color: '#44403c', lineHeight: 21 }}>{business.description}</Text> : null}
-
-        <Text style={[styles.h2, { marginTop: 8 }]}>1. Hizmet seçin</Text>
-        {services.length === 0 && <Text style={styles.muted}>Bu işletme henüz hizmet eklememiş.</Text>}
-        {services.map((s) => (
-          <Pressable
-            key={s.id}
-            onPress={() => {
-              setServiceId(s.id);
-              setStaffId('');
-              setTime(null);
-            }}
-            style={[styles.card, { flexDirection: 'row', alignItems: 'center', gap: 10 }, s.id === serviceId && { borderColor: colors.brand, backgroundColor: colors.brandLight }]}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontWeight: '600', fontSize: 15, color: colors.text }}>{s.name}</Text>
-              <Text style={styles.muted}>{formatDuration(s.duration_minutes)}{s.description ? ` · ${s.description}` : ''}</Text>
+          <View style={[styles.content, { marginTop: -56, paddingBottom: 0 }]}>
+            <View style={s.logo}>
+              <Logo business={business} size={84} />
             </View>
-            <Text style={{ fontWeight: '700', color: colors.text }}>{Number(s.price) > 0 ? formatPrice(s.price) : '—'}</Text>
-          </Pressable>
-        ))}
+            <View style={{ gap: 6 }}>
+              <Text variant="display">{business.name}</Text>
+              <View style={[styles.rowCenter, { flexWrap: 'wrap' }]}>
+                <Ionicons name={categoryIcon(business.category)} size={15} color={colors.ink3} />
+                <Text tone="muted">
+                  {categoryLabel(business.category)}
+                  {business.district || business.city ? ` · ${[business.district, business.city].filter(Boolean).join(', ')}` : ''}
+                </Text>
+              </View>
+              {business.rating_count > 0 ? (
+                <View style={styles.rowCenter}>
+                  <Ionicons name="star" size={15} color={colors.gold} />
+                  <Text variant="bodyStrong" tone="gold">
+                    {Number(business.rating_avg).toFixed(1)}
+                  </Text>
+                  <Text tone="muted">· {business.rating_count} değerlendirme</Text>
+                </View>
+              ) : (
+                <Badge label="Yeni işletme" fg={accent.soft} bg={alpha(accent.base, 0.12)} icon="sparkles-outline" />
+              )}
+            </View>
 
-        {service && staff.length > 1 && (
-          <>
-            <Text style={[styles.h2, { marginTop: 8 }]}>2. Personel seçin</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              {[{ id: '', name: 'Farketmez' }, ...staff].map((p) => (
-                <Pressable
-                  key={p.id}
-                  onPress={() => {
-                    setStaffId(p.id);
-                    setTime(null);
-                  }}
-                  style={[styles.chip, p.id === staffId && styles.chipActive]}>
-                  <Text style={{ color: p.id === staffId ? '#fff' : colors.text, fontWeight: '500' }}>{p.name}</Text>
-                </Pressable>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.shortcuts} style={{ marginHorizontal: -16, marginTop: 4 }}>
+              {shortcuts.map((x) => (
+                <Shortcut key={x.label} {...x} />
               ))}
-            </View>
-          </>
-        )}
+            </ScrollView>
+
+            {announcement ? (
+              <View style={[s.announcement, { backgroundColor: alpha(accent.base, 0.1), borderColor: alpha(accent.base, 0.25) }]}>
+                <View style={[s.announcementIcon, { backgroundColor: alpha(accent.base, 0.16) }]}>
+                  <Ionicons name="megaphone-outline" size={18} color={accent.soft} />
+                </View>
+                <Text style={{ flex: 1 }}>{announcement}</Text>
+              </View>
+            ) : null}
+
+            {business.description ? (
+              <>
+                <SectionTitle title="Hakkında" />
+                <Pressable onPress={() => setAboutOpen(!aboutOpen)} accessibilityRole="button">
+                  <Text tone="secondary" style={{ lineHeight: 22 }} numberOfLines={aboutOpen ? undefined : 3}>
+                    {business.description}
+                  </Text>
+                  {business.description.length > 110 && (
+                    <Text variant="label" style={{ marginTop: 4, color: accent.soft }}>
+                      {aboutOpen ? 'Daha az' : 'Devamını gör'}
+                    </Text>
+                  )}
+                </Pressable>
+              </>
+            ) : null}
+
+            <SectionTitle title="Hizmet seçin" />
+            {services.length === 0 && <Text tone="muted">Bu işletme henüz hizmet eklememiş.</Text>}
+            {services.map((x) => {
+              const on = x.id === serviceId;
+              return (
+                <Card
+                  key={x.id}
+                  onPress={() => selectService(x.id)}
+                  accessibilityLabel={x.name}
+                  style={[s.service, on && { borderColor: alpha(accent.base, 0.4), backgroundColor: alpha(accent.base, 0.07) }]}>
+                  <View style={{ flex: 1, gap: 3 }}>
+                    <Text variant="bodyStrong">{x.name}</Text>
+                    <Text variant="caption" tone="muted" numberOfLines={2}>
+                      {formatDuration(x.duration_minutes)}
+                      {x.description ? ` · ${x.description}` : ''}
+                    </Text>
+                  </View>
+                  <Text variant="bodyStrong" style={{ fontVariant: ['tabular-nums'] }}>
+                    {Number(x.price) > 0 ? formatPrice(x.price) : '—'}
+                  </Text>
+                  <View style={[s.radio, on && { backgroundColor: accent.base, borderColor: accent.base }]}>
+                    {on && <Ionicons name="checkmark" size={14} color={accent.ink} />}
+                  </View>
+                </Card>
+              );
+            })}
+
+            {service && (
+              <Animated.View entering={FadeInDown.duration(250)} style={{ gap: 12 }}>
+                {staff.length > 1 && (
+                  <>
+                    <SectionTitle title="Personel" />
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }} style={{ marginHorizontal: -16 }}>
+                      {[{ id: '', name: 'Farketmez' }, ...staff].map((p) => (
+                        <Chip
+                          key={p.id}
+                          label={p.name}
+                          icon={p.id ? undefined : 'people-outline'}
+                          selected={staffId === p.id}
+                          onPress={() => {
+                            setStaffId(p.id);
+                            setTime(null);
+                          }}
+                        />
+                      ))}
+                    </ScrollView>
+                  </>
+                )}
+
+                <SectionTitle title="Gün" />
+                <DayStrip days={days} value={day} onChange={chooseDay} onMore={business.booking_days > 30 ? () => setCalendarOpen(true) : undefined} />
+
+                <SectionTitle title={`Saat · ${formatDate(day)}`} />
+                {times === null ? (
+                  <View style={styles.wrap}>
+                    {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+                      <Skeleton key={i} height={38} style={s.slot} />
+                    ))}
+                  </View>
+                ) : times.length === 0 ? (
+                  <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <Ionicons name="moon-outline" size={22} color={colors.ink3} />
+                    <Text tone="muted" style={{ flex: 1 }}>
+                      {isOpen(day) ? 'Bu gün için boş saat kalmadı. Başka bir gün seçin.' : 'İşletme bu gün kapalı.'}
+                    </Text>
+                  </Card>
+                ) : (
+                  <View style={styles.wrap}>
+                    {times.map((t) => (
+                      <Chip key={t} label={formatTime(t)} solid selected={t === time} onPress={() => setTime(t)} style={s.slot} />
+                    ))}
+                  </View>
+                )}
+              </Animated.View>
+            )}
+
+            <SectionTitle title="Çalışma saatleri" />
+            <Card style={{ gap: 10 }}>
+              {hours.map((h) => (
+                <View key={h.weekday} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text variant={h.weekday === today ? 'bodyStrong' : 'body'} tone="secondary" style={h.weekday === today && { color: accent.soft }}>
+                    {WEEKDAYS[h.weekday - 1]}
+                    {h.weekday === today ? ' · Bugün' : ''}
+                  </Text>
+                  <Text variant={h.weekday === today ? 'bodyStrong' : 'body'} tone={h.is_open ? 'default' : 'muted'} style={{ fontVariant: ['tabular-nums'] }}>
+                    {h.is_open ? `${h.open_time.slice(0, 5)} – ${h.close_time.slice(0, 5)}` : 'Kapalı'}
+                  </Text>
+                </View>
+              ))}
+              {location ? (
+                <Pressable onPress={() => Linking.openURL(mapsLink(`${business.name} ${location}`))} style={s.address} accessibilityRole="link">
+                  <Ionicons name="location-outline" size={18} color={accent.soft} />
+                  <Text tone="secondary" style={{ flex: 1 }}>
+                    {location}
+                  </Text>
+                  <Ionicons name="open-outline" size={16} color={colors.ink3} />
+                </Pressable>
+              ) : null}
+            </Card>
+
+            {business.gallery.length > 0 && (
+              <>
+                <SectionTitle title="Fotoğraflar" />
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }} style={{ marginHorizontal: -16 }}>
+                  {business.gallery.map((url) => (
+                    <Pressable key={url} onPress={() => setPhoto(url)} accessibilityRole="imagebutton" accessibilityLabel="Fotoğrafı büyüt">
+                      <Image source={url} style={s.photo} contentFit="cover" transition={150} />
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </>
+            )}
+
+            {reviews.length > 0 && (
+              <>
+                <SectionTitle
+                  title={`Yorumlar · ${business.rating_count}`}
+                  action={reviews.length > 3 ? (allReviews ? 'Daha az' : 'Tümü') : undefined}
+                  onAction={() => setAllReviews(!allReviews)}
+                />
+                {(allReviews ? reviews : reviews.slice(0, 3)).map((r) => (
+                  <Card key={r.id} style={{ gap: 8 }}>
+                    <View style={styles.rowCenter}>
+                      <Avatar name={r.customer_name} size={32} />
+                      <View style={{ flex: 1 }}>
+                        <Text variant="bodyStrong">{r.customer_name}</Text>
+                        <Text variant="caption" tone="muted">
+                          {formatDate(r.created_at, false)} · Randevulu müşteri
+                        </Text>
+                      </View>
+                      <View style={{ flexDirection: 'row', gap: 1 }}>
+                        {[1, 2, 3, 4, 5].map((i) => (
+                          <Ionicons key={i} name="star" size={13} color={i <= r.rating ? colors.gold : colors.surface3} />
+                        ))}
+                      </View>
+                    </View>
+                    {r.comment ? <Text tone="secondary">{r.comment}</Text> : null}
+                    {r.reply ? (
+                      <View style={s.reply}>
+                        <Text variant="caption" style={{ color: accent.soft }}>
+                          İşletmenin cevabı
+                        </Text>
+                        <Text tone="secondary">{r.reply}</Text>
+                      </View>
+                    ) : null}
+                  </Card>
+                ))}
+              </>
+            )}
+          </View>
+        </ScrollView>
+
+        <BackButton top={insets.top + 8} />
 
         {service && (
-          <>
-            <Text style={[styles.h2, { marginTop: 8 }]}>{staff.length > 1 ? 3 : 2}. Gün ve saat</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-              {days.map(({ day: d, open }) => {
-                const s = shortDay(d);
-                const selected = d === day;
-                return (
-                  <Pressable
-                    key={d}
-                    disabled={!open}
-                    onPress={() => {
-                      setDay(d);
-                      setTime(null);
-                    }}
-                    style={[styles.card, { width: 62, alignItems: 'center', paddingVertical: 8, paddingHorizontal: 0 }, selected && { backgroundColor: colors.brand, borderColor: colors.brand }, !open && { opacity: 0.35 }]}>
-                    <Text style={{ fontSize: 12, color: selected ? '#fff' : colors.muted }}>{s.weekday}</Text>
-                    <Text style={{ fontSize: 18, fontWeight: '700', color: selected ? '#fff' : colors.text }}>{s.date}</Text>
-                    <Text style={{ fontSize: 12, color: selected ? '#fff' : colors.muted }}>{s.month}</Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-            {times === null ? (
-              <Loading />
-            ) : times.length === 0 ? (
-              <Text style={styles.muted}>Bu gün için boş saat yok. Başka bir gün seçin.</Text>
-            ) : (
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                {times.map((t) => (
-                  <Pressable key={t} onPress={() => setTime(t)} style={[styles.chip, { minWidth: 72, alignItems: 'center' }, t === time && styles.chipActive]}>
-                    <Text style={{ color: t === time ? '#fff' : colors.text, fontWeight: '600' }}>{formatTime(t)}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            )}
-          </>
-        )}
-
-        {service && time && (
-          <Card style={{ gap: 12, marginTop: 8 }}>
-            <Text style={{ fontWeight: '600', color: colors.text }}>
-              {formatDate(time)}, {formatTime(time)} · {service.name}
-            </Text>
-            <Field label="Adınız Soyadınız" value={form.name} onChangeText={(name) => setInput({ ...input, name })} autoComplete="name" />
-            <Field label="Telefon" value={form.phone} onChangeText={(phone) => setInput({ ...input, phone })} keyboardType="phone-pad" placeholder="05xx xxx xx xx" autoComplete="tel" />
-            {!session && (
-              <Field
-                label="E-posta (isteğe bağlı)"
-                value={form.email}
-                onChangeText={(email) => setInput({ ...input, email })}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-                placeholder="Onay ve hatırlatma e-postası için"
-              />
-            )}
-            <Field label="Not (isteğe bağlı)" value={form.note} onChangeText={(note) => setInput({ ...input, note })} maxLength={500} />
-            {error ? <Text style={styles.error}>{error}</Text> : null}
-            <Button title="Randevuyu Onayla" onPress={book} loading={busy} />
-          </Card>
-        )}
-
-        <Card style={{ gap: 6, marginTop: 8 }}>
-          <Text style={styles.h2}>Çalışma saatleri</Text>
-          {hours.map((h) => (
-            <View key={h.weekday} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text style={styles.muted}>{WEEKDAYS[h.weekday - 1]}</Text>
-              <Text style={{ color: h.is_open ? colors.text : '#a8a29e', fontWeight: '500' }}>
-                {h.is_open ? `${h.open_time.slice(0, 5)} – ${h.close_time.slice(0, 5)}` : 'Kapalı'}
+          <Animated.View entering={FadeInDown.duration(220)} style={[s.bar, { paddingBottom: Math.max(insets.bottom, 12) + 4 }]}>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text variant="bodyStrong" numberOfLines={1}>
+                {service.name}
+              </Text>
+              <Text variant="caption" tone={time ? 'brand' : 'muted'} numberOfLines={1}>
+                {time ? `${formatDate(time)} · ${formatTime(time)}` : `${formatDuration(service.duration_minutes)} · saat seçin`}
+                {Number(service.price) > 0 ? ` · ${formatPrice(service.price)}` : ''}
               </Text>
             </View>
-          ))}
-          {location ? <Text style={[styles.muted, { marginTop: 6 }]}>{location}</Text> : null}
-        </Card>
-
-        {reviews.length > 0 && (
-          <Card style={{ gap: 12 }}>
-            <Text style={styles.h2}>
-              ★ {Number(business.rating_avg).toFixed(1)} · {business.rating_count} değerlendirme
-            </Text>
-            {reviews.map((r) => (
-              <View key={r.id} style={{ gap: 2 }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text style={{ fontWeight: '600', color: colors.text }}>{r.customer_name}</Text>
-                  <Text style={{ color: '#f59e0b' }}>{'★'.repeat(r.rating)}<Text style={{ color: '#d6d3d1' }}>{'★'.repeat(5 - r.rating)}</Text></Text>
-                </View>
-                {r.comment ? <Text style={{ color: '#44403c' }}>{r.comment}</Text> : null}
-              </View>
-            ))}
-          </Card>
+            <Button
+              title="Devam"
+              icon="arrow-forward"
+              disabled={!time}
+              onPress={() =>
+                router.push({
+                  pathname: '/isletme/[slug]/randevu',
+                  params: { slug: business.slug, service: service.id, staff: staffId, time: time! },
+                })
+              }
+            />
+          </Animated.View>
         )}
 
-        {business.gallery.length > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-            {business.gallery.map((url) => (
-              <Image key={url} source={url} style={{ width: 120, height: 120, borderRadius: 12 }} contentFit="cover" />
-            ))}
-          </ScrollView>
-        )}
+        <CalendarSheet
+          key={day}
+          visible={calendarOpen}
+          onClose={() => setCalendarOpen(false)}
+          title="Gün seçin"
+          value={day}
+          min={todayStr()}
+          max={lastDay}
+          onSelect={chooseDay}
+        />
+
+        <Modal visible={!!photo} transparent animationType="fade" onRequestClose={() => setPhoto(null)}>
+          <View style={s.lightbox}>
+            {photo && <Image source={photo} style={StyleSheet.absoluteFill} contentFit="contain" />}
+            <IconButton icon="close" label="Kapat" onPress={() => setPhoto(null)} style={{ position: 'absolute', top: insets.top + 12, right: 16 }} />
+          </View>
+        </Modal>
       </View>
-    </ScrollView>
+    </AccentProvider>
   );
 }
+
+/** Yuvarlak kısayol (Ara, WhatsApp, Yol tarifi...); rengi sayfa renginden. */
+function Shortcut({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
+  const accent = useAccent();
+  return (
+    <Pressable
+      onPress={() => {
+        haptic.press();
+        onPress();
+      }}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed }) => [s.shortcut, pressed && { opacity: 0.7, transform: [{ scale: 0.95 }] }]}>
+      <View style={[s.shortcutIcon, { backgroundColor: alpha(accent.base, 0.12), borderColor: alpha(accent.base, 0.25) }]}>
+        <Ionicons name={icon} size={22} color={accent.soft} />
+      </View>
+      <Text variant="caption" tone="secondary" numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function BackButton({ top }: { top: number }) {
+  return (
+    <IconButton
+      icon="chevron-back"
+      label="Geri"
+      onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+      style={{ position: 'absolute', top, left: 16, backgroundColor: colors.bgGlass, borderColor: colors.lineStrong }}
+    />
+  );
+}
+
+const s = StyleSheet.create({
+  fade: { height: 56, marginTop: -56, experimental_backgroundImage: `linear-gradient(to bottom, ${colors.bgClear}, ${colors.bg})` },
+  logo: {
+    alignSelf: 'flex-start',
+    padding: 4,
+    borderRadius: 30,
+    backgroundColor: colors.bg,
+  },
+  shortcuts: { gap: 4, paddingHorizontal: 12 },
+  shortcut: { width: 72, alignItems: 'center', gap: 6, paddingVertical: 2 },
+  shortcutIcon: { width: 52, height: 52, borderRadius: 26, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  announcement: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: radius.lg, borderWidth: 1 },
+  announcementIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  service: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  radio: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: colors.lineStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Satırda 4 saat; son satırdakiler de aynı genişlikte kalsın.
+  slot: { flexBasis: '22%', flexGrow: 1, maxWidth: '24%', paddingHorizontal: 0 },
+  reply: { gap: 2, paddingLeft: 10, paddingVertical: 6, borderLeftWidth: 2, borderLeftColor: colors.brandLine },
+  address: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.line },
+  photo: { width: 150, height: 150, borderRadius: radius.lg, backgroundColor: colors.surface2 },
+  bar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    backgroundColor: colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: colors.lineStrong,
+  },
+  lightbox: { flex: 1, backgroundColor: colors.black },
+});
