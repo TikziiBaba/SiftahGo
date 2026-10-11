@@ -32,7 +32,7 @@ const LINKS = [
 
 /** `minimal`: dükkân sayfalarında pazarlama menüsü ve "Hemen Başla" gizlenir; müşteri işletmeye odaklanır. */
 export function SiteHeader({ minimal = false }: { minimal?: boolean }) {
-  const [account, setAccount] = useState<{ href: string; label: string } | null>(null);
+  const [account, setAccount] = useState<{ href: string; label: string; short?: string } | null>(null);
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -44,7 +44,7 @@ export function SiteHeader({ minimal = false }: { minimal?: boolean }) {
         supabase.rpc("is_admin"),
       ]);
       if (admin === true) return setAccount({ href: "/admin", label: "Yönetim" });
-      setAccount(data?.role === "business" ? { href: "/panel", label: "Panel" } : { href: "/hesabim", label: "Hesabım" });
+      setAccount(data?.role === "business" ? { href: "/panel", label: "İşletme Paneli", short: "Panel" } : { href: "/hesabim", label: "Hesabım" });
     }
     supabase.auth.getSession().then(({ data }) => load(data.session?.user.id));
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => load(session?.user.id));
@@ -86,9 +86,18 @@ export function SiteHeader({ minimal = false }: { minimal?: boolean }) {
                 {account.label}
               </Link>
             )}
-            <Link href={cta.href} className={`group btn btn-primary hidden py-2 pl-4 pr-1.5 ${minimal ? "" : "sm:inline-flex"}`}>
-              {cta.label}
-              <span className="btn-icon">
+            {/* Giriş yapmış kullanıcı paneline telefonda da tek dokunuşla gider; "Hemen Başla" telefonda menüde kalır. */}
+            <Link href={cta.href} className={`group btn btn-primary whitespace-nowrap py-2 pl-4 pr-1.5 max-sm:px-3 ${minimal ? "hidden" : account ? "" : "hidden sm:inline-flex"}`}>
+              {/* 360 px telefonda uzun ad başlığı taşırıyor. */}
+              {"short" in cta && cta.short ? (
+                <>
+                  <span className="max-sm:hidden">{cta.label}</span>
+                  <span className="sm:hidden">{cta.short}</span>
+                </>
+              ) : (
+                cta.label
+              )}
+              <span className="btn-icon max-sm:hidden">
                 <ArrowUpRight className="size-4" />
               </span>
             </Link>
