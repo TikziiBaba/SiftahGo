@@ -2,8 +2,9 @@ import type { CSSProperties } from "react";
 import type { AppointmentStatus } from "./types";
 
 export const SITE_NAME = "SiftahGo";
+export const SITE_URL = (process.env.NEXT_PUBLIC_APP_URL || "https://siftahgo.com").replace(/\/$/, "");
 /** Sayfa adreslerinde gösterilen alan adı (örn. siftahgo.com/usta-berber); sitenin gerçek adresinden gelir. */
-export const SITE_DOMAIN = (process.env.NEXT_PUBLIC_APP_URL || "https://siftahgo.com").replace(/^https?:\/\//, "").replace(/\/$/, "");
+export const SITE_DOMAIN = SITE_URL.replace(/^https?:\/\//, "");
 
 export const CATEGORIES = [
   { id: "berber", label: "Berber" },

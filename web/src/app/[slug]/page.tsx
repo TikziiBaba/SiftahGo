@@ -6,7 +6,7 @@ import { SiteFooter, SiteHeader } from "@/components/site-header";
 import { BookingWidget } from "@/components/booking-widget";
 import { ShopShortcuts } from "@/components/shop-shortcuts";
 import { createClient } from "@/lib/supabase/server";
-import { accentVars, categoryLabel, isSubscribed, WEEKDAYS } from "@/lib/constants";
+import { accentVars, categoryLabel, isSubscribed, SITE_NAME, SITE_URL, WEEKDAYS } from "@/lib/constants";
 import { formatDate, isoWeekday, todayStr } from "@/lib/format";
 import type { Business, Review, Service, Staff, StaffService, WorkingHour } from "@/lib/types";
 
@@ -19,10 +19,27 @@ const getBusiness = cache(async (slug: string) => {
 export async function generateMetadata({ params }: PageProps<"/[slug]">): Promise<Metadata> {
   const business = await getBusiness((await params).slug);
   if (!business) return { title: "İşletme bulunamadı" };
+  const place = [business.district, business.city].filter(Boolean).join(", ");
+  const title = `${business.name} — Online Randevu`;
+  // Aramada "şehir + kategori" yazanlara görünmek için açıklama yoksa bunlarla kurulur.
+  const description =
+    business.description ||
+    `${business.name}${place ? ` (${place})` : ""} ${categoryLabel(business.category).toLocaleLowerCase("tr")} için online randevu alın.`;
+  const image = business.cover_url ?? business.logo_url;
   return {
-    title: `${business.name} — Online Randevu`,
-    description: business.description || `${business.name} için online randevu alın.`,
-    openGraph: business.cover_url ? { images: [business.cover_url] } : undefined,
+    title,
+    description,
+    alternates: { canonical: `/${business.slug}` },
+    // Alt sayfa openGraph verince düzendekinin yerine geçer; site adı ve dil burada da yazılır.
+    openGraph: {
+      type: "website",
+      siteName: SITE_NAME,
+      locale: "tr_TR",
+      title,
+      description,
+      url: `/${business.slug}`,
+      images: image ? [image] : undefined,
+    },
   };
 }
 
@@ -67,8 +84,45 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
   const custom = features.includes("links");
   const website = custom ? (business.website ?? "") : "";
 
+  // Google'ın işletmeyi tanıması için yapısal veri (adres, telefon, saatler, puan).
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "LocalBusiness",
+    name: business.name,
+    url: `${SITE_URL}/${business.slug}`,
+    description: business.description || undefined,
+    image: business.cover_url ?? business.logo_url ?? undefined,
+    logo: business.logo_url ?? undefined,
+    telephone: business.phone || undefined,
+    address: location
+      ? {
+          "@type": "PostalAddress",
+          streetAddress: business.address || undefined,
+          addressLocality: business.district || undefined,
+          addressRegion: business.city || undefined,
+          addressCountry: "TR",
+        }
+      : undefined,
+    openingHoursSpecification: hourList
+      .filter((h) => h.is_open)
+      .map((h) => ({
+        "@type": "OpeningHoursSpecification",
+        dayOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][h.weekday - 1],
+        opens: h.open_time.slice(0, 5),
+        closes: h.close_time.slice(0, 5),
+      })),
+    aggregateRating:
+      business.rating_count > 0
+        ? { "@type": "AggregateRating", ratingValue: Number(business.rating_avg).toFixed(1), reviewCount: business.rating_count }
+        : undefined,
+  };
+
   return (
     <main className="w-full" style={accentVars(accent)}>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
+      />
       <div className="relative h-48 overflow-hidden md:h-72">
         {business.cover_url ? (
           <img src={business.cover_url} alt="" className="size-full object-cover" />

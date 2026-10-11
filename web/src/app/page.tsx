@@ -28,6 +28,8 @@ import {
   CATEGORIES,
   PLAN_FEATURES,
   SITE_DOMAIN,
+  SITE_NAME,
+  SITE_URL,
 } from "@/lib/constants";
 import { formatPrice } from "@/lib/format";
 import type { Plan } from "@/lib/types";
@@ -38,6 +40,16 @@ export default function Home() {
       <Backdrop />
       <SiteHeader />
       <main className="relative">
+        {/* Google arama sonucunda site adının doğru görünmesi için. */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify([
+              { "@context": "https://schema.org", "@type": "WebSite", name: SITE_NAME, url: SITE_URL },
+              { "@context": "https://schema.org", "@type": "Organization", name: SITE_NAME, url: SITE_URL, logo: `${SITE_URL}/apple-icon.png` },
+            ]),
+          }}
+        />
         <Hero />
         <CategoryMarquee />
         <Features />

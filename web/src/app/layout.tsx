@@ -1,15 +1,17 @@
 import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
-import { SITE_NAME } from "@/lib/constants";
+import { SITE_NAME, SITE_URL } from "@/lib/constants";
 import "./globals.css";
 
 const geist = Geist({ variable: "--font-geist-sans", subsets: ["latin", "latin-ext"] });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: { default: `${SITE_NAME} — Esnaf için online randevu`, template: `%s | ${SITE_NAME}` },
   description:
     "Berber, kuaför, güzellik salonu, oto yıkama, halı saha ve tüm esnaf için online randevu, takvim ve müşteri yönetimi.",
   applicationName: SITE_NAME,
+  openGraph: { type: "website", siteName: SITE_NAME, locale: "tr_TR" },
   appleWebApp: { capable: true, title: SITE_NAME, statusBarStyle: "black-translucent" },
 };
 
