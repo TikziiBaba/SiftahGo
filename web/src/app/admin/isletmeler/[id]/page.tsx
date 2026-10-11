@@ -233,7 +233,7 @@ export default function AdminBusinessDetail() {
               ) : (
                 <ul className="mt-3 divide-y divide-line text-sm">
                   {data.services.map((s) => (
-                    <li key={s.id} className={`flex items-center justify-between gap-2 py-2 ${s.is_active ? "" : "text-ink-4"}`}>
+                    <li key={s.id} className={`flex items-center justify-between gap-2 py-2 ${s.is_active ? "" : "text-ink-3"}`}>
                       <span className="truncate">{s.name}</span>
                       <span className="shrink-0 tabular-nums text-ink-3">
                         {formatDuration(s.duration_minutes)} · {formatPrice(s.price)}

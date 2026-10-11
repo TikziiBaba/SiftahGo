@@ -150,7 +150,7 @@ function Hero() {
           </Reveal>
           <Reveal onLoad delay={320}>
             <ul className="mt-10 flex flex-wrap gap-x-6 gap-y-2 text-sm text-ink-3">
-              {["1 dakikada kurulum", "Taahhüt yok", "Web, iOS ve Android"].map(
+              {["7 gün ücretsiz", "1 dakikada kurulum", "Taahhüt yok", "Web, iOS ve Android"].map(
                 (t) => (
                   <li key={t} className="flex items-center gap-2">
                     <Check className="size-4 text-brand-300" /> {t}
@@ -234,7 +234,7 @@ function HeroVisual() {
           <div className="bezel-core p-5 [transform-style:preserve-3d]">
             <div className="depth-2 flex items-center justify-between">
               <div>
-                <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-ink-4">
+                <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-ink-3">
                   Bugün · Perşembe
                 </p>
                 <p className="mt-1 text-xl font-semibold tracking-tight">
@@ -242,7 +242,7 @@ function HeroVisual() {
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-ink-4">
+                <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-ink-3">
                   Beklenen
                 </p>
                 <p className="mt-1 text-xl font-semibold tracking-tight text-brand-300">
@@ -319,7 +319,7 @@ function CategoryMarquee() {
   const items = CATEGORIES.filter((c) => c.id !== "diger");
   return (
     <section className="border-y border-line py-8">
-      <p className="text-center text-[10px] font-medium uppercase tracking-[0.25em] text-ink-4">
+      <p className="text-center text-[10px] font-medium uppercase tracking-[0.25em] text-ink-3">
         Her sektörden esnaf için
       </p>
       <div className="relative mt-6 overflow-hidden [mask-image:linear-gradient(90deg,transparent,black_12%,black_88%,transparent)]">
@@ -542,7 +542,7 @@ function BookingMock() {
               i === 6
                 ? "bg-brand-400 text-brand-950 ring-brand-300"
                 : [2, 3, 9].includes(i)
-                  ? "text-ink-4 line-through ring-line"
+                  ? "text-ink-3 line-through ring-line"
                   : "text-ink-2 ring-line"
             }`}
           >
@@ -608,7 +608,7 @@ function TimelineMock() {
           </div>
         </div>
       ))}
-      <div className="flex justify-between pl-[3.25rem] text-[10px] text-ink-4">
+      <div className="flex justify-between pl-[3.25rem] text-[10px] text-ink-3">
         <span>09:00</span>
         <span>13:00</span>
         <span>19:00</span>
@@ -693,7 +693,7 @@ function ReviewMock() {
       <p className="mt-3 text-sm leading-relaxed text-ink-2">
         “Sıra beklemeden girdim, tam saatinde. Artık hep buradan alıyorum.”
       </p>
-      <p className="mt-2 text-xs text-ink-4">Zeynep A.</p>
+      <p className="mt-2 text-xs text-ink-3">Zeynep A.</p>
     </div>
   );
 }
@@ -850,7 +850,7 @@ async function Pricing() {
             <span className="text-gradient">sürpriz yok</span>
           </>
         }
-        text="Aylık ödeme, taahhüt yok. Müşterileriniz için randevu her zaman ücretsiz."
+        text="İlk 7 gün ücretsiz, sonra aylık ödeme; taahhüt yok. Müşterileriniz için randevu her zaman ücretsiz."
       />
       <div className="mt-16 grid gap-4 md:grid-cols-3">
         {plans.map((plan, i) => {
@@ -902,10 +902,10 @@ async function Pricing() {
                       return (
                         <li
                           key={k}
-                          className={`flex gap-2.5 ${on ? "text-ink-2" : "text-ink-4 line-through"}`}
+                          className={`flex gap-2.5 ${on ? "text-ink-2" : "text-ink-3 line-through"}`}
                         >
                           <Check
-                            className={`mt-0.5 size-4 shrink-0 ${on ? "text-brand-300" : "text-ink-4"}`}
+                            className={`mt-0.5 size-4 shrink-0 ${on ? "text-brand-300" : "text-ink-3"}`}
                           />{" "}
                           {label}
                         </li>
@@ -1104,7 +1104,7 @@ function Faq() {
     ],
     [
       "Ücret ne kadar, taahhüt var mı?",
-      "Paketler aylıktır ve taahhüt yoktur. Her ödeme 30 gün geçerlidir; istediğiniz zaman paket değiştirebilir veya bırakabilirsiniz. Ödeme PayTR güvencesiyle kartla alınır.",
+      "İlk 7 gün ücretsizdir; deneme boyunca Pro paketin tüm özelliklerini kullanırsınız. Paketler aylıktır ve taahhüt yoktur. Her ödeme 30 gün geçerlidir; istediğiniz zaman paket değiştirebilir veya bırakabilirsiniz. Ödeme PayTR güvencesiyle kartla alınır.",
     ],
     [
       "Müşterilerim ücret ödüyor mu?",
@@ -1149,7 +1149,7 @@ function FinalCta() {
             <span className="text-gradient">ilk randevu yarın gelsin.</span>
           </h2>
           <p className="relative mx-auto mt-5 max-w-lg text-lg text-ink-2">
-            Kurulum yok, taahhüt yok. Dakikalar içinde işletme sayfanız yayında.
+            İlk 7 gün ücretsiz, taahhüt yok. Dakikalar içinde işletme sayfanız yayında.
           </p>
           <div className="relative mt-10 flex justify-center">
             <PrimaryCta href="/kayit?rol=isletme">Hemen başla</PrimaryCta>

@@ -4,7 +4,7 @@ import type { AppointmentStatus } from "@/lib/types";
 /** claim_notifications satırı */
 export type QueuedNotification = {
   id: string;
-  kind: "booked" | "confirmed" | "cancelled" | "reminder";
+  kind: "booked" | "confirmed" | "cancelled" | "rescheduled" | "reminder" | "review";
   recipient: "customer" | "business";
   email: string;
   customer_name: string;
@@ -18,6 +18,9 @@ export type QueuedNotification = {
   business_slug: string;
   business_phone: string;
   business_address: string;
+  prior_cancels: number;
+  prior_no_shows: number;
+  customer_flagged: boolean;
 };
 
 type Content = {
@@ -59,6 +62,29 @@ function content(n: QueuedNotification, appUrl: string): Content {
       };
     }
     const pending = n.status === "pending";
+    if (n.kind === "booked" && n.customer_flagged) {
+      const history = `Son 6 ayda ${n.prior_cancels} iptal, ${n.prior_no_shows} gelmedi`;
+      return {
+        subject: `Dikkat, sık iptal eden müşteri: ${n.customer_name}, ${when}`,
+        title: "Sık iptal eden müşteriden randevu",
+        intro: pending
+          ? `${n.customer_name} son 6 ayda ${n.prior_cancels} randevusunu iptal etti, ${n.prior_no_shows} randevusuna gelmedi. Bu yüzden randevu otomatik onaylanmadı; panelden onaylayın veya reddedin.`
+          : `${n.customer_name} son 6 ayda ${n.prior_cancels} randevusunu iptal etti, ${n.prior_no_shows} randevusuna gelmedi. Randevudan önce aramanızı öneririz.`,
+        rows: [...forBusiness, ["Geçmiş", history]],
+        action: panel,
+      };
+    }
+    if (n.kind === "rescheduled") {
+      return {
+        subject: `${pending ? "Saat değişikliği onay bekliyor" : "Randevu saati değişti"}: ${n.customer_name}, ${when}`,
+        title: pending ? "Saat değişikliği onay bekliyor" : "Randevu saati değişti",
+        intro: pending
+          ? `${n.customer_name} randevusunu yeni bir saate aldı. Panelden onaylayın ki müşteriye bildirim gitsin.`
+          : `${n.customer_name} randevusunu yeni bir saate aldı. Eski saat tekrar randevuya açıldı.`,
+        rows: forBusiness,
+        action: panel,
+      };
+    }
     return {
       subject: `${pending ? "Onay bekleyen randevu" : "Yeni randevu"}: ${n.customer_name}, ${when}`,
       title: pending ? "Onay bekleyen randevu" : "Yeni randevu",
@@ -102,6 +128,26 @@ function content(n: QueuedNotification, appUrl: string): Content {
         intro: "İşletme bu randevuyu iptal etti. Dilerseniz başka bir saate yeni randevu alabilirsiniz.",
         rows: forCustomer,
         action: { label: "Yeni randevu al", href: `${appUrl}/${n.business_slug}` },
+      };
+    case "rescheduled":
+      return {
+        subject: `Randevunuzun saati değişti: ${n.business_name}, ${when}`,
+        title: "Randevunuzun saati değişti",
+        intro: "İşletme randevunuzu aşağıdaki yeni saate aldı. Bu saat size uymuyorsa lütfen işletmeye haber verin.",
+        rows: forCustomer,
+        action: businessPage,
+      };
+    case "review":
+      return {
+        subject: `${n.business_name} nasıldı?`,
+        title: "Hizmet nasıldı?",
+        intro: `Merhaba ${n.customer_name.split(" ")[0]}, ${n.business_name} randevunuz için birkaç saniyelik bir değerlendirme bırakır mısınız? Puanınız diğer müşterilere yol gösterir.`,
+        rows: [
+          ["İşletme", n.business_name],
+          ["Hizmet", n.service_name],
+          ["Tarih", when],
+        ],
+        action: { label: "Değerlendir", href: `${appUrl}/hesabim` },
       };
     case "reminder":
       return {

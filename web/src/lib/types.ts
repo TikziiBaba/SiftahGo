@@ -21,6 +21,12 @@ export type Business = {
   logo_url: string | null;
   cover_url: string | null;
   gallery: string[];
+  // Sayfa özelleştirme (paketteki özelliğe göre görünür)
+  accent: string;
+  announcement: string;
+  whatsapp: string;
+  instagram: string;
+  website: string;
   slot_minutes: number;
   booking_days: number;
   min_notice_minutes: number;
@@ -32,6 +38,8 @@ export type Business = {
   rating_count: number;
   plan_id: string | null;
   subscription_ends_at: string | null;
+  // Ücretsiz deneme bitişi; subscription_ends_at buna eşitse işletme denemededir.
+  trial_ends_at: string | null;
 };
 
 export type Service = {
@@ -84,6 +92,9 @@ export type Review = {
   customer_name: string;
   rating: number;
   comment: string;
+  // İşletmenin herkese açık cevabı (boş = cevap yok)
+  reply: string;
+  replied_at: string | null;
   created_at: string;
 };
 
@@ -121,5 +132,11 @@ export type Appointment = {
   starts_at: string;
   ends_at: string;
   status: AppointmentStatus;
+  cancelled_by: "customer" | "business" | null;
+  // Randevu alınırken müşterinin son 6 aydaki geçmişi (tüm işletmelerde)
+  prior_cancels: number;
+  prior_no_shows: number;
+  // Sık iptal eden / gelmeyen müşteri
+  customer_flagged: boolean;
   created_at: string;
 };

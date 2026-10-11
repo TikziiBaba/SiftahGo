@@ -54,15 +54,15 @@ async function Results({ searchParams }: { searchParams: PageProps<"/kesfet">["s
       <form className="card mt-6 grid gap-3 p-4 md:grid-cols-[1fr_200px_200px_auto]">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" />
-          <input name="q" defaultValue={q} placeholder="İşletme adı ara" className="input pl-9" />
+          <input name="q" defaultValue={q} placeholder="İşletme adı ara" aria-label="İşletme adı" className="input pl-9" />
         </div>
-        <select name="kategori" defaultValue={category} className="input">
+        <select name="kategori" defaultValue={category} aria-label="Kategori" className="input">
           <option value="">Tüm kategoriler</option>
           {CATEGORIES.map((c) => (
             <option key={c.id} value={c.id}>{c.label}</option>
           ))}
         </select>
-        <select name="sehir" defaultValue={city} className="input">
+        <select name="sehir" defaultValue={city} aria-label="Şehir" className="input">
           <option value="">Tüm şehirler</option>
           {CITIES.map((c) => (
             <option key={c} value={c}>{c}</option>
@@ -73,7 +73,7 @@ async function Results({ searchParams }: { searchParams: PageProps<"/kesfet">["s
 
       {businesses.length === 0 ? (
         <div className="card mt-6 grid place-items-center p-12 text-center">
-          <Store className="size-10 text-ink-4" />
+          <Store className="size-10 text-ink-3" />
           <p className="mt-3 font-medium">Aramanıza uygun işletme bulunamadı</p>
           <p className="mt-1 text-sm text-ink-3">Filtreleri değiştirmeyi deneyin.</p>
         </div>

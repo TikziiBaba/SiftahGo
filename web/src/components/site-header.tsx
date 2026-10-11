@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ArrowUpRight, CalendarCheck } from "lucide-react";
+import { InboxBell } from "@/components/inbox-bell";
 import { createClient } from "@/lib/supabase/client";
 import { SITE_NAME } from "@/lib/constants";
 
@@ -28,7 +29,8 @@ const LINKS = [
   { href: "/#sss", label: "SSS" },
 ];
 
-export function SiteHeader() {
+/** `minimal`: dükkân sayfalarında pazarlama menüsü ve "Hemen Başla" gizlenir; müşteri işletmeye odaklanır. */
+export function SiteHeader({ minimal = false }: { minimal?: boolean }) {
   const [account, setAccount] = useState<{ href: string; label: string } | null>(null);
   const [open, setOpen] = useState(false);
 
@@ -64,7 +66,7 @@ export function SiteHeader() {
       <header className="fixed inset-x-0 top-4 z-40 flex justify-center px-4">
         <div className="flex w-full max-w-5xl items-center justify-between gap-2 rounded-full bg-surface/70 py-2 pl-4 pr-2 ring-1 ring-line-strong backdrop-blur-xl shadow-[0_10px_40px_-12px_rgb(0_0_0/0.8),inset_0_1px_0_rgb(255_255_255/0.06)]">
           <Logo />
-          <nav className="hidden items-center gap-1 text-sm md:flex">
+          <nav className={`hidden items-center gap-1 text-sm ${minimal ? "" : "md:flex"}`}>
             {LINKS.map((l) => (
               <Link key={l.href} href={l.href} className="rounded-full px-3.5 py-2 text-ink-2 transition-colors duration-300 ease-spring hover:bg-white/[0.05] hover:text-ink">
                 {l.label}
@@ -73,11 +75,17 @@ export function SiteHeader() {
           </nav>
           <div className="flex items-center gap-1">
             {!account && (
-              <Link href="/giris" className="btn btn-ghost hidden sm:inline-flex">
+              <Link href="/giris" className={`btn ${minimal ? "btn-secondary py-2" : "btn-ghost hidden sm:inline-flex"}`}>
                 Giriş
               </Link>
             )}
-            <Link href={cta.href} className="group btn btn-primary hidden py-2 pl-4 pr-1.5 sm:inline-flex">
+            {account && <InboxBell />}
+            {minimal && account && (
+              <Link href={account.href} className="btn btn-secondary py-2">
+                {account.label}
+              </Link>
+            )}
+            <Link href={cta.href} className={`group btn btn-primary hidden py-2 pl-4 pr-1.5 ${minimal ? "" : "sm:inline-flex"}`}>
               {cta.label}
               <span className="btn-icon">
                 <ArrowUpRight className="size-4" />
@@ -88,7 +96,7 @@ export function SiteHeader() {
               onClick={() => setOpen(!open)}
               aria-label={open ? "Menüyü kapat" : "Menüyü aç"}
               aria-expanded={open}
-              className="relative grid size-10 place-items-center rounded-full ring-1 ring-line-strong md:hidden"
+              className={`relative grid size-10 place-items-center rounded-full ring-1 ring-line-strong md:hidden ${minimal ? "hidden" : ""}`}
             >
               <span className={`absolute h-px w-4 bg-ink transition-transform duration-500 ease-spring ${open ? "rotate-45" : "-translate-y-1"}`} />
               <span className={`absolute h-px w-4 bg-ink transition-transform duration-500 ease-spring ${open ? "-rotate-45" : "translate-y-1"}`} />
@@ -159,7 +167,7 @@ export function SiteFooter() {
         <p className="select-none bg-gradient-to-b from-white/[0.07] to-transparent bg-clip-text text-[18vw] font-bold leading-none tracking-tighter text-transparent md:text-[11rem]">
           {SITE_NAME}
         </p>
-        <p className="mt-4 text-xs text-ink-4">© {SITE_NAME} · Esnaf için online randevu</p>
+        <p className="mt-4 text-xs text-ink-3">© {SITE_NAME} · Esnaf için online randevu</p>
       </div>
     </footer>
   );
@@ -168,7 +176,7 @@ export function SiteFooter() {
 function FooterCol({ title, links }: { title: string; links: [string, string][] }) {
   return (
     <div>
-      <p className="text-xs font-medium uppercase tracking-[0.2em] text-ink-4">{title}</p>
+      <p className="text-xs font-medium uppercase tracking-[0.2em] text-ink-3">{title}</p>
       <ul className="mt-4 space-y-2.5 text-sm">
         {links.map(([label, href]) => (
           <li key={href}>

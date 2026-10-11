@@ -21,6 +21,7 @@ type Row = Business & {
 const FILTERS = [
   { id: "all", label: "Tümü" },
   { id: "live", label: "Yayında" },
+  { id: "trial", label: "Denemede" },
   { id: "expiring", label: "Bitmek üzere" },
   { id: "expired", label: "Süresi doldu" },
   { id: "never", label: "Paketsiz" },
@@ -71,12 +72,12 @@ export default function AdminBusinesses() {
     const counts = Object.fromEntries(FILTERS.map((f) => [f.id, 0])) as Record<Filter, number>;
     counts.all = withState.length;
     for (const x of withState) counts[x.state.key as Filter] += 1;
-    // "Bitmek üzere" olanlar yayında da sayılır.
-    counts.live += counts.expiring;
+    // Denemedekiler ve "Bitmek üzere" olanlar yayında da sayılır.
+    counts.live += counts.expiring + counts.trial;
 
     const term = q.trim().toLocaleLowerCase("tr-TR");
     const list = withState
-      .filter(({ state }) => filter === "all" || state.key === filter || (filter === "live" && state.key === "expiring"))
+      .filter(({ state }) => filter === "all" || state.key === filter || (filter === "live" && (state.key === "expiring" || state.key === "trial")))
       .filter(({ b }) => !plan || b.plan_id === plan)
       .filter(({ b }) => !category || b.category === category)
       .filter(({ b }) => !city || b.city === city)
@@ -134,7 +135,7 @@ export default function AdminBusinesses() {
 
       <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr_1fr]">
         <label className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-4" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" />
           <input className="input pl-9" placeholder="Ad, adres, şehir, sahip e-postası…" value={q} onChange={(e) => setQ(e.target.value)} />
         </label>
         <select className="input" value={plan} onChange={(e) => setPlan(e.target.value)} aria-label="Paket">
@@ -206,7 +207,7 @@ export default function AdminBusinesses() {
                         <span className="text-xs text-ink-3">({b.rating_count})</span>
                       </span>
                     ) : (
-                      <span className="text-ink-4">—</span>
+                      <span className="text-ink-3">—</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-xs text-ink-3">{shortDate(b.created_at)}</td>

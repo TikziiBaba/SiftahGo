@@ -2,6 +2,11 @@
 
 @theme inline {
   --font-sans: var(--font-geist-sans);
+}
+
+/* Renkler değişken olarak kullanılır (inline değil): dükkân sayfası, sayfa rengini
+   brand-* değişkenlerini değiştirerek uygular (accentVars). */
+@theme static {
 
   /* Zemin ve yüzeyler (koyudan açığa) */
   --color-bg: #060808;
@@ -17,7 +22,6 @@
   --color-ink: #f1f5f4;
   --color-ink-2: #b3bebb;
   --color-ink-3: #808d8a;
-  --color-ink-4: #4f5a58;
 
   /* Marka: turkuaz */
   --color-brand-50: #f0fdfa;
@@ -67,7 +71,11 @@ svg.lucide {
     @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium transition-[background-color,color,transform,box-shadow] duration-300 ease-spring active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
   }
   .btn-primary {
-    @apply bg-brand-400 text-brand-950 shadow-[0_0_0_1px_rgb(94_234_212/0.4),0_8px_30px_-8px_rgb(45_212_191/0.5)] hover:bg-brand-300;
+    @apply bg-brand-400 text-brand-950 hover:bg-brand-300;
+    /* Işıma marka renginden türetilir; sayfa rengi değişince o da değişir. */
+    box-shadow:
+      0 0 0 1px color-mix(in oklab, var(--color-brand-300) 40%, transparent),
+      0 8px 30px -8px color-mix(in oklab, var(--color-brand-400) 50%, transparent);
   }
   .btn-secondary {
     @apply bg-white/[0.04] text-ink ring-1 ring-line-strong hover:bg-white/[0.08];
@@ -83,7 +91,7 @@ svg.lucide {
     @apply grid size-7 place-items-center rounded-full bg-black/15 transition-transform duration-500 ease-spring group-hover:translate-x-0.5 group-hover:-translate-y-px group-hover:scale-105;
   }
   .input {
-    @apply w-full rounded-xl border border-line bg-surface-2 px-3.5 py-2.5 text-sm text-ink outline-none transition-[border-color,box-shadow] duration-300 ease-spring placeholder:text-ink-4 focus:border-brand-400/60 focus:ring-4 focus:ring-brand-400/10;
+    @apply w-full rounded-xl border border-line bg-surface-2 px-3.5 py-2.5 text-sm text-ink outline-none transition-[border-color,box-shadow] duration-300 ease-spring placeholder:text-ink-3 focus:border-brand-400/60 focus:ring-4 focus:ring-brand-400/10;
   }
   .label {
     @apply mb-1.5 block text-sm font-medium text-ink-2;

@@ -71,7 +71,7 @@ export default function AdminUsers() {
       <div className="mt-6 flex flex-wrap items-center gap-2">
         <Tabs value={filter} onChange={setFilter} options={FILTERS.map((f) => ({ ...f, count: users?.filter((u) => match(u, f.id)).length }))} />
         <label className="relative min-w-60 flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-4" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" />
           <input className="input pl-9" placeholder="Ad, e-posta, telefon, işletme…" value={q} onChange={(e) => setQ(e.target.value)} />
         </label>
       </div>
@@ -122,7 +122,7 @@ export default function AdminUsers() {
                         {u.business_name}
                       </Link>
                     ) : (
-                      <span className="text-ink-4">—</span>
+                      <span className="text-ink-3">—</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">{u.appointment_count}</td>

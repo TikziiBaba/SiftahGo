@@ -1,16 +1,14 @@
 import { emailConfigured, sendEmail } from "@/lib/email";
 import { buildEmail, type QueuedNotification } from "@/lib/notification-email";
+import { sendQueuedPushes } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-// Kuyruktaki randevu e-postalarını gönderir. Zamanlanmış görev (Supabase pg_cron)
-// dakikada bir "Authorization: Bearer CRON_SECRET" başlığıyla çağırır.
+// Kuyruktaki randevu bildirimlerini (anlık bildirim ve e-posta) gönderir. Zamanlanmış görev
+// (Supabase pg_cron) dakikada bir "Authorization: Bearer CRON_SECRET" başlığıyla çağırır.
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
     return new Response("Unauthorized", { status: 401 });
-  }
-  if (!emailConfigured()) {
-    return Response.json({ error: "RESEND_API_KEY ve EMAIL_FROM tanımlı değil." }, { status: 503 });
   }
 
   const supabase = createAdminClient();
@@ -18,6 +16,19 @@ export async function GET(request: Request) {
 
   const { data: reminders, error: queueError } = await supabase.rpc("queue_due_reminders");
   if (queueError) console.error("Hatırlatmalar kuyruğa eklenemedi", queueError.message);
+  const { data: reviewRequests, error: reviewError } = await supabase.rpc("queue_review_requests");
+  if (reviewError) console.error("Değerlendirme istekleri kuyruğa eklenemedi", reviewError.message);
+
+  // E-postalar yavaş gönderildiği için anlık bildirimler önce gider.
+  const push = await sendQueuedPushes(supabase).catch((e: unknown) => {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error("Anlık bildirim kuyruğu okunamadı", message);
+    return { error: message };
+  });
+
+  if (!emailConfigured()) {
+    return Response.json({ push, error: "RESEND_API_KEY ve EMAIL_FROM tanımlı değil." }, { status: 503 });
+  }
 
   const { data, error } = await supabase.rpc("claim_notifications", { p_limit: 20 });
   if (error) {
@@ -42,5 +53,5 @@ export async function GET(request: Request) {
     await supabase.rpc("finish_notification", { p_id: n.id, p_error: sendError });
   }
 
-  return Response.json({ reminders: reminders ?? 0, sent, failed });
+  return Response.json({ reminders: reminders ?? 0, reviewRequests: reviewRequests ?? 0, sent, failed, push });
 }

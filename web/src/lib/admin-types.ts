@@ -6,6 +6,7 @@ export type AdminStats = {
   businesses: number;
   businesses_30d: number;
   active: number;
+  trial: number;
   live: number;
   suspended: number;
   expiring_7d: number;

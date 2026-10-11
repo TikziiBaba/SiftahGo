@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, CheckCircle2, Loader2, ShieldCheck, X } from "lucide-react";
 import { useBusiness } from "@/components/panel-context";
 import { createClient } from "@/lib/supabase/client";
-import { BASE_FEATURES, isSubscribed, PLAN_FEATURES } from "@/lib/constants";
+import { BASE_FEATURES, isSubscribed, isTrial, PLAN_FEATURES } from "@/lib/constants";
 import { formatDate, formatPrice } from "@/lib/format";
 import type { Payment, Plan } from "@/lib/types";
 
@@ -23,6 +23,7 @@ export default function SubscriptionPage() {
   const startEnds = useRef(business.subscription_ends_at);
 
   const subscribed = isSubscribed(business);
+  const trial = isTrial(business);
   const currentPlan = plans?.find((p) => p.id === business.plan_id);
 
   useEffect(() => {
@@ -100,8 +101,13 @@ export default function SubscriptionPage() {
       <div className="bezel mt-6">
         <div className="bezel-core flex flex-wrap items-center justify-between gap-4 p-5 md:p-6">
           <div>
-            <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-ink-4">Mevcut durum</p>
-            {subscribed ? (
+            <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-ink-3">Mevcut durum</p>
+            {trial ? (
+              <p className="mt-1 text-lg font-semibold">
+                Ücretsiz deneme (Pro) ·{" "}
+                <span className="font-normal text-ink-2">{formatDate(business.subscription_ends_at!, { weekday: undefined, year: "numeric" })} tarihine kadar</span>
+              </p>
+            ) : subscribed ? (
               <p className="mt-1 text-lg font-semibold">
                 {currentPlan?.name ?? "Paket"} paketi ·{" "}
                 <span className="font-normal text-ink-2">{formatDate(business.subscription_ends_at!, { weekday: undefined, year: "numeric" })} tarihine kadar</span>
@@ -110,6 +116,11 @@ export default function SubscriptionPage() {
               <p className="mt-1 text-lg font-semibold text-amber-300">Aktif paketiniz yok</p>
             )}
           </div>
+          {trial && (
+            <p className="max-w-sm text-sm text-ink-3">
+              Deneme bitince sayfanız yayından kalkar. Şimdi paket seçerseniz paketiniz hemen başlar, kalan deneme günleri de üstüne eklenir.
+            </p>
+          )}
           {!subscribed && (
             <p className="max-w-sm text-sm text-ink-3">
               Paket seçene kadar sayfanız yayında görünmez ve randevu alınamaz. Ayarlar’dan bilgilerinizi şimdiden doldurabilirsiniz.
@@ -122,7 +133,7 @@ export default function SubscriptionPage() {
         {plans === null &&
           Array.from({ length: 3 }, (_, i) => <div key={i} className="h-96 animate-pulse rounded-[2rem] bg-surface-2" />)}
         {plans?.map((plan) => {
-          const isCurrent = subscribed && plan.id === business.plan_id;
+          const isCurrent = subscribed && !trial && plan.id === business.plan_id;
           const popular = plan.id === POPULAR;
           return (
             <div key={plan.id} className={`bezel ${popular ? "ring-brand-400/40" : ""}`}>
@@ -153,7 +164,7 @@ export default function SubscriptionPage() {
                   className={`btn relative mt-8 w-full py-3 ${popular ? "btn-primary" : "btn-secondary"}`}
                 >
                   {busyPlan === plan.id && <Loader2 className="size-4 animate-spin" />}
-                  {isCurrent ? "30 gün uzat" : subscribed ? "Bu pakete geç" : "Seç ve öde"}
+                  {isCurrent ? "30 gün uzat" : subscribed && !trial ? "Bu pakete geç" : "Seç ve öde"}
                 </button>
               </div>
             </div>
@@ -211,7 +222,7 @@ export default function SubscriptionPage() {
 
 function Feature({ children, off }: { children: React.ReactNode; off?: boolean }) {
   return (
-    <li className={`flex gap-2.5 ${off ? "text-ink-4 line-through" : "text-ink-2"}`}>
+    <li className={`flex gap-2.5 ${off ? "text-ink-3 line-through" : "text-ink-2"}`}>
       <span className={`mt-0.5 grid size-4.5 shrink-0 place-items-center rounded-full ${off ? "bg-white/5" : "bg-brand-400/15"}`}>
         {off ? <X className="size-3" /> : <Check className="size-3 text-brand-300" style={{ strokeWidth: 2.5 }} />}
       </span>

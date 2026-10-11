@@ -97,7 +97,7 @@ function PlanCard({ plan, subscribers, onSaved }: { plan: Plan; subscribers: num
     <div className="bezel">
       <div className="bezel-core flex h-full flex-col p-5">
         <div className="flex items-center justify-between gap-2">
-          <p className="font-mono text-xs text-ink-4">{plan.id}</p>
+          <p className="font-mono text-xs text-ink-3">{plan.id}</p>
           <span className="chip bg-white/5 text-ink-2 ring-1 ring-line">{subscribers} aktif abone</span>
         </div>
         <p className="mt-3 text-3xl font-semibold tracking-tight">

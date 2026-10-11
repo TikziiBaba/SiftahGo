@@ -97,7 +97,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             </Link>
           ))}
         </nav>
-        <p className="truncate px-3 pb-2 text-xs text-ink-4" title={state.email}>
+        <p className="truncate px-3 pb-2 text-xs text-ink-3" title={state.email}>
           {state.email}
         </p>
         <button onClick={logout} className="btn btn-ghost justify-start">

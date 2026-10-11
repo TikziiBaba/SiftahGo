@@ -1,7 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { connection } from "next/server";
 
 export async function createClient() {
+  // Supabase oturumu okurken Date.now() çağırır; Cache Components önceden hazırlama sırasında
+  // buna izin vermez ("blocking-prerender-current-time"). Sorgular yalnızca gerçek istekte çalışsın.
+  await connection();
   const cookieStore = await cookies();
 
   return createServerClient(

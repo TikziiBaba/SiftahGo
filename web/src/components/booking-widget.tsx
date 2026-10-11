@@ -3,16 +3,15 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { CalendarPlus, CheckCircle2, ChevronLeft, Loader2 } from "lucide-react";
+import { bookableDays, DayStrip, SlotGrid } from "@/components/slot-picker";
 import { createClient } from "@/lib/supabase/client";
 import {
-  addDays,
   errorMessage,
   formatDate,
   formatDuration,
   formatPrice,
   formatTime,
   googleCalendarLink,
-  isoWeekday,
   todayStr,
 } from "@/lib/format";
 import type { Business, Service, Staff, StaffService, WorkingHour } from "@/lib/types";
@@ -23,14 +22,17 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
   const supabase = createClient();
   const [serviceId, setServiceId] = useState<string | null>(null);
   const [staffId, setStaffId] = useState("");
-  const [day, setDay] = useState(todayStr);
+  const days = useMemo(() => bookableDays(business.booking_days, hours), [business.booking_days, hours]);
+  // Bugün kapalıysa ilk açık gün seçili gelir.
+  const [day, setDay] = useState(() => days.find((d) => d.open)?.day ?? todayStr());
   const [slotResult, setSlotResult] = useState<{ key: string; times: string[] } | null>(null);
   const [time, setTime] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", phone: "", email: "", note: "" });
   const [loggedIn, setLoggedIn] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [booked, setBooked] = useState(false);
+  // Alınan randevunun durumu; sık iptal eden müşteride işletme ayarından bağımsız "pending" olur.
+  const [booked, setBooked] = useState<"pending" | "confirmed" | null>(null);
   const [reload, setReload] = useState(0);
 
   const service = services.find((s) => s.id === serviceId);
@@ -41,14 +43,6 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
   const slotKey = `${serviceId}|${staffId}|${day}|${reload}`;
   const times = slotResult?.key === slotKey ? slotResult.times : null;
 
-  const days = useMemo(() => {
-    const start = todayStr();
-    return Array.from({ length: Math.min(business.booking_days, 30) + 1 }, (_, i) => {
-      const d = addDays(start, i);
-      const open = hours.find((h) => h.weekday === isoWeekday(d))?.is_open ?? false;
-      return { day: d, open };
-    });
-  }, [business.booking_days, hours]);
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
@@ -85,7 +79,7 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
     if (!service || !time) return;
     setBusy(true);
     setError("");
-    const { error } = await supabase.rpc("book_appointment", {
+    const { data, error } = await supabase.rpc("book_appointment", {
       p_business_id: business.id,
       p_service_id: service.id,
       p_staff_id: staffId || null,
@@ -105,7 +99,7 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
       }
       return;
     }
-    setBooked(true);
+    setBooked((data as { status: "pending" | "confirmed" } | null)?.status ?? (business.auto_confirm ? "confirmed" : "pending"));
   }
 
   if (services.length === 0) {
@@ -125,7 +119,7 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
           {formatDate(time)} saat <b>{formatTime(time)}</b> · {service.name}
         </p>
         <p className="mt-1 text-sm text-ink-3">
-          {business.auto_confirm ? "Randevunuz onaylandı." : "İşletme randevunuzu onayladığında kesinleşecek."}
+          {booked === "confirmed" ? "Randevunuz onaylandı." : "İşletme randevunuzu onayladığında kesinleşecek."}
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <a
@@ -149,7 +143,7 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
           <button
             className="btn btn-secondary"
             onClick={() => {
-              setBooked(false);
+              setBooked(null);
               setTime(null);
               setReload((r) => r + 1);
             }}
@@ -218,55 +212,17 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
 
       {service && (
         <Step n={staff.length > 1 ? 3 : 2} title="Gün ve saat seçin">
-          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2">
-            {days.map(({ day: d, open }) => {
-              const date = new Date(`${d}T12:00:00Z`);
-              return (
-                <button
-                  key={d}
-                  type="button"
-                  disabled={!open}
-                  onClick={() => {
-                    setDay(d);
-                    setTime(null);
-                  }}
-                  className={`flex w-16 shrink-0 flex-col items-center rounded-xl border py-2 text-sm transition disabled:opacity-40 ${
-                    d === day ? "border-brand-400 bg-brand-700 text-white" : "border-line hover:border-line-strong"
-                  }`}
-                >
-                  <span className="text-xs">{date.toLocaleDateString("tr-TR", { weekday: "short", timeZone: "UTC" })}</span>
-                  <span className="text-lg font-semibold">{date.getUTCDate()}</span>
-                  <span className="text-xs">{date.toLocaleDateString("tr-TR", { month: "short", timeZone: "UTC" })}</span>
-                </button>
-              );
-            })}
-          </div>
+          <DayStrip
+            days={days}
+            value={day}
+            onChange={(d) => {
+              setDay(d);
+              setTime(null);
+            }}
+          />
 
           <div className="mt-3">
-            {times === null ? (
-              <div className="flex items-center gap-2 py-4 text-sm text-ink-3">
-                <Loader2 className="size-4 animate-spin" /> Boş saatler yükleniyor…
-              </div>
-            ) : times.length === 0 ? (
-              <p className="rounded-xl bg-surface-2 p-4 text-sm text-ink-3">
-                Bu gün için boş saat yok. Lütfen başka bir gün seçin.
-              </p>
-            ) : (
-              <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
-                {times.map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setTime(t)}
-                    className={`rounded-lg border py-2 text-sm font-medium transition ${
-                      t === time ? "border-brand-400 bg-brand-700 text-white" : "border-line hover:border-brand-400"
-                    }`}
-                  >
-                    {formatTime(t)}
-                  </button>
-                ))}
-              </div>
-            )}
+            <SlotGrid times={times} value={time} onChange={setTime} />
           </div>
         </Step>
       )}

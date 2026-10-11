@@ -140,6 +140,7 @@ export default function AdminDashboard() {
           <Breakdown
             items={[
               { name: "Aktif", value: stats.active },
+              { name: "Ücretsiz denemede", value: stats.trial },
               { name: "7 gün içinde bitiyor", value: stats.expiring_7d },
               { name: "Süresi dolmuş", value: stats.expired },
               { name: "Hiç paket almamış", value: stats.never_paid },

@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CalendarPlus, ChevronLeft, ChevronRight, Loader2, MessageCircle, Phone, X } from "lucide-react";
+import { AlertTriangle, CalendarClock, CalendarPlus, ChevronLeft, ChevronRight, Loader2, MessageCircle, Phone, X } from "lucide-react";
 import { useBusiness } from "@/components/panel-context";
+import { RescheduleDialog } from "@/components/reschedule-dialog";
 import { createClient } from "@/lib/supabase/client";
 import { STATUS } from "@/lib/constants";
 import {
@@ -31,6 +32,9 @@ export default function AppointmentsPage() {
   const [staff, setStaff] = useState<Staff[]>([]);
   const [links, setLinks] = useState<StaffService[]>([]);
   const [adding, setAdding] = useState(false);
+  const [moving, setMoving] = useState<Row | null>(null);
+  // Saati geçmiş randevu ertelenemez; saat veri yüklenirken alınır (render sırasında okunmaz).
+  const [loadedAt, setLoadedAt] = useState(0);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
@@ -43,6 +47,7 @@ export default function AppointmentsPage() {
     ]);
     setRows((a.data ?? []) as Row[]);
     setPending((p.data ?? []) as Row[]);
+    setLoadedAt(Date.now());
   }, [supabase, business.id, day]);
 
   useEffect(() => {
@@ -122,7 +127,10 @@ export default function AppointmentsPage() {
             {pending.map((r) => (
               <li key={r.id} className="flex flex-wrap items-center gap-3 rounded-xl bg-surface p-3 text-sm">
                 <span className="font-medium">{formatDate(r.starts_at, { weekday: undefined })} {formatTime(r.starts_at)}</span>
-                <span className="flex-1">{r.customer_name} · {r.service_name}</span>
+                <span className="flex flex-1 flex-wrap items-center gap-2">
+                  {r.customer_name} · {r.service_name}
+                  {r.customer_flagged && <FlaggedChip row={r} />}
+                </span>
                 <button className="btn btn-primary py-1.5" onClick={() => setStatus(r.id, "confirmed")}>Onayla</button>
                 <button className="btn btn-ghost py-1.5 text-rose-400" onClick={() => setStatus(r.id, "cancelled")}>Reddet</button>
               </li>
@@ -145,7 +153,10 @@ export default function AppointmentsPage() {
                   <p className="text-xs text-ink-3">{formatTime(r.ends_at)}</p>
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold">{r.customer_name}</p>
+                  <p className="flex flex-wrap items-center gap-2 font-semibold">
+                    {r.customer_name}
+                    {r.customer_flagged && <FlaggedChip row={r} />}
+                  </p>
                   <p className="text-sm text-ink-2">
                     {r.service_name}
                     {r.staff && ` · ${r.staff.name}`} · {formatPrice(r.price)}
@@ -163,6 +174,11 @@ export default function AppointmentsPage() {
                       >
                         <MessageCircle className="size-3.5" /> WhatsApp ile hatırlat
                       </a>
+                    )}
+                    {["pending", "confirmed"].includes(r.status) && r.service_id && new Date(r.starts_at).getTime() > loadedAt && (
+                      <button onClick={() => setMoving(r)} className="inline-flex items-center gap-1 text-brand-300">
+                        <CalendarClock className="size-3.5" /> Saati değiştir
+                      </button>
                     )}
                   </div>
                   {r.note && <p className="mt-1 text-sm italic text-ink-3">“{r.note}”</p>}
@@ -182,6 +198,17 @@ export default function AppointmentsPage() {
         )}
       </section>
 
+      {moving && (
+        <RescheduleDialog
+          appointment={moving}
+          onClose={() => setMoving(null)}
+          onDone={() => {
+            setMoving(null);
+            load();
+          }}
+        />
+      )}
+
       {adding && (
         <AddAppointment
           businessId={business.id}
@@ -197,6 +224,18 @@ export default function AppointmentsPage() {
         />
       )}
     </div>
+  );
+}
+
+/** Sık iptal eden / gelmeyen müşteri: randevu alındığı andaki son 6 aylık geçmiş (tüm işletmelerde). */
+function FlaggedChip({ row }: { row: Row }) {
+  return (
+    <span
+      className="chip bg-rose-400/10 text-xs font-medium text-rose-300 ring-1 ring-rose-400/20"
+      title="Randevu alındığında müşterinin son 6 aydaki geçmişi (tüm SiftahGo işletmelerinde)"
+    >
+      <AlertTriangle className="size-3.5" /> Sık iptal · {row.prior_cancels} iptal, {row.prior_no_shows} gelmedi
+    </span>
   );
 }
 

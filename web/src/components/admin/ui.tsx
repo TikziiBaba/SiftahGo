@@ -6,7 +6,7 @@ import { formatDate } from "@/lib/format";
 
 /** İşletmenin yayın/abonelik durumu. `now` veri yüklenirken alınır (render sırasında saat okunmaz). */
 export function businessState(
-  b: { subscription_ends_at: string | null; is_suspended: boolean; is_published: boolean },
+  b: { subscription_ends_at: string | null; trial_ends_at: string | null; is_suspended: boolean; is_published: boolean },
   now: number,
 ) {
   if (b.is_suspended) return { key: "suspended", label: "Askıda", className: TONE.rose };
@@ -14,6 +14,7 @@ export function businessState(
   const days = Math.ceil((new Date(b.subscription_ends_at).getTime() - now) / 864e5);
   if (days <= 0) return { key: "expired", label: "Süresi doldu", className: TONE.amber };
   if (!b.is_published) return { key: "hidden", label: "Sahibi gizledi", className: TONE.muted };
+  if (b.subscription_ends_at === b.trial_ends_at) return { key: "trial", label: `Deneme · ${days} gün`, className: TONE.sky };
   if (days <= 7) return { key: "expiring", label: `${days} gün kaldı`, className: TONE.amber };
   return { key: "live", label: "Yayında", className: TONE.green };
 }
@@ -198,7 +199,7 @@ export function Tabs<T extends string>({
           }`}
         >
           {o.label}
-          {o.count !== undefined && <span className="ml-1.5 tabular-nums text-ink-4">{o.count}</span>}
+          {o.count !== undefined && <span className="ml-1.5 tabular-nums text-ink-3">{o.count}</span>}
         </button>
       ))}
     </div>

@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { CalendarX2, Loader2, LogOut, RotateCcw, Star, Store } from "lucide-react";
+import { CalendarClock, CalendarX2, Loader2, LogOut, RotateCcw, Star, Store } from "lucide-react";
+import { RescheduleDialog } from "@/components/reschedule-dialog";
 import { SiteHeader } from "@/components/site-header";
 import { createClient } from "@/lib/supabase/client";
 import { STATUS } from "@/lib/constants";
@@ -16,8 +17,10 @@ export default function AccountPage() {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [lists, setLists] = useState<{ upcoming: Row[]; past: Row[] } | null>(null);
-  const [reviewed, setReviewed] = useState<Set<string>>(new Set());
+  // Değerlendirilebilecek randevular: tamamlanan veya saati geçmiş onaylı, henüz değerlendirilmemiş.
+  const [reviewable, setReviewable] = useState<Set<string>>(new Set());
   const [error, setError] = useState("");
+  const [moving, setMoving] = useState<Row | null>(null);
 
   const load = useCallback(async () => {
     // İstemci burada oluşturulur: build sırasında (env yokken) sayfa çizilirken değil.
@@ -35,9 +38,16 @@ export default function AccountPage() {
       supabase.from("reviews").select("appointment_id").eq("customer_id", auth.user.id),
     ]);
     setProfile(p.data as Profile | null);
-    setReviewed(new Set((r.data ?? []).map((x: { appointment_id: string }) => x.appointment_id)));
+    const reviewed = new Set((r.data ?? []).map((x: { appointment_id: string }) => x.appointment_id));
     const rows = (a.data ?? []) as Row[];
     const now = new Date().toISOString();
+    setReviewable(
+      new Set(
+        rows
+          .filter((x) => !reviewed.has(x.id) && (x.status === "completed" || (x.status === "confirmed" && x.ends_at <= now)))
+          .map((x) => x.id),
+      ),
+    );
     const isUpcoming = (r: Row) => r.starts_at >= now && ["pending", "confirmed"].includes(r.status);
     setLists({ upcoming: rows.filter(isUpcoming).reverse(), past: rows.filter((r) => !isUpcoming(r)) });
   }, [router]);
@@ -87,14 +97,19 @@ export default function AccountPage() {
           <div className="card mt-3 h-24 animate-pulse bg-surface-2" />
         ) : upcoming.length === 0 ? (
           <div className="card mt-3 flex flex-col items-center p-8 text-center">
-            <CalendarX2 className="size-10 text-ink-4" />
+            <CalendarX2 className="size-10 text-ink-3" />
             <p className="mt-2 text-ink-2">Yaklaşan randevunuz yok.</p>
             <Link href="/kesfet" className="btn btn-primary mt-4">Randevu Al</Link>
           </div>
         ) : (
           <ul className="mt-3 space-y-3">
             {upcoming.map((r) => (
-              <AppointmentCard key={r.id} row={r} onCancel={() => cancel(r.id)} />
+              <AppointmentCard
+                key={r.id}
+                row={r}
+                onCancel={() => cancel(r.id)}
+                onReschedule={r.service_id ? () => setMoving(r) : undefined}
+              />
             ))}
           </ul>
         )}
@@ -104,12 +119,22 @@ export default function AccountPage() {
             <h2 className="mt-10 font-semibold">Geçmiş</h2>
             <ul className="mt-3 space-y-3">
               {past.map((r) => (
-                <AppointmentCard key={r.id} row={r} canReview={r.status === "completed" && !reviewed.has(r.id)} onReviewed={load} />
+                <AppointmentCard key={r.id} row={r} canReview={reviewable.has(r.id)} onReviewed={load} />
               ))}
             </ul>
           </>
         )}
       </main>
+      {moving && (
+        <RescheduleDialog
+          appointment={moving}
+          onClose={() => setMoving(null)}
+          onDone={() => {
+            setMoving(null);
+            load();
+          }}
+        />
+      )}
     </>
   );
 }
@@ -117,11 +142,13 @@ export default function AccountPage() {
 function AppointmentCard({
   row,
   onCancel,
+  onReschedule,
   canReview,
   onReviewed,
 }: {
   row: Row;
   onCancel?: () => void;
+  onReschedule?: () => void;
   canReview?: boolean;
   onReviewed?: () => void;
 }) {
@@ -144,6 +171,11 @@ function AppointmentCard({
           </p>
         </div>
         <span className={`chip ${status.className}`}>{status.label}</span>
+        {onReschedule && (
+          <button onClick={onReschedule} className="btn btn-secondary">
+            <CalendarClock className="size-4" /> Saati değiştir
+          </button>
+        )}
         {onCancel && (
           <button onClick={onCancel} className="btn btn-ghost text-rose-400">İptal et</button>
         )}
@@ -184,7 +216,7 @@ function ReviewForm({ appointmentId, onDone }: { appointmentId: string; onDone: 
       <div className="flex gap-1" role="radiogroup" aria-label="Puan">
         {[1, 2, 3, 4, 5].map((i) => (
           <button key={i} type="button" role="radio" aria-checked={rating === i} aria-label={`${i} yıldız`} onClick={() => setRating(i)}>
-            <Star className={`size-7 ${i <= rating ? "fill-amber-400 text-amber-400" : "text-ink-4"}`} />
+            <Star className={`size-7 ${i <= rating ? "fill-amber-400 text-amber-400" : "text-ink-3"}`} />
           </button>
         ))}
       </div>

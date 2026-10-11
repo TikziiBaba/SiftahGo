@@ -15,17 +15,20 @@ import {
   QrCode,
   Scissors,
   Settings,
+  Star,
   Users,
 } from "lucide-react";
+import { InboxBell } from "@/components/inbox-bell";
 import { Logo } from "@/components/site-header";
 import { BusinessContext, SetupDoneContext } from "@/components/panel-context";
 import { createClient } from "@/lib/supabase/client";
-import { isSubscribed } from "@/lib/constants";
+import { isSubscribed, isTrial } from "@/lib/constants";
 import type { Business } from "@/lib/types";
 
 const NAV = [
   { href: "/panel", label: "Randevular", icon: CalendarDays },
   { href: "/panel/musteriler", label: "Müşteriler", icon: Contact },
+  { href: "/panel/yorumlar", label: "Yorumlar", icon: Star },
   { href: "/panel/raporlar", label: "Raporlar", icon: BarChart3 },
   { href: "/panel/hizmetler", label: "Hizmetler", icon: Scissors },
   { href: "/panel/personel", label: "Personel", icon: Users },
@@ -43,7 +46,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const [business, setBusiness] = useState<Business | null | undefined>(undefined);
   // Abonelik durumu veri yüklenirken hesaplanır (render sırasında saat okunmaz).
-  const [sub, setSub] = useState({ subscribed: false, daysLeft: 0 });
+  const [sub, setSub] = useState({ subscribed: false, trial: false, daysLeft: 0 });
 
   const refresh = useCallback(async () => {
     const supabase = createClient();
@@ -53,6 +56,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
     const b = (data as Business) ?? null;
     setSub({
       subscribed: b ? isSubscribed(b) : false,
+      trial: b ? isTrial(b) : false,
       daysLeft: b?.subscription_ends_at ? Math.ceil((new Date(b.subscription_ends_at).getTime() - Date.now()) / 864e5) : 0,
     });
     setBusiness(b);
@@ -73,7 +77,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
     return <SetupDoneContext.Provider value={refresh}>{children}</SetupDoneContext.Provider>;
   }
 
-  const { subscribed, daysLeft } = sub;
+  const { subscribed, trial, daysLeft } = sub;
 
   if (!business || pathname === "/panel/kurulum" || (!subscribed && !OPEN_WITHOUT_PLAN.includes(pathname))) {
     return (
@@ -115,6 +119,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
           <header className="sticky top-0 z-20 flex print:hidden h-16 items-center justify-between gap-3 border-b border-line bg-bg/75 px-4 backdrop-blur-xl md:px-8">
             <p className="truncate font-semibold">{business.name}</p>
             <div className="flex items-center gap-1">
+              <InboxBell />
               <Link href={`/${business.slug}`} target="_blank" className="btn btn-secondary py-2">
                 <ExternalLink className="size-4" /> <span className="hidden sm:inline">Sayfamı gör</span>
               </Link>
@@ -128,7 +133,15 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
               İşletmeniz yönetici tarafından yayından kaldırıldı; sayfanız görünmüyor ve randevu alınamıyor. Bilgi için bizimle iletişime geçin.
             </p>
           )}
-          {subscribed && daysLeft <= 5 && pathname !== "/panel/abonelik" && (
+          {trial && pathname !== "/panel/abonelik" && (
+            <Link
+              href="/panel/abonelik"
+              className="flex items-center justify-center gap-2 border-b border-brand-400/20 bg-brand-400/10 px-4 py-2 text-sm text-brand-200 print:hidden"
+            >
+              Ücretsiz Pro denemenizin bitmesine {daysLeft} gün kaldı. Sayfanız yayında kalsın diye paket seçin →
+            </Link>
+          )}
+          {subscribed && !trial && daysLeft <= 5 && pathname !== "/panel/abonelik" && (
             <Link
               href="/panel/abonelik"
               className="flex items-center justify-center gap-2 border-b border-amber-400/20 bg-amber-400/10 px-4 py-2 text-sm text-amber-200 print:hidden"

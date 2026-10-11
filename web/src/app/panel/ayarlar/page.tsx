@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ImagePlus, Loader2, X } from "lucide-react";
+import { PageAppearance } from "@/components/page-appearance";
 import { useBusiness } from "@/components/panel-context";
 import { createClient } from "@/lib/supabase/client";
 import { CATEGORIES, CITIES, RESERVED_SLUGS, SITE_DOMAIN } from "@/lib/constants";
@@ -130,6 +131,9 @@ export default function SettingsPage() {
           </div>
         </div>
       </section>
+
+      {/* Veritabanında sayfa özelleştirme alanları yoksa (ek dosya henüz çalıştırılmadıysa) gizli kalır. */}
+      {"accent" in business && <PageAppearance />}
 
       <form onSubmit={save} className="space-y-8">
         <section>

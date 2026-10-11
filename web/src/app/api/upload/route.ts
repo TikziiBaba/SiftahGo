@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createClient as createTokenClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { uploadToR2 } from "@/lib/r2";
 
@@ -8,9 +9,16 @@ const MAX_BYTES = 4 * 1024 * 1024;
 
 // İşletme sahibinin görsel yüklemesi. Görsel R2'ye gider, adresi döner;
 // adresi işletme kaydına yazmak istemcinin işidir (RLS ile korunur).
+// Mobil uygulamada çerez yok; oturum "Authorization: Bearer <erişim anahtarı>" ile gelir.
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const { data: claims } = await supabase.auth.getClaims();
+  const token = request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
+  const supabase = token
+    ? createTokenClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+        global: { headers: { Authorization: `Bearer ${token}` } },
+        auth: { persistSession: false, autoRefreshToken: false },
+      })
+    : await createClient();
+  const { data: claims } = await supabase.auth.getClaims(token);
   const userId = claims?.claims.sub;
   if (!userId) return NextResponse.json({ error: "Giriş yapmalısınız." }, { status: 401 });
 
