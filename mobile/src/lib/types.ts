@@ -74,12 +74,23 @@ export type Plan = {
 
 export type Payment = {
   id: string;
-  plan_id: string;
+  // Boşsa bakiye yüklemesidir.
+  plan_id: string | null;
   merchant_oid: string;
   amount: number;
   status: "pending" | "paid" | "failed";
   created_at: string;
   paid_at: string | null;
+};
+
+// Bakiye hareketi: + yükleme ve yönetici eklemesi, − paket alımı ve yönetici düşmesi.
+export type BalanceTransaction = {
+  id: string;
+  amount: number;
+  kind: "topup" | "plan" | "admin";
+  plan_id: string | null;
+  note: string;
+  created_at: string;
 };
 
 export type StaffService = { staff_id: string; service_id: string };

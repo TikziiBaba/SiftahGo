@@ -29,18 +29,21 @@ function Subscription({ business }: { business: Business }) {
   const { refresh } = useAuth();
   const [plans, setPlans] = useState<Plan[] | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [balance, setBalance] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const subscribed = isSubscribed(business);
   const trial = isTrial(business);
   const current = plans?.find((p) => p.id === business.plan_id);
 
   const load = useCallback(async () => {
-    const [p, pay] = await Promise.all([
+    const [p, pay, bal] = await Promise.all([
       supabase.from('plans').select('*').order('sort_order'),
       supabase.from('payments').select('*').eq('business_id', business.id).order('created_at', { ascending: false }).limit(10),
+      supabase.rpc('business_balance', { p_business_id: business.id }),
     ]);
     setPlans((p.data ?? []) as Plan[]);
     setPayments((pay.data ?? []) as Payment[]);
+    setBalance(Number(bal.data ?? 0));
     setRefreshing(false);
   }, [business.id]);
 
@@ -100,6 +103,7 @@ function Subscription({ business }: { business: Business }) {
             <Text tone="muted">Paket seçene kadar sayfanız yayında görünmez ve randevu alınamaz.</Text>
           </>
         )}
+        {balance > 0 && <Text tone="secondary">Bakiye: {formatPrice(balance)} · paketler bakiyeden alınabilir</Text>}
       </Card>
 
       <Banner
@@ -167,7 +171,7 @@ function Subscription({ business }: { business: Business }) {
               <View key={p.id} style={styles.rowCenter}>
                 <View style={{ flex: 1 }}>
                   <Text variant="bodyStrong">
-                    {plans?.find((x) => x.id === p.plan_id)?.name ?? p.plan_id} · {formatPrice(p.amount)}
+                    {p.plan_id ? (plans?.find((x) => x.id === p.plan_id)?.name ?? p.plan_id) : 'Bakiye yükleme'} · {formatPrice(p.amount)}
                   </Text>
                   <Text variant="caption" tone="muted">
                     {formatDate(p.created_at)}

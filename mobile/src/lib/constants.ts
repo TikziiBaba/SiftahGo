@@ -64,6 +64,7 @@ export const STATUS: Record<AppointmentStatus, { label: string; fg: string; bg: 
 // Veritabanındaki kısıtla aynı olmalı (supabase/schema.sql).
 export const RESERVED_SLUGS = [
   'panel', 'kesfet', 'giris', 'kayit', 'hesabim', 'api', 'auth', 'admin', 'sifremi-unuttum', 'sifre-yenile',
+  'yasal', 'iletisim',
 ];
 
 // Paket kartlarında gösterilen özellik metinleri (web ile aynı).

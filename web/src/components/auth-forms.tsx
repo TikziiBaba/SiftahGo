@@ -214,6 +214,11 @@ export function SignupForm() {
       <button disabled={busy} className="btn btn-primary w-full py-3">
         {busy && <Loader2 className="size-4 animate-spin" />} {role === "business" ? "İşletme Hesabı Aç" : "Hesap Aç"}
       </button>
+      <p className="text-center text-xs leading-relaxed text-ink-3">
+        Hesap açarak <Link href="/yasal/kullanim-kosullari" className="underline underline-offset-2 hover:text-ink">hizmet şartlarını</Link> kabul
+        etmiş olursunuz. Kişisel verileriniz <Link href="/yasal/gizlilik" className="underline underline-offset-2 hover:text-ink">Gizlilik ve KVKK
+        metnine</Link> göre işlenir.
+      </p>
       <p className="text-center text-sm text-ink-3">
         Zaten hesabın var mı?{" "}
         <Link href="/giris" className="font-medium text-brand-300 hover:underline">Giriş yap</Link>

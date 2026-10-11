@@ -1,51 +1,70 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Check, CheckCircle2, Loader2, ShieldCheck, X } from "lucide-react";
+import Link from "next/link";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Check, CheckCircle2, Loader2, ShieldCheck, Wallet, X } from "lucide-react";
 import { useBusiness } from "@/components/panel-context";
 import { createClient } from "@/lib/supabase/client";
 import { BASE_FEATURES, isSubscribed, isTrial, PLAN_FEATURES } from "@/lib/constants";
 import { formatDate, formatPrice } from "@/lib/format";
-import type { Payment, Plan } from "@/lib/types";
+import type { BalanceTransaction, Payment, Plan } from "@/lib/types";
 
 const POPULAR = "esnaf";
+const TOPUP_PRESETS = [250, 500, 1000];
 
 export default function SubscriptionPage() {
   const { business, refresh } = useBusiness();
   const [plans, setPlans] = useState<Plan[] | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [balance, setBalance] = useState<number | null>(null);
+  const [moves, setMoves] = useState<BalanceTransaction[]>([]);
   const [busyPlan, setBusyPlan] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [topup, setTopup] = useState("500");
+  const [accepted, setAccepted] = useState(false);
+  const [consentError, setConsentError] = useState(false);
+  const consentRef = useRef<HTMLLabelElement>(null);
   // PayTR ödeme sonrası buraya ?odeme=basarili|hata ile döner.
   const [result] = useState(() => (typeof window === "undefined" ? null : new URLSearchParams(location.search).get("odeme")));
   const [waiting, setWaiting] = useState(result === "basarili");
-  const startEnds = useRef(business.subscription_ends_at);
 
   const subscribed = isSubscribed(business);
   const trial = isTrial(business);
   const currentPlan = plans?.find((p) => p.id === business.plan_id);
+  const lastPayment = payments[0];
+  const lastStatus = lastPayment?.status;
 
   useEffect(() => {
     // Ödeme sayfası iframe içinde döndüyse ana pencereyi yönlendir.
     if (result && window.top && window.top !== window.self) window.top.location.href = location.href;
   }, [result]);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     const supabase = createClient();
-    Promise.all([
+    const [p, pay, bal, mv] = await Promise.all([
       supabase.from("plans").select("*").order("sort_order"),
       supabase.from("payments").select("*").eq("business_id", business.id).order("created_at", { ascending: false }).limit(20),
-    ]).then(([p, pay]) => {
-      setPlans((p.data ?? []) as Plan[]);
-      setPayments((pay.data ?? []) as Payment[]);
-    });
-  }, [business.id, business.subscription_ends_at]);
+      supabase.rpc("business_balance", { p_business_id: business.id }),
+      supabase.from("balance_transactions").select("*").eq("business_id", business.id).order("created_at", { ascending: false }).limit(20),
+    ]);
+    setPlans((p.data ?? []) as Plan[]);
+    setPayments((pay.data ?? []) as Payment[]);
+    setBalance(Number(bal.data ?? 0));
+    setMoves((mv.data ?? []) as BalanceTransaction[]);
+  }, [business.id]);
 
-  // Ödeme onayı (PayTR bildirimi) birkaç saniye sürebilir; gelene kadar yokla.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- paketleri, ödemeleri ve bakiyeyi yükle
+    load();
+  }, [load, business.subscription_ends_at]);
+
+  // Ödeme onayı (PayTR bildirimi) birkaç saniye sürebilir; son ödeme sonuçlanana kadar yokla.
   useEffect(() => {
     if (!waiting) return;
-    if (business.subscription_ends_at !== startEnds.current) {
+    if (lastStatus && lastStatus !== "pending") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- ödeme sonuçlandı, yoklamayı bitir
       setWaiting(false);
       history.replaceState(null, "", "/panel/abonelik");
       return;
@@ -54,27 +73,67 @@ export default function SubscriptionPage() {
     const timer = setInterval(() => {
       tries += 1;
       refresh();
+      load();
       if (tries >= 20) {
         clearInterval(timer);
         setWaiting(false);
       }
     }, 3000);
     return () => clearInterval(timer);
-  }, [waiting, business.subscription_ends_at, refresh]);
+  }, [waiting, lastStatus, refresh, load]);
 
-  async function buy(planId: string) {
-    setBusyPlan(planId);
+  function checkConsent() {
+    if (accepted) return true;
+    setConsentError(true);
+    consentRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    return false;
+  }
+
+  async function startPayment(body: { planId: string } | { topup: number }, key: string) {
+    setBusyPlan(key);
     setError("");
+    setNotice("");
     const res = await fetch("/api/paytr/token", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ planId }),
+      body: JSON.stringify(body),
     });
     const json = await res.json();
     setBusyPlan(null);
     if (!res.ok) return setError(json.error ?? "Ödeme başlatılamadı.");
     setToken(json.token);
   }
+
+  async function buy(plan: Plan) {
+    if (!checkConsent()) return;
+    if (balance === null || balance < Number(plan.price)) return startPayment({ planId: plan.id }, plan.id);
+    if (!confirm(`${plan.name} paketi (30 gün) bakiyenizden ${formatPrice(plan.price)} düşülerek alınsın mı?`)) return;
+    setBusyPlan(plan.id);
+    setError("");
+    setNotice("");
+    const { error } = await createClient().rpc("buy_plan_with_balance", { p_plan_id: plan.id });
+    setBusyPlan(null);
+    if (error) return setError(error.message);
+    setNotice(`${plan.name} paketi bakiyenizden alındı.`);
+    await refresh();
+    load();
+  }
+
+  function loadBalance() {
+    if (!checkConsent()) return;
+    const amount = Number(topup);
+    if (!Number.isInteger(amount) || amount < 50 || amount > 10000) {
+      return setError("Yükleme tutarı 50 ile 10.000 TL arasında, tam sayı olmalı.");
+    }
+    startPayment({ topup: amount }, "topup");
+  }
+
+  const moveLabel = (m: BalanceTransaction) =>
+    m.kind === "topup"
+      ? "Bakiye yükleme"
+      : m.kind === "plan"
+        ? `${plans?.find((p) => p.id === m.plan_id)?.name ?? m.plan_id} paketi`
+        : m.note || "Düzeltme";
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -86,9 +145,10 @@ export default function SubscriptionPage() {
           <Loader2 className="size-5 animate-spin" /> Ödemeniz alındı, onay bekleniyor. Bu birkaç saniye sürebilir…
         </div>
       )}
-      {result === "basarili" && !waiting && subscribed && (
+      {result === "basarili" && !waiting && lastPayment?.status === "paid" && (
         <div className="mt-6 flex items-center gap-3 rounded-2xl bg-emerald-400/10 p-4 text-sm text-emerald-200 ring-1 ring-emerald-400/20">
-          <CheckCircle2 className="size-5" /> Teşekkürler! Aboneliğiniz aktif. Sayfanız yayında ve randevu alabilirsiniz.
+          <CheckCircle2 className="size-5" />
+          {lastPayment.plan_id ? "Teşekkürler! Aboneliğiniz aktif. Sayfanız yayında ve randevu alabilirsiniz." : "Teşekkürler! Bakiyeniz yüklendi."}
         </div>
       )}
       {result === "hata" && (
@@ -96,45 +156,115 @@ export default function SubscriptionPage() {
           Ödeme tamamlanamadı. Kartınızdan çekim yapılmadı; tekrar deneyebilirsiniz.
         </p>
       )}
+      {notice && (
+        <div className="mt-6 flex items-center gap-3 rounded-2xl bg-emerald-400/10 p-4 text-sm text-emerald-200 ring-1 ring-emerald-400/20">
+          <CheckCircle2 className="size-5" /> {notice}
+        </div>
+      )}
       {error && <p className="mt-6 rounded-2xl bg-rose-500/10 p-4 text-sm text-rose-300 ring-1 ring-rose-400/20">{error}</p>}
 
-      <div className="bezel mt-6">
-        <div className="bezel-core flex flex-wrap items-center justify-between gap-4 p-5 md:p-6">
-          <div>
+      <div className="mt-6 grid gap-4 md:grid-cols-2">
+        <div className="bezel">
+          <div className="bezel-core flex h-full flex-col gap-3 p-5 md:p-6">
             <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-ink-3">Mevcut durum</p>
             {trial ? (
-              <p className="mt-1 text-lg font-semibold">
+              <p className="text-lg font-semibold">
                 Ücretsiz deneme (Pro) ·{" "}
                 <span className="font-normal text-ink-2">{formatDate(business.subscription_ends_at!, { weekday: undefined, year: "numeric" })} tarihine kadar</span>
               </p>
             ) : subscribed ? (
-              <p className="mt-1 text-lg font-semibold">
+              <p className="text-lg font-semibold">
                 {currentPlan?.name ?? "Paket"} paketi ·{" "}
                 <span className="font-normal text-ink-2">{formatDate(business.subscription_ends_at!, { weekday: undefined, year: "numeric" })} tarihine kadar</span>
               </p>
             ) : (
-              <p className="mt-1 text-lg font-semibold text-amber-300">Aktif paketiniz yok</p>
+              <p className="text-lg font-semibold text-amber-300">Aktif paketiniz yok</p>
+            )}
+            {trial && (
+              <p className="text-sm text-ink-3">
+                Deneme bitince sayfanız yayından kalkar. Şimdi paket seçerseniz paketiniz hemen başlar, kalan deneme günleri de üstüne eklenir.
+              </p>
+            )}
+            {!subscribed && (
+              <p className="text-sm text-ink-3">
+                Paket seçene kadar sayfanız yayında görünmez ve randevu alınamaz. Ayarlar’dan bilgilerinizi şimdiden doldurabilirsiniz.
+              </p>
             )}
           </div>
-          {trial && (
-            <p className="max-w-sm text-sm text-ink-3">
-              Deneme bitince sayfanız yayından kalkar. Şimdi paket seçerseniz paketiniz hemen başlar, kalan deneme günleri de üstüne eklenir.
+        </div>
+
+        <div className="bezel">
+          <div className="bezel-core flex h-full flex-col gap-3 p-5 md:p-6">
+            <p className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.2em] text-ink-3">
+              <Wallet className="size-3.5" /> Bakiye
             </p>
-          )}
-          {!subscribed && (
-            <p className="max-w-sm text-sm text-ink-3">
-              Paket seçene kadar sayfanız yayında görünmez ve randevu alınamaz. Ayarlar’dan bilgilerinizi şimdiden doldurabilirsiniz.
+            <p className="text-3xl font-semibold tabular-nums tracking-tight">{balance === null ? "…" : formatPrice(balance)}</p>
+            <p className="text-sm text-ink-3">
+              Bakiye yükleyip paketlerinizi bakiyeden alabilirsiniz. Bakiye yalnızca paket almak için kullanılır; nakit olarak çekilemez.
             </p>
-          )}
+            <div className="mt-auto flex flex-wrap items-center gap-2">
+              {TOPUP_PRESETS.map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setTopup(String(v))}
+                  className={`rounded-full px-3 py-1.5 text-xs font-medium ring-1 transition ${topup === String(v) ? "bg-brand-400/15 text-brand-200 ring-brand-400/40" : "text-ink-2 ring-line hover:bg-white/5"}`}
+                >
+                  {formatPrice(v)}
+                </button>
+              ))}
+              <input
+                type="number"
+                min={50}
+                max={10000}
+                step={1}
+                inputMode="numeric"
+                aria-label="Yüklenecek tutar (TL)"
+                className="input w-28 py-1.5"
+                value={topup}
+                onChange={(e) => setTopup(e.target.value)}
+              />
+              <button type="button" disabled={busyPlan !== null} onClick={loadBalance} className="btn btn-secondary py-2">
+                {busyPlan === "topup" && <Loader2 className="size-4 animate-spin" />} Bakiye yükle
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="mt-8 grid gap-4 md:grid-cols-3">
+      <label
+        ref={consentRef}
+        className={`mt-6 flex cursor-pointer items-start gap-3 rounded-2xl p-4 text-sm text-ink-2 ring-1 transition ${consentError && !accepted ? "bg-rose-500/10 ring-rose-400/40" : "ring-line"}`}
+      >
+        <input
+          type="checkbox"
+          checked={accepted}
+          onChange={(e) => {
+            setAccepted(e.target.checked);
+            setConsentError(false);
+          }}
+          className="mt-0.5 size-4 shrink-0 accent-brand-400"
+        />
+        <span>
+          <Link href="/yasal/mesafeli-satis" target="_blank" className="text-brand-300 underline-offset-2 hover:underline">
+            Ön bilgilendirme formunu ve mesafeli satış sözleşmesini
+          </Link>{" "}
+          okudum, onaylıyorum.{" "}
+          <Link href="/yasal/iptal-iade" target="_blank" className="text-brand-300 underline-offset-2 hover:underline">
+            İptal ve iade koşullarına
+          </Link>{" "}
+          göre ödeme sonrasında nakit iade yapılmadığını ve bakiyenin geri çekilemediğini biliyorum.
+          {consentError && !accepted && <span className="mt-1 block text-rose-300">Ödeme için bu kutuyu işaretleyin.</span>}
+        </span>
+      </label>
+
+      <div className="mt-6 grid gap-4 md:grid-cols-3">
         {plans === null &&
           Array.from({ length: 3 }, (_, i) => <div key={i} className="h-96 animate-pulse rounded-[2rem] bg-surface-2" />)}
         {plans?.map((plan) => {
           const isCurrent = subscribed && !trial && plan.id === business.plan_id;
           const popular = plan.id === POPULAR;
+          const fromBalance = balance !== null && balance >= Number(plan.price);
           return (
             <div key={plan.id} className={`bezel ${popular ? "ring-brand-400/40" : ""}`}>
               <div className={`bezel-core relative flex h-full flex-col overflow-hidden p-6 ${popular ? "bg-gradient-to-b from-brand-900/40 to-surface" : ""}`}>
@@ -160,12 +290,13 @@ export default function SubscriptionPage() {
                 </ul>
                 <button
                   disabled={busyPlan !== null}
-                  onClick={() => buy(plan.id)}
+                  onClick={() => buy(plan)}
                   className={`btn relative mt-8 w-full py-3 ${popular ? "btn-primary" : "btn-secondary"}`}
                 >
                   {busyPlan === plan.id && <Loader2 className="size-4 animate-spin" />}
                   {isCurrent ? "30 gün uzat" : subscribed && !trial ? "Bu pakete geç" : "Seç ve öde"}
                 </button>
+                <p className="relative mt-2 text-center text-xs text-ink-3">{fromBalance ? "Bakiyenizden ödenir" : "Kartla ödenir"}</p>
               </div>
             </div>
           );
@@ -176,6 +307,24 @@ export default function SubscriptionPage() {
         Küçük pakete geçerseniz fazla personel pasif olur.
       </p>
 
+      {moves.length > 0 && (
+        <section className="mt-10">
+          <h2 className="font-semibold">Bakiye hareketleri</h2>
+          <ul className="card mt-3 divide-y divide-line">
+            {moves.map((m) => (
+              <li key={m.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
+                <span className="text-ink-2">{formatDate(m.created_at, { weekday: undefined, year: "numeric" })}</span>
+                <span>{moveLabel(m)}</span>
+                <span className={`tabular-nums ${m.amount > 0 ? "text-emerald-300" : "text-ink-2"}`}>
+                  {m.amount > 0 ? "+" : "−"}
+                  {formatPrice(Math.abs(m.amount))}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {payments.length > 0 && (
         <section className="mt-10">
           <h2 className="font-semibold">Ödeme geçmişi</h2>
@@ -183,7 +332,7 @@ export default function SubscriptionPage() {
             {payments.map((p) => (
               <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
                 <span className="text-ink-2">{formatDate(p.paid_at ?? p.created_at, { weekday: undefined, year: "numeric" })}</span>
-                <span>{plans?.find((x) => x.id === p.plan_id)?.name ?? p.plan_id}</span>
+                <span>{p.plan_id ? (plans?.find((x) => x.id === p.plan_id)?.name ?? p.plan_id) : "Bakiye yükleme"}</span>
                 <span className="tabular-nums">{formatPrice(p.amount)}</span>
                 <span
                   className={`chip ring-1 ${

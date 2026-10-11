@@ -116,6 +116,28 @@ svg.lucide {
   .text-gradient {
     @apply bg-gradient-to-br from-brand-200 via-brand-400 to-gold bg-clip-text text-transparent;
   }
+  /* Yasal metinler ve iletişim sayfası */
+  .legal {
+    @apply space-y-4 text-[15px] leading-relaxed text-ink-2;
+  }
+  .legal h2 {
+    @apply pt-6 text-lg font-semibold tracking-tight text-ink;
+  }
+  .legal h3 {
+    @apply pt-2 font-semibold text-ink;
+  }
+  .legal ul {
+    @apply list-disc space-y-1.5 pl-5;
+  }
+  .legal ol {
+    @apply list-decimal space-y-1.5 pl-5;
+  }
+  .legal a {
+    @apply text-brand-300 underline-offset-4 hover:underline;
+  }
+  .legal strong {
+    @apply font-semibold text-ink;
+  }
 }
 
 /* Belirme animasyonları (bkz. components/reveal.tsx). JavaScript gerekmez:

@@ -275,6 +275,10 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
           <button disabled={busy} className="btn btn-primary mt-4 w-full py-3 text-base">
             {busy && <Loader2 className="size-4 animate-spin" />} Randevuyu Onayla
           </button>
+          <p className="mt-3 text-center text-xs text-ink-3">
+            Randevu bilgileriniz işletmeye iletilir; kişisel verileriniz{" "}
+            <Link href="/yasal/gizlilik" className="underline">Gizlilik ve KVKK metnine</Link> göre işlenir.
+          </p>
           {!loggedIn && (
             <p className="mt-3 text-center text-xs text-ink-3">
               Randevularınızı takip etmek için <Link href="/giris" className="underline">giriş yapabilirsiniz</Link>.

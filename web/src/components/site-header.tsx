@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowUpRight, CalendarCheck } from "lucide-react";
+import { ArrowUpRight, CalendarCheck, ShieldCheck } from "lucide-react";
 import { InboxBell } from "@/components/inbox-bell";
 import { createClient } from "@/lib/supabase/client";
+import { COMPANY, LEGAL_DOCS } from "@/lib/company";
 import { SITE_NAME } from "@/lib/constants";
 
 export function Logo({ size = "md" }: { size?: "md" | "lg" }) {
@@ -131,12 +132,32 @@ export function SiteFooter() {
   return (
     <footer className="relative mt-auto overflow-hidden border-t border-line">
       <div className="pointer-events-none absolute -bottom-40 left-1/2 h-80 w-[60rem] -translate-x-1/2 rounded-full bg-brand-500/10 blur-3xl" />
-      <div className="relative mx-auto grid max-w-6xl gap-12 px-4 py-16 md:grid-cols-[1.5fr_1fr_1fr_1fr]">
+      <div className="relative mx-auto grid max-w-6xl gap-12 px-4 py-16 sm:grid-cols-2 md:grid-cols-[1.5fr_1fr_1fr_1fr_1fr]">
         <div>
           <Logo />
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-ink-3">
             Berberden halı sahaya, esnafın randevu defteri. Müşteri bağlantıdan randevu alır, siz işinize bakarsınız.
           </p>
+          <dl className="mt-6 space-y-2 border-t border-line pt-6 text-sm">
+            <div className="flex flex-wrap gap-x-2">
+              <dt className="font-medium text-ink">Adres:</dt>
+              <dd className="text-ink-3">{COMPANY.address}</dd>
+            </div>
+            <div className="flex flex-wrap gap-x-2">
+              <dt className="font-medium text-ink">Destek hattı:</dt>
+              <dd>
+                <a href={`tel:+90${COMPANY.phone.replace(/\D/g, "").replace(/^0/, "")}`} className="font-mono text-brand-300 hover:text-brand-200">
+                  {COMPANY.phone}
+                </a>
+              </dd>
+            </div>
+            <div className="flex flex-wrap gap-x-2">
+              <dt className="font-medium text-ink">E-posta:</dt>
+              <dd>
+                <a href={`mailto:${COMPANY.email}`} className="break-all text-brand-300 hover:text-brand-200">{COMPANY.email}</a>
+              </dd>
+            </div>
+          </dl>
         </div>
         <FooterCol
           title="Müşteri"
@@ -162,12 +183,25 @@ export function SiteFooter() {
             ["Şifremi unuttum", "/sifremi-unuttum"],
           ]}
         />
+        <FooterCol title="Gizlilik & Güven" links={LEGAL_DOCS.map((d): [string, string] => [d.label, d.href])} />
       </div>
       <div className="relative mx-auto max-w-6xl px-4 pb-8">
         <p className="select-none bg-gradient-to-b from-white/[0.07] to-transparent bg-clip-text text-[18vw] font-bold leading-none tracking-tighter text-transparent md:text-[11rem]">
           {SITE_NAME}
         </p>
-        <p className="mt-4 text-xs text-ink-3">© {SITE_NAME} · Esnaf için online randevu</p>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-4 text-xs text-ink-3">
+          <p>
+            © 2026 {SITE_NAME} · {COMPANY.name}. Tüm hakları saklıdır.
+          </p>
+          <p className="flex flex-wrap items-center gap-2">
+            <ShieldCheck className="size-4 text-brand-300" /> PayTR ile güvenli ödeme
+            {["VISA", "Mastercard", "troy"].map((card) => (
+              <span key={card} className="rounded-md px-2 py-0.5 font-semibold tracking-wide text-ink-2 ring-1 ring-line">
+                {card}
+              </span>
+            ))}
+          </p>
+        </div>
       </div>
     </footer>
   );
