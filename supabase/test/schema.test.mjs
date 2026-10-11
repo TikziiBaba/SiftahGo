@@ -68,6 +68,7 @@ ok((await db.query(`select trial_ends_at from businesses where id = $1`, [biz]))
 await db.query(`update businesses set plan_id = null, subscription_ends_at = null, trial_ends_at = null where id = $1`, [biz]);
 
 await expectError(() => as(C, `insert into businesses (owner_id, slug, name) values ($1, 'panel', 'X')`, [C]), /check constraint/, 'ayrılmış adres (panel) reddedildi');
+await expectError(() => as(C, `insert into businesses (owner_id, slug, name) values ($1, 'yasal', 'X')`, [C]), /check constraint/, 'ayrılmış adres (yasal) reddedildi');
 await expectError(() => as(C, `insert into businesses (owner_id, slug, name) values ($1, 'Kötü Adres', 'X')`, [C]), /check constraint/, 'geçersiz adres reddedildi');
 const svc30 = (await as(A, `insert into services (business_id, name, duration_minutes, price) values ($1, 'Saç Kesimi', 30, 300) returning id`, [biz])).rows[0].id;
 const svc60 = (await as(A, `insert into services (business_id, name, duration_minutes, price) values ($1, 'Saç + Sakal', 60, 450) returning id`, [biz])).rows[0].id;
@@ -555,6 +556,40 @@ await as(ADM, `update plans set price = 999, staff_limit = 10 where id = 'pro'`)
 await as(ADM, `insert into plans (id, name, price, staff_limit, sort_order) values ('kurumsal', 'Kurumsal', 1999, null, 4)`);
 ok((await as(null, `select price::int p from plans where id = 'pro'`)).rows[0].p === 999 && (await as(null, `select id from plans`)).rows.length === 4, 'yönetici paket fiyatını değiştirdi ve yeni paket ekledi');
 await expectError(() => as(ADM, `update plans set price = 0 where id = 'pro'`), /check constraint/, 'sıfır fiyat reddedildi');
+
+// bakiye: PayTR ile yüklenir, paket almak için kullanılır, nakit olarak çekilemez
+const balance = async (uid) => Number((await as(uid, `select business_balance($1) b`, [biz])).rows[0].b);
+await expectError(() => as(A, `select * from create_topup(30)`), /50 ile 10.000/, 'çok küçük yükleme reddedildi');
+await expectError(() => as(A, `select * from create_topup(100.5)`), /tam sayı/, 'kuruşlu yükleme reddedildi');
+await expectError(() => as(C, `select * from create_topup(100)`), /Önce işletmenizi/, 'işletmesi olmayan bakiye yükleyemez');
+const top = (await as(A, `select * from create_topup(500)`)).rows[0];
+ok((await db.query(`select plan_id from payments where merchant_oid = $1`, [top.merchant_oid])).rows[0].plan_id === null, 'bakiye yüklemesi paketsiz ödeme kaydı');
+const beforeTopup = (await db.query(`select plan_id, subscription_ends_at from businesses where id = $1`, [biz])).rows[0];
+await expectError(() => db.query(`select activate_subscription($1, 400)`, [top.merchant_oid]), /eksik/, 'eksik tutarla yükleme reddedildi');
+await db.query(`select activate_subscription($1, 500)`, [top.merchant_oid]);
+await db.query(`select activate_subscription($1, 500)`, [top.merchant_oid]);
+ok(await balance(A) === 500, 'ödeme bildirimiyle bakiyeye 500 TL eklendi (tekrar gelen bildirim eklemez)');
+const afterTopup = (await db.query(`select plan_id, subscription_ends_at from businesses where id = $1`, [biz])).rows[0];
+ok(afterTopup.plan_id === beforeTopup.plan_id && afterTopup.subscription_ends_at.getTime() === beforeTopup.subscription_ends_at.getTime(), 'bakiye yüklemesi aboneliği değiştirmez');
+ok(await balance(C) === 0 && (await as(C, `select id from balance_transactions`)).rows.length === 0, 'başkası bakiyeyi ve hareketleri göremez');
+await expectError(() => as(A, `insert into balance_transactions (business_id, amount, kind) values ($1, 1000, 'admin')`, [biz]), /row-level security/, 'işletme sahibi bakiye ekleyemez');
+ok((await as(A, `update balance_transactions set amount = 9999 returning id`)).rows.length === 0
+  && (await as(A, `delete from balance_transactions returning id`)).rows.length === 0, 'işletme sahibi bakiye hareketini değiştiremez veya silemez');
+
+await expectError(() => as(A, `select buy_plan_with_balance('pro')`), /yetersiz/, 'bakiyenin yetmediği paket alınamaz');
+await as(A, `select buy_plan_with_balance('baslangic')`);
+const bought = (await db.query(`select plan_id, subscription_ends_at from businesses where id = $1`, [biz])).rows[0];
+const boughtDays = (bought.subscription_ends_at - Date.now()) / 864e5;
+ok(bought.plan_id === 'baslangic' && boughtDays > 29.9 && boughtDays < 30.1 && await balance(A) === 251, `bakiyeden Başlangıç paketi alındı: ${boughtDays.toFixed(2)} gün, bakiye ${await balance(A)} TL`);
+
+await expectError(() => as(A, `select admin_adjust_balance($1, 100, 'iade')`, [biz]), /Yetkiniz yok/, 'işletme sahibi bakiye düzeltemez');
+await expectError(() => as(ADM, `select admin_adjust_balance($1, -300, 'düzeltme')`, [biz]), /eksiye/, 'bakiye eksiye düşürülemez');
+await expectError(() => as(ADM, `select admin_adjust_balance($1, 100, '  ')`, [biz]), /Açıklama/, 'açıklamasız düzeltme reddedildi');
+await as(ADM, `select admin_adjust_balance($1, 49, 'Hizmet kesintisi telafisi')`, [biz]);
+const moves = (await as(A, `select kind, amount::int a from balance_transactions`)).rows;
+ok(await balance(ADM) === 300 && await balance(A) === 300 && moves.length === 3
+  && ['topup:500', 'plan:-249', 'admin:49'].every((m) => moves.some((x) => `${x.kind}:${x.a}` === m)),
+  'yönetici bakiye ekledi; hareketler: yükleme, paket, telafi');
 
 console.log(failures ? `\n${failures} TEST BAŞARISIZ` : '\nTÜM TESTLER GEÇTİ');
 process.exit(failures ? 1 : 0);

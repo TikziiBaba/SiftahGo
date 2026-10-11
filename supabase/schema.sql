@@ -14,6 +14,7 @@ drop table if exists
   public.inbox,
   public.push_tokens,
   public.notifications,
+  public.balance_transactions,
   public.payments,
   public.reviews,
   public.staff_services,
@@ -50,7 +51,7 @@ begin
         'format_when', 'inbox_insert', 'register_push_token', 'unregister_push_token',
         'mark_inbox_read', 'claim_push', 'finish_push', 'drop_push_tokens',
         'customer_history', 'appointments_before_write', 'queue_review_requests', 'review_after_insert',
-        'reply_review'
+        'reply_review', 'create_topup', 'business_balance', 'buy_plan_with_balance', 'admin_adjust_balance'
       )
   loop
     execute 'drop function if exists ' || r.sig || ' cascade';
@@ -110,7 +111,7 @@ create table public.businesses (
                      -- Web sitesindeki sayfa adlarıyla çakışmasın.
                      check (slug not in (
                        'panel', 'kesfet', 'giris', 'kayit', 'hesabim', 'api', 'auth', 'admin',
-                       'sifremi-unuttum', 'sifre-yenile'
+                       'sifremi-unuttum', 'sifre-yenile', 'yasal', 'iletisim'
                      )),
   name               text not null check (length(trim(name)) > 0),
   category           text not null default 'diger',
@@ -260,11 +261,11 @@ create table public.reviews (
 );
 create index reviews_business_idx on public.reviews (business_id, created_at desc);
 
--- PayTR ödemeleri
+-- PayTR ödemeleri. plan_id boşsa bakiye yüklemesidir.
 create table public.payments (
   id           uuid primary key default gen_random_uuid(),
   business_id  uuid not null references public.businesses (id) on delete cascade,
-  plan_id      text not null references public.plans (id),
+  plan_id      text references public.plans (id),
   merchant_oid text not null unique,
   amount       numeric(10, 2) not null,
   status       text not null default 'pending' check (status in ('pending', 'paid', 'failed')),
@@ -272,6 +273,20 @@ create table public.payments (
   paid_at      timestamptz
 );
 create index payments_business_idx on public.payments (business_id, created_at desc);
+
+-- Bakiye hareketleri: + yükleme ve yönetici eklemesi, − paket alımı ve yönetici düşmesi.
+-- Bakiye bunların toplamıdır (business_balance); paket almak için kullanılır, nakit olarak geri çekilemez.
+create table public.balance_transactions (
+  id          uuid primary key default gen_random_uuid(),
+  business_id uuid not null references public.businesses (id) on delete cascade,
+  amount      numeric(10, 2) not null check (amount <> 0),
+  kind        text not null check (kind in ('topup', 'plan', 'admin')),
+  plan_id     text references public.plans (id),
+  payment_id  uuid unique references public.payments (id) on delete set null,
+  note        text not null default '' check (length(note) <= 200),
+  created_at  timestamptz not null default now()
+);
+create index balance_transactions_business_idx on public.balance_transactions (business_id, created_at desc);
 
 -- Gönderilecek e-postalar. Tetikleyiciler ve queue_due_reminders ekler,
 -- sunucu (/api/notifications) claim_notifications ile alıp gönderir.
@@ -878,8 +893,62 @@ begin
 end;
 $$;
 
--- PayTR "başarılı" bildirimi: sadece sunucu (service_role) çağırır.
--- Aynı bildirim tekrar gelirse bir şey yapmaz.
+-- İşletme sahibi bakiye yükleme ödemesi başlatır (tam TL, 50 - 10.000).
+create function public.create_topup(p_amount numeric)
+returns table (merchant_oid text, amount numeric)
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  v_business uuid;
+  v_oid text;
+begin
+  select id into v_business from public.businesses where owner_id = auth.uid();
+  if v_business is null then raise exception 'Önce işletmenizi oluşturun.'; end if;
+  if p_amount is null or p_amount <> trunc(p_amount) or p_amount not between 50 and 10000 then
+    raise exception 'Yükleme tutarı 50 ile 10.000 TL arasında, tam sayı olmalı.';
+  end if;
+
+  v_oid := 'SG' || to_char(clock_timestamp(), 'YYMMDDHH24MISS') || substr(md5(gen_random_uuid()::text), 1, 10);
+  insert into public.payments (business_id, merchant_oid, amount) values (v_business, v_oid, p_amount);
+
+  return query select v_oid, p_amount;
+end;
+$$;
+
+-- İşletmenin bakiyesi. Çağıranın yetkisiyle çalışır: sahibi ve yönetici okur, başkası 0 görür.
+create function public.business_balance(p_business_id uuid)
+returns numeric
+language sql stable set search_path = ''
+as $$
+  select coalesce(sum(amount), 0) from public.balance_transactions where business_id = p_business_id;
+$$;
+
+-- İşletme sahibi bakiyesinden 30 günlük paket alır.
+create function public.buy_plan_with_balance(p_plan_id text)
+returns void
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  v_business uuid;
+  v_plan public.plans;
+begin
+  -- Aynı anda iki alım bakiyeyi eksiye düşürmesin diye işletme satırı kilitlenir.
+  select id into v_business from public.businesses where owner_id = auth.uid() for update;
+  if v_business is null then raise exception 'Önce işletmenizi oluşturun.'; end if;
+  select * into v_plan from public.plans where id = p_plan_id;
+  if not found then raise exception 'Paket bulunamadı.'; end if;
+  if public.business_balance(v_business) < v_plan.price then
+    raise exception 'Bakiyeniz yetersiz.';
+  end if;
+
+  insert into public.balance_transactions (business_id, amount, kind, plan_id)
+  values (v_business, -v_plan.price, 'plan', v_plan.id);
+  perform public.apply_subscription(v_business, v_plan.id, 30);
+end;
+$$;
+
+-- PayTR "başarılı" bildirimi: sadece sunucu (service_role) çağırır. Paket ödemesi paketi
+-- başlatır, bakiye yüklemesi bakiyeye eklenir. Aynı bildirim tekrar gelirse bir şey yapmaz.
 create function public.activate_subscription(p_merchant_oid text, p_total_amount numeric)
 returns void
 language plpgsql volatile security definer set search_path = ''
@@ -895,7 +964,12 @@ begin
   end if;
 
   update public.payments set status = 'paid', paid_at = now() where id = pay.id;
-  perform public.apply_subscription(pay.business_id, pay.plan_id, 30);
+  if pay.plan_id is null then
+    insert into public.balance_transactions (business_id, amount, kind, payment_id)
+    values (pay.business_id, pay.amount, 'topup', pay.id);
+  else
+    perform public.apply_subscription(pay.business_id, pay.plan_id, 30);
+  end if;
 end;
 $$;
 
@@ -1382,6 +1456,28 @@ begin
 end;
 $$;
 
+-- Bakiye ekler (iade, telafi) veya düşer (düzeltme). Bakiye eksiye düşemez.
+create function public.admin_adjust_balance(p_business_id uuid, p_amount numeric, p_note text)
+returns void
+language plpgsql volatile security definer set search_path = ''
+as $$
+begin
+  if not public.is_admin() then raise exception 'Yetkiniz yok.'; end if;
+  if p_amount is null or round(p_amount, 2) = 0 or abs(p_amount) > 100000 then
+    raise exception 'Tutar 0 olamaz ve 100.000 TL''yi geçemez.';
+  end if;
+  if coalesce(trim(p_note), '') = '' then raise exception 'Açıklama yazın.'; end if;
+  perform 1 from public.businesses where id = p_business_id for update;
+  if not found then raise exception 'İşletme bulunamadı.'; end if;
+  if public.business_balance(p_business_id) + round(p_amount, 2) < 0 then
+    raise exception 'Bakiye eksiye düşemez.';
+  end if;
+
+  insert into public.balance_transactions (business_id, amount, kind, note)
+  values (p_business_id, round(p_amount, 2), 'admin', left(trim(p_note), 200));
+end;
+$$;
+
 -- İşletmeyi askıya alır / askıdan çıkarır. Askıdaki işletme görünmez ve randevu almaz.
 create function public.admin_set_suspended(p_business_id uuid, p_suspended boolean)
 returns void
@@ -1566,6 +1662,7 @@ alter table public.staff_services enable row level security;
 alter table public.reviews        enable row level security;
 alter table public.plans          enable row level security;
 alter table public.payments       enable row level security;
+alter table public.balance_transactions enable row level security;
 -- Politika yok: sadece sunucu (service_role) ve yukarıdaki fonksiyonlar erişir.
 alter table public.notifications  enable row level security;
 alter table public.push_tokens    enable row level security;
@@ -1633,6 +1730,9 @@ create policy "paket: herkes okur" on public.plans
   for select using (true);
 create policy "ödeme: işletme kendi ödemelerini okur" on public.payments
   for select using (public.is_business_owner(business_id));
+-- Bakiye hareketlerini sadece fonksiyonlar yazar.
+create policy "bakiye: işletme kendi hareketlerini okur" on public.balance_transactions
+  for select using (public.is_business_owner(business_id));
 
 -- working_hours
 create policy "çalışma saati: herkes okur" on public.working_hours
@@ -1665,6 +1765,7 @@ create policy "admin: hizmetleri okur" on public.services for select using (publ
 create policy "admin: personeli okur" on public.staff for select using (public.is_admin());
 create policy "admin: randevuları okur" on public.appointments for select using (public.is_admin());
 create policy "admin: ödemeleri okur" on public.payments for select using (public.is_admin());
+create policy "admin: bakiye hareketlerini okur" on public.balance_transactions for select using (public.is_admin());
 create policy "admin: bildirimleri okur" on public.notifications for select using (public.is_admin());
 create policy "admin: paket ekler" on public.plans for insert with check (public.is_admin());
 create policy "admin: paket günceller" on public.plans
