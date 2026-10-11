@@ -45,6 +45,17 @@ gerçek kullanıcılar için Resend SMTP kullanın:
    veya mobil uygulamadan kayıttan sonra açılsa da çalışır.
 3. **Authentication > Rate Limits**: saatlik e-posta sınırını ihtiyaca göre artırın.
 
+#### Google ile giriş
+
+1. [Google Cloud Console](https://console.cloud.google.com/) > APIs & Services > **OAuth consent screen**: uygulama adı SiftahGo,
+   destek e-postası; kapsamlar `email`, `profile`, `openid`. Yayın durumunu *In production* yapın.
+2. **Credentials > Create credentials > OAuth client ID** > *Web application*. *Authorized redirect URIs*:
+   `https://SUPABASE-PROJE.supabase.co/auth/v1/callback`
+3. Supabase > **Authentication > Sign In / Providers > Google**: açın, Client ID ve Client Secret'ı yapıştırın.
+4. Supabase > **Authentication > URL Configuration > Redirect URLs**: mobil uygulama için `siftahgo://auth/callback` ekleyin.
+
+Mobil uygulama Google ekranını tarayıcıda açar; Android için ayrıca istemci kimliği veya SHA-1 gerekmez.
+
 ### 2. Web
 
 ```bash
@@ -155,5 +166,9 @@ tamamlanan randevuya puan ve yorum, şifremi unuttum.
 - Hizmetler, personel (hangi personelin hangi hizmeti verdiği), çalışma saatleri, izin/tatil günleri
 - Randevu kuralları (saat aralığı, en erken/en geç), otomatik onay, logo/kapak/galeri (R2), QR kod
 
-**İşletme (mobil):** günlük randevular, durum değiştirme, müşteriyi arama veya WhatsApp'tan hatırlatma.
-Diğer ayarlar web panelinden.
+**İşletme (mobil):** web panelindeki işlerin tamamı uygulamada da var: işletme kurulumu, takvim (hafta görünümü,
+onay bekleyenler, durum yönetimi, elle randevu ekleme, canlı güncelleme), müşteri defteri, raporlar, hizmetler, personel,
+çalışma saatleri ve izinler, işletme bilgileri ve randevu kuralları, görseller, QR kod ve bağlantı paylaşımı.
+Ödeme (PayTR) web sitesinde yapılır; uygulama abonelik sayfasını tarayıcıda açar. Görseller sitedeki `/api/upload`
+adresine yüklenir (uygulama oturumu `Authorization: Bearer` başlığıyla gönderir), bu yüzden mobilde
+`EXPO_PUBLIC_WEB_URL` canlı siteyi göstermelidir.

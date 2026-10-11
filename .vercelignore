@@ -1,0 +1,9 @@
+# Vercel yalnızca web uygulamasını derler (proje ayarı: Root Directory = web).
+# Mobil uygulama, veritabanı dosyaları ve gizli dosyalar yüklenmez.
+/*
+!/web
+/web/node_modules
+/web/.next
+/web/.vercel
+/web/.env*
+!/web/.env.example
