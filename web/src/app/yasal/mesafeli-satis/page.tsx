@@ -10,7 +10,7 @@ export default function DistanceSalesPage() {
   return (
     <LegalPage href="/yasal/mesafeli-satis" title="Ön bilgilendirme formu ve mesafeli satış sözleşmesi">
       <p>
-        Bu metin, işletmelerin {SITE_NAME} paketlerini ve bakiye yüklemelerini {SITE_DOMAIN} üzerinden satın almasına uygulanır. Ödeme ekranındaki
+        Bu metin, işletmelerin {SITE_NAME} paketlerini {SITE_DOMAIN} üzerinden satın almasına uygulanır. Ödeme ekranındaki
         onay kutusu işaretlenip ödeme tamamlandığında sözleşme elektronik ortamda kurulmuş olur.
       </p>
 
@@ -32,10 +32,6 @@ export default function DistanceSalesPage() {
           müşteri defteri, raporlar, sayfa özelleştirme vb.) 30 gün boyunca kullanılması. Paket içerikleri ve fiyatları{" "}
           <Link href="/#fiyatlar">Fiyatlar</Link> bölümünde ve panelin Abonelik sayfasında yazılıdır.
         </li>
-        <li>
-          <strong>Bakiye:</strong> İşletme hesabına yüklenen ve yalnızca {SITE_NAME} paketlerini almak için kullanılan ön ödeme. Tek seferde en az 50 TL,
-          en fazla 10.000 TL yüklenebilir.
-        </li>
       </ul>
       <h3>4. Fiyat ve ödeme</h3>
       <ul>
@@ -44,16 +40,15 @@ export default function DistanceSalesPage() {
           Ödeme banka veya kredi kartıyla, tek çekim olarak, PayTR Ödeme ve Elektronik Para Kuruluşu A.Ş. altyapısıyla alınır. Kart bilgileri
           {" "}{SITE_NAME}’ya ulaşmaz ve saklanmaz.
         </li>
-        <li>Bakiyeden yapılan paket alımlarında karttan yeni bir çekim yapılmaz; paket bedeli bakiyeden düşülür.</li>
       </ul>
       <h3>5. İfa</h3>
       <p>
-        Hizmet, ödemenin onaylanmasıyla <strong>anında</strong> başlar: paket hesaba tanımlanır veya bakiye hesaba eklenir. Fiziksel teslimat yoktur.
+        Hizmet, ödemenin onaylanmasıyla <strong>anında</strong> başlar: paket hesaba tanımlanır. Fiziksel teslimat yoktur.
         Paket süresi, varsa kalan sürenin üzerine 30 gün olarak eklenir. Otomatik yenileme yapılmaz.
       </p>
       <h3>6. Cayma hakkı</h3>
       <p>
-        Paket ve bakiye, işletmelerin ticari veya mesleki faaliyetleri için satın alınır; bu nedenle Alıcı 6502 sayılı Tüketicinin Korunması Hakkında
+        Paketler, işletmelerin ticari veya mesleki faaliyetleri için satın alınır; bu nedenle Alıcı 6502 sayılı Tüketicinin Korunması Hakkında
         Kanun anlamında tüketici sayılmaz ve cayma hakkı doğmaz. Alıcının tüketici sayıldığı durumlarda da hizmet elektronik ortamda anında ifa
         edildiği ve Alıcının onayıyla ifasına başlandığı için, Mesafeli Sözleşmeler Yönetmeliği’nin 15. maddesinin birinci fıkrasının (ğ) ve (h)
         bentleri uyarınca <strong>cayma hakkı kullanılamaz</strong>. Yeni işletmelere ödeme öncesinde 7 günlük ücretsiz deneme sunulur.
@@ -72,55 +67,41 @@ export default function DistanceSalesPage() {
       </p>
       <h3>Madde 2 · Konu</h3>
       <p>
-        Sözleşmenin konusu, Alıcının {SITE_DOMAIN} üzerinden elektronik ortamda satın aldığı {SITE_NAME} paket aboneliği veya bakiye yüklemesinin
+        Sözleşmenin konusu, Alıcının {SITE_DOMAIN} üzerinden elektronik ortamda satın aldığı {SITE_NAME} paket aboneliğinin
         satışı ve ifasına ilişkin hak ve yükümlülüklerin belirlenmesidir. Hizmetin adı, süresi ve bedeli ödeme ekranında ve Alıcının panelindeki
         ödeme geçmişinde yazılıdır.
       </p>
       <h3>Madde 3 · Bedel ve ödeme</h3>
       <p>
-        Alıcı, ödeme ekranında gösterilen toplam bedeli kartla veya bakiyesinden öder. Ödeme kuruluşunun onay vermediği işlemlerde hizmet başlamaz
+        Alıcı, ödeme ekranında gösterilen toplam bedeli kartla öder. Ödeme kuruluşunun onay vermediği işlemlerde hizmet başlamaz
         ve karttan çekim yapılmaz.
       </p>
       <h3>Madde 4 · İfa</h3>
       <p>
         Satıcı, ödemenin onaylanmasıyla hizmeti derhal sunar. Paket 30 gün süreyle geçerlidir; bu süre içinde Platform’un çalışması için makul özen
-        gösterilir. Satıcıdan kaynaklanan ve 24 saati aşan kesintilerde kesinti süresi pakete eklenir veya karşılığı bakiyeye yüklenir.
+        gösterilir. Satıcıdan kaynaklanan ve 24 saati aşan kesintilerde kesinti süresi pakete eklenir.
       </p>
-      <h3>Madde 5 · Bakiye</h3>
-      <ul>
-        <li>Bakiye yalnızca {SITE_NAME} paketlerini almak için kullanılır; nakit olarak geri çekilemez, başka hesaba devredilemez ve faiz işlemez.</li>
-        <li>Alıcının kendi isteğiyle hesabını kapatması halinde kullanılmamış bakiye iade edilmez.</li>
-        <li>Satıcının Platform’u tamamen kapatması halinde kullanılmamış bakiye, ödemenin yapıldığı karta veya Alıcının bildireceği hesaba iade edilir.</li>
-        <li>Hesabın askıya alınması bakiyeyi ortadan kaldırmaz; askı kalkınca bakiye kullanılabilir.</li>
-      </ul>
-      <h3>Madde 6 · Cayma ve iade</h3>
+      <h3>Madde 5 · Cayma ve iade</h3>
       <p>
         Cayma hakkı, ön bilgilendirme formunun 6. maddesinde açıklanan nedenlerle kullanılamaz. İade koşulları{" "}
         <Link href="/yasal/iptal-iade">İptal ve iade</Link> sayfasında yazılıdır ve bu sözleşmenin parçasıdır.
       </p>
-      <h3>Madde 7 · Alıcının yükümlülükleri</h3>
+      <h3>Madde 6 · Alıcının yükümlülükleri</h3>
       <p>
         Alıcı, ödeme sırasında verdiği bilgilerin doğru olduğunu ve kullandığı kartın kendisine ait olduğunu veya kart sahibinin onayıyla
-        kullandığını kabul eder. Kartın yetkisiz kullanımı nedeniyle bankanın ödemeyi geri alması halinde ilgili paket veya bakiye geri alınır.
+        kullandığını kabul eder. Kartın yetkisiz kullanımı nedeniyle bankanın ödemeyi geri alması halinde ilgili paket geri alınır.
       </p>
-      <h3>Madde 8 · Uyuşmazlıklar</h3>
+      <h3>Madde 7 · Uyuşmazlıklar</h3>
       <p>
         Bu sözleşmeden doğan uyuşmazlıklarda, tüketici sıfatıyla yapılan başvurularda Tüketici Hakem Heyetleri ve Tüketici Mahkemeleri, diğer
         durumlarda Satıcının yerleşim yeri mahkemeleri ve icra daireleri yetkilidir.
       </p>
-      <h3>Madde 9 · Yürürlük</h3>
+      <h3>Madde 8 · Yürürlük</h3>
       <p>
         Alıcı, ödeme ekranında “Ön bilgilendirme formunu ve mesafeli satış sözleşmesini okudum, onaylıyorum” kutusunu işaretleyerek bu metnin tüm
         koşullarını kabul etmiş sayılır. Sözleşme, ödemenin onaylandığı anda yürürlüğe girer. Sözleşmenin güncel hali her zaman bu sayfadadır.
       </p>
 
-      <h2>C. Online ödemeli randevular</h2>
-      <p>
-        İşletmenin randevu sırasında kartla ödeme aldığı durumlarda hizmetin satıcısı <strong>işletmedir</strong>; sözleşme müşteri ile işletme
-        arasında kurulur. {SITE_NAME} bu satışta 6563 sayılı Kanun kapsamında aracı hizmet sağlayıcıdır. İşletmenin bilgileri, hizmetin
-        bedeli ve iptal kuralı ödeme ekranında gösterilir; ödeme PayTR altyapısıyla alınır. İade koşulları{" "}
-        <Link href="/yasal/iptal-iade">İptal ve iade</Link> sayfasındadır.
-      </p>
     </LegalPage>
   );
 }

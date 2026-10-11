@@ -68,11 +68,11 @@ export default function AdminPayments() {
   }, [data, status, source, period, q]);
 
   if (error) return <p className="mx-auto max-w-6xl rounded-2xl bg-rose-500/10 p-4 text-sm text-rose-300">{error}</p>;
-  const planName = (id: string | null) => (id === null ? "Bakiye yükleme" : (data?.plans.find((p) => p.id === id)?.name ?? id));
+  const planName = (id: string) => data?.plans.find((p) => p.id === id)?.name ?? id;
 
   return (
     <div className="mx-auto max-w-6xl">
-      <PageTitle title="Ödemeler" hint="PayTR ödemeleri (paket ve bakiye yükleme) ve yöneticinin tanımladığı paketler">
+      <PageTitle title="Ödemeler" hint="PayTR ödemeleri ve yöneticinin tanımladığı paketler">
         <select className="input w-auto" value={period} onChange={(e) => setPeriod(e.target.value)} aria-label="Dönem">
           {PERIODS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
         </select>

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getPaytrToken, paytrConfigured } from "@/lib/paytr";
 
-// İşletme sahibi bir paket veya bakiye yüklemesi için ödeme başlatır; dönen token ile PayTR iframe'i açılır.
+// İşletme sahibi bir paket için ödeme başlatır; dönen token ile PayTR iframe'i açılır.
 export async function POST(request: Request) {
   if (!paytrConfigured()) {
     return NextResponse.json({ error: "Online ödeme henüz yapılandırılmadı." }, { status: 503 });
@@ -11,13 +11,9 @@ export async function POST(request: Request) {
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) return NextResponse.json({ error: "Giriş yapmalısınız." }, { status: 401 });
 
-  const { planId, topup } = (await request.json()) as { planId?: string; topup?: number };
-  const payment =
-    topup !== undefined
-      ? supabase.rpc("create_topup", { p_amount: topup }).single<{ merchant_oid: string; amount: number }>()
-      : supabase.rpc("create_payment", { p_plan_id: planId }).single<{ merchant_oid: string; amount: number; plan_name: string }>();
+  const { planId } = (await request.json()) as { planId?: string };
   const [{ data: pay, error }, { data: business }, { data: profile }] = await Promise.all([
-    payment,
+    supabase.rpc("create_payment", { p_plan_id: planId }).single<{ merchant_oid: string; amount: number; plan_name: string }>(),
     supabase.from("businesses").select("name, phone, address, district, city").eq("owner_id", auth.user.id).maybeSingle(),
     supabase.from("profiles").select("full_name, phone").eq("id", auth.user.id).maybeSingle(),
   ]);
@@ -28,7 +24,7 @@ export async function POST(request: Request) {
   const result = await getPaytrToken({
     merchantOid: pay.merchant_oid,
     amount: Number(pay.amount),
-    productName: "plan_name" in pay ? `SiftahGo ${pay.plan_name} paketi (30 gün)` : "SiftahGo bakiye yükleme",
+    productName: `SiftahGo ${pay.plan_name} paketi (30 gün)`,
     email: auth.user.email ?? "",
     userIp: ip,
     userName: profile?.full_name || business.name,

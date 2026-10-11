@@ -15,7 +15,6 @@ import {
   Phone,
   PlayCircle,
   Star,
-  Wallet,
 } from "lucide-react";
 import {
   businessState,
@@ -33,7 +32,7 @@ import { createClient } from "@/lib/supabase/client";
 import { categoryLabel, STATUS } from "@/lib/constants";
 import { errorMessage, formatDuration, formatPrice, intlPhone } from "@/lib/format";
 import type { AdminUser } from "@/lib/admin-types";
-import type { Appointment, BalanceTransaction, Business, Payment, Plan, Review, Service, Staff } from "@/lib/types";
+import type { Appointment, Business, Payment, Plan, Review, Service, Staff } from "@/lib/types";
 
 type Data = {
   business: Business & { created_at: string };
@@ -43,8 +42,6 @@ type Data = {
   services: Service[];
   appointments: Appointment[];
   payments: Payment[];
-  balance: number;
-  moves: BalanceTransaction[];
   reviews: Review[];
   now: number;
 };
@@ -58,7 +55,7 @@ export default function AdminBusinessDetail() {
 
   const load = useCallback(async () => {
     const supabase = createClient();
-    const [b, u, p, st, sv, a, pay, r, bal, mv] = await Promise.all([
+    const [b, u, p, st, sv, a, pay, r] = await Promise.all([
       supabase.from("businesses").select("*").eq("id", id).maybeSingle(),
       supabase.rpc("admin_users"),
       supabase.from("plans").select("*").order("sort_order"),
@@ -67,8 +64,6 @@ export default function AdminBusinessDetail() {
       supabase.from("appointments").select("*").eq("business_id", id).order("starts_at", { ascending: false }).limit(2000),
       supabase.from("payments").select("*").eq("business_id", id).order("created_at", { ascending: false }),
       supabase.from("reviews").select("*").eq("business_id", id).order("created_at", { ascending: false }).limit(50),
-      supabase.rpc("business_balance", { p_business_id: id }),
-      supabase.from("balance_transactions").select("*").eq("business_id", id).order("created_at", { ascending: false }),
     ]);
     if (b.error) return setError(errorMessage(b.error));
     if (!b.data) return setData(null);
@@ -80,8 +75,6 @@ export default function AdminBusinessDetail() {
       services: (sv.data ?? []) as Service[],
       appointments: (a.data ?? []) as Appointment[],
       payments: (pay.data ?? []) as Payment[],
-      balance: Number(bal.data ?? 0),
-      moves: (mv.data ?? []) as BalanceTransaction[],
       reviews: (r.data ?? []) as Review[],
       now: Date.now(),
     });
@@ -173,7 +166,6 @@ export default function AdminBusinessDetail() {
                 {activeStaff} / {staffLimit ?? "∞"}
               </Info>
               <Info label="Sahibin ayarı">{b.is_published ? "Yayında" : "Gizli"}</Info>
-              <Info label="Bakiye">{formatPrice(data.balance)}</Info>
             </dl>
           </Section>
 
@@ -322,36 +314,13 @@ export default function AdminBusinessDetail() {
                   <li key={p.id} className="flex items-center justify-between gap-2 py-2.5">
                     <div className="min-w-0">
                       <p>
-                        {p.plan_id ? planName(p.plan_id) : "Bakiye yükleme"} · <span className="tabular-nums">{formatPrice(p.amount)}</span>
+                        {planName(p.plan_id)} · <span className="tabular-nums">{formatPrice(p.amount)}</span>
                       </p>
                       <p className="truncate text-xs text-ink-3">
                         {dateTime(p.paid_at ?? p.created_at)} · {isAdminPayment(p.merchant_oid) ? "Yönetici" : "PayTR"}
                       </p>
                     </div>
                     <span className={`chip shrink-0 ${PAYMENT_STATUS[p.status].className}`}>{PAYMENT_STATUS[p.status].label}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Section>
-
-          <Section title={`Bakiye hareketleri · ${formatPrice(data.balance)}`}>
-            {data.moves.length === 0 ? (
-              <Empty>Bakiye hareketi yok.</Empty>
-            ) : (
-              <ul className="mt-3 divide-y divide-line text-sm">
-                {data.moves.map((m) => (
-                  <li key={m.id} className="flex items-center justify-between gap-2 py-2.5">
-                    <div className="min-w-0">
-                      <p className="truncate">
-                        {m.kind === "topup" ? "Bakiye yükleme" : m.kind === "plan" ? `${planName(m.plan_id)} paketi` : `Yönetici: ${m.note}`}
-                      </p>
-                      <p className="text-xs text-ink-3">{dateTime(m.created_at)}</p>
-                    </div>
-                    <span className={`shrink-0 tabular-nums ${m.amount > 0 ? "text-emerald-300" : "text-ink-2"}`}>
-                      {m.amount > 0 ? "+" : "−"}
-                      {formatPrice(Math.abs(m.amount))}
-                    </span>
                   </li>
                 ))}
               </ul>
@@ -368,8 +337,6 @@ function Actions({ data, onDone }: { data: Data; onDone: () => Promise<void> }) 
   const [planId, setPlanId] = useState(b.plan_id ?? plans[0]?.id ?? "");
   const [days, setDays] = useState(30);
   const [amount, setAmount] = useState("");
-  const [adjust, setAdjust] = useState("");
-  const [adjustNote, setAdjustNote] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -383,13 +350,9 @@ function Actions({ data, onDone }: { data: Data; onDone: () => Promise<void> }) 
     setMessage(null);
     const { error } = await fn();
     setBusy(null);
-    if (error) {
-      setMessage({ ok: false, text: errorMessage(error) });
-      return false;
-    }
+    if (error) return setMessage({ ok: false, text: errorMessage(error) });
     setMessage({ ok: true, text: success });
     await onDone();
-    return true;
   }
 
   const supabase = createClient();
@@ -399,16 +362,6 @@ function Actions({ data, onDone }: { data: Data; onDone: () => Promise<void> }) 
       () => supabase.rpc("admin_grant_subscription", { p_business_id: b.id, p_plan_id: planId, p_days: days, p_amount: Number(amount) || 0 }),
       `${plans.find((p) => p.id === planId)?.name} paketi ${days} gün tanımlandı.`,
     );
-  const adjustBalance = () =>
-    run(
-      "balance",
-      () => supabase.rpc("admin_adjust_balance", { p_business_id: b.id, p_amount: Number(adjust), p_note: adjustNote }),
-      `Bakiye ${Number(adjust) > 0 ? "eklendi" : "düşüldü"}: ${formatPrice(Math.abs(Number(adjust)))}.`,
-    ).then((ok) => {
-      if (!ok) return;
-      setAdjust("");
-      setAdjustNote("");
-    });
   const end = () =>
     confirm(`${b.name} aboneliği şimdi bitirilsin mi? Sayfa yayından düşer ve randevu almaz.`) &&
     run("end", () => supabase.rpc("admin_end_subscription", { p_business_id: b.id }), "Abonelik bitirildi.");
@@ -472,20 +425,6 @@ function Actions({ data, onDone }: { data: Data; onDone: () => Promise<void> }) 
         </p>
         <button type="button" disabled={!!busy || !planId} onClick={grant} className="btn btn-primary w-full">
           {busy === "grant" && <Loader2 className="size-4 animate-spin" />} {subscribed ? "Süreyi uzat" : "Paketi tanımla"}
-        </button>
-      </div>
-
-      <div className="mt-5 space-y-3 border-t border-line pt-4">
-        <p className="flex items-center gap-2 text-sm font-medium">
-          <Wallet className="size-4 text-brand-300" /> Bakiye ekle / düş · <span className="tabular-nums text-ink-2">{formatPrice(data.balance)}</span>
-        </p>
-        <div className="grid grid-cols-[7rem_1fr] gap-2">
-          <input className="input" type="number" placeholder="± ₺" aria-label="Tutar (₺, düşmek için eksi)" value={adjust} onChange={(e) => setAdjust(e.target.value)} />
-          <input className="input" maxLength={200} placeholder="Açıklama (ör. iade, telafi)" aria-label="Açıklama" value={adjustNote} onChange={(e) => setAdjustNote(e.target.value)} />
-        </div>
-        <p className="text-xs text-ink-3">İadeler ve telafiler nakit yerine bakiyeye eklenir. Düşmek için eksi tutar yazın; bakiye eksiye inemez.</p>
-        <button type="button" disabled={!!busy || !Number(adjust) || !adjustNote.trim()} onClick={adjustBalance} className="btn btn-secondary w-full">
-          {busy === "balance" && <Loader2 className="size-4 animate-spin" />} Bakiyeyi güncelle
         </button>
       </div>
 

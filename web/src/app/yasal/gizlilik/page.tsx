@@ -32,7 +32,7 @@ export default function PrivacyPage() {
       <ul>
         <li>Ad soyad, telefon, e-posta; işletmenin adı, adresi, iletişim bilgileri, hizmetleri, fiyatları, çalışma saatleri ve personel adları.</li>
         <li>Yüklenen logo, kapak ve galeri görselleri.</li>
-        <li>Paket, ödeme ve bakiye kayıtları (tutar, tarih, ödeme numarası). Kart bilgileri bize ulaşmaz; ödeme kuruluşu PayTR tarafından işlenir.</li>
+        <li>Paket ve ödeme kayıtları (tutar, tarih, ödeme numarası). Kart bilgileri bize ulaşmaz; ödeme kuruluşu PayTR tarafından işlenir.</li>
       </ul>
       <h3>Tüm kullanıcılar</h3>
       <ul>
@@ -48,7 +48,7 @@ export default function PrivacyPage() {
           gönderilmesi; hesabın açılması ve yönetimi. <em>Hukuki sebep: sözleşmenin kurulması ve ifası (KVKK m. 5/2-c).</em>
         </li>
         <li>
-          Paket, ödeme ve bakiye işlemleri; muhasebe ve yasal saklama yükümlülükleri. <em>Hukuki sebep: sözleşmenin ifası ve hukuki yükümlülük (m. 5/2-c, ç).</em>
+          Paket ve ödeme işlemleri; muhasebe ve yasal saklama yükümlülükleri. <em>Hukuki sebep: sözleşmenin ifası ve hukuki yükümlülük (m. 5/2-c, ç).</em>
         </li>
         <li>
           <strong>İptal ve gelmeme geçmişi:</strong> İşletmelerin boş kalan randevular nedeniyle zarar görmemesi için, son 6 ayda {SITE_NAME} genelinde
@@ -91,7 +91,7 @@ export default function PrivacyPage() {
       <ul>
         <li>Hesap bilgileri hesabınız açık olduğu sürece saklanır; hesap silinince silinir veya anonim hale getirilir.</li>
         <li>Randevu kayıtları, işletmenin randevu defteri olarak işletme hesabı açık kaldığı sürece saklanır.</li>
-        <li>Ödeme, bakiye ve muhasebe kayıtları ilgili mevzuatın öngördüğü süre boyunca saklanır.</li>
+        <li>Ödeme ve muhasebe kayıtları ilgili mevzuatın öngördüğü süre boyunca saklanır.</li>
         <li>Bildirim adresleri, oturum kapatıldığında veya uygulama kaldırıldığında silinir.</li>
       </ul>
 
