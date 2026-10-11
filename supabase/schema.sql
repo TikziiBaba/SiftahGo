@@ -11,6 +11,8 @@
 drop trigger if exists on_auth_user_created on auth.users;
 
 drop table if exists
+  public.inbox,
+  public.push_tokens,
   public.notifications,
   public.payments,
   public.reviews,
@@ -37,14 +39,18 @@ begin
     where n.nspname = 'public'
       and p.proname in (
         'handle_new_user', 'update_updated_at_column', 'check_appointment_overlap',
-        'get_available_slots', 'book_appointment', 'cancel_appointment',
+        'get_available_slots', 'book_appointment', 'cancel_appointment', 'reschedule_appointment',
         'is_business_owner', 'business_after_insert', 'add_review',
         'refresh_business_rating', 'get_customers', 'protect_business_rating',
         'protect_business_columns', 'is_bookable', 'enforce_staff_limit', 'create_payment',
         'activate_subscription', 'fail_payment', 'plan_has_feature',
         'queue_appointment_notifications', 'queue_due_reminders', 'claim_notifications',
         'finish_notification', 'is_admin', 'apply_subscription', 'admin_stats', 'admin_users',
-        'admin_grant_subscription', 'admin_end_subscription', 'admin_set_suspended'
+        'admin_grant_subscription', 'admin_end_subscription', 'admin_set_suspended',
+        'format_when', 'inbox_insert', 'register_push_token', 'unregister_push_token',
+        'mark_inbox_read', 'claim_push', 'finish_push', 'drop_push_tokens',
+        'customer_history', 'appointments_before_write', 'queue_review_requests', 'review_after_insert',
+        'reply_review'
       )
   loop
     execute 'drop function if exists ' || r.sig || ' cascade';
@@ -85,14 +91,16 @@ create table public.plans (
   name        text not null,
   price       numeric(10, 2) not null check (price > 0),
   staff_limit int check (staff_limit > 0), -- boş = sınırsız
-  features    text[] not null default '{}', -- 'customers', 'reports'
+  -- 'customers', 'reports', 'announcement' (duyuru bandı), 'links' (WhatsApp/Instagram/web kısayolları),
+  -- 'theme' (sayfa rengi)
+  features    text[] not null default '{}',
   sort_order  int not null default 0
 );
 
 insert into public.plans (id, name, price, staff_limit, features, sort_order) values
   ('baslangic', 'Başlangıç', 249, 1, '{}', 1),
-  ('esnaf', 'Esnaf', 449, 5, '{customers,reports}', 2),
-  ('pro', 'Pro', 749, null, '{customers,reports}', 3);
+  ('esnaf', 'Esnaf', 449, 5, '{customers,reports,announcement,links}', 2),
+  ('pro', 'Pro', 749, null, '{customers,reports,announcement,links,theme}', 3);
 
 create table public.businesses (
   id                 uuid primary key default gen_random_uuid(),
@@ -114,6 +122,14 @@ create table public.businesses (
   logo_url           text,
   cover_url          text,
   gallery            text[] not null default '{}',
+  -- Sayfa özelleştirme. Paketinde ilgili özellik varsa sayfada görünür; paket düşerse silinmez, gizlenir.
+  accent             text not null default 'turkuaz'
+                     check (accent in ('turkuaz', 'zumrut', 'gok', 'lavanta', 'pembe', 'kehribar', 'mercan')),
+  announcement       text not null default '' check (length(announcement) <= 160),
+  whatsapp           text not null default '' check (whatsapp ~ '^[0-9+ ()-]{0,20}$'),
+  instagram          text not null default '' check (instagram ~ '^[A-Za-z0-9._]{0,30}$'),
+  website            text not null default ''
+                     check (website = '' or (website ~ '^https?://\S+$' and length(website) <= 200)),
   slot_minutes       int not null default 30 check (slot_minutes between 5 and 240),
   booking_days       int not null default 30 check (booking_days between 1 and 365),
   min_notice_minutes int not null default 60 check (min_notice_minutes between 0 and 10080),
@@ -128,6 +144,9 @@ create table public.businesses (
   -- Abonelik: sadece ödeme bildirimiyle (activate_subscription) değişir.
   plan_id              text references public.plans (id),
   subscription_ends_at timestamptz,
+  -- Ücretsiz deneme bitişi (business_after_insert). subscription_ends_at buna eşitse işletme denemededir;
+  -- ödeme veya yönetici süre ekleyince ayrışır.
+  trial_ends_at        timestamptz,
   created_at         timestamptz not null default now()
 );
 create index businesses_city_category_idx on public.businesses (city, category);
@@ -205,6 +224,13 @@ create table public.appointments (
   ends_at        timestamptz not null,
   status         text not null default 'pending'
                  check (status in ('pending', 'confirmed', 'completed', 'cancelled', 'no_show')),
+  -- İptal eden taraf; müşteri iptalleri güvenilirlik sayısına girer. appointments_before_write yazar.
+  cancelled_by   text check (cancelled_by in ('customer', 'business')),
+  -- Randevu alınırken müşterinin son 6 aydaki geçmişi (tüm işletmelerde; hesap veya telefonla eşleşir).
+  -- appointments_before_write yazar. customer_flagged: sık iptal eden / gelmeyen müşteri.
+  prior_cancels    int not null default 0,
+  prior_no_shows   int not null default 0,
+  customer_flagged boolean not null default false,
   created_at     timestamptz not null default now(),
   check (ends_at > starts_at),
   -- Aynı personele aynı anda iki aktif randevu verilemez.
@@ -215,6 +241,8 @@ create table public.appointments (
 );
 create index appointments_business_time_idx on public.appointments (business_id, starts_at);
 create index appointments_customer_idx on public.appointments (customer_id, starts_at);
+-- Müşteri geçmişi telefonun son 10 hanesiyle eşleşir ("0555..." = "+90555...").
+create index appointments_phone_idx on public.appointments ((right(regexp_replace(customer_phone, '\D', '', 'g'), 10)));
 
 -- Müşteri değerlendirmesi: tamamlanan her randevu için bir tane (add_review ile eklenir).
 create table public.reviews (
@@ -225,6 +253,9 @@ create table public.reviews (
   customer_name  text not null,
   rating         smallint not null check (rating between 1 and 5),
   comment        text not null default '',
+  -- İşletmenin herkese açık cevabı (reply_review).
+  reply          text not null default '' check (length(reply) <= 1000),
+  replied_at     timestamptz,
   created_at     timestamptz not null default now()
 );
 create index reviews_business_idx on public.reviews (business_id, created_at desc);
@@ -247,7 +278,7 @@ create index payments_business_idx on public.payments (business_id, created_at d
 create table public.notifications (
   id             uuid primary key default gen_random_uuid(),
   appointment_id uuid not null references public.appointments (id) on delete cascade,
-  kind           text not null check (kind in ('booked', 'confirmed', 'cancelled', 'reminder')),
+  kind           text not null check (kind in ('booked', 'confirmed', 'cancelled', 'rescheduled', 'reminder', 'review')),
   recipient      text not null check (recipient in ('customer', 'business')),
   email          text not null,
   status         text not null default 'pending' check (status in ('pending', 'sent', 'failed', 'skipped')),
@@ -260,6 +291,36 @@ create table public.notifications (
   unique (appointment_id, kind, recipient)
 );
 create index notifications_pending_idx on public.notifications (created_at) where status = 'pending';
+
+-- Telefonların Expo push adresleri. Uygulama register_push_token ile ekler.
+create table public.push_tokens (
+  token      text primary key check (token ~ '^Expo(nent)?PushToken\[.+\]$'),
+  user_id    uuid not null references public.profiles (id) on delete cascade,
+  platform   text not null check (platform in ('android', 'ios')),
+  updated_at timestamptz not null default now()
+);
+create index push_tokens_user_idx on public.push_tokens (user_id);
+
+-- Uygulama içi bildirimler. Her satır kullanıcının telefonlarına anlık bildirim olarak da
+-- gider: sunucu (/api/notifications) claim_push ile alıp Expo'ya iletir.
+create table public.inbox (
+  id                uuid primary key default gen_random_uuid(),
+  user_id           uuid not null references public.profiles (id) on delete cascade,
+  appointment_id    uuid not null references public.appointments (id) on delete cascade,
+  -- review: müşteriye "hizmet nasıldı?", reviewed: işletmeye yeni değerlendirme
+  kind              text not null check (kind in ('booked', 'confirmed', 'cancelled', 'rescheduled', 'reminder', 'review', 'reviewed')),
+  recipient         text not null check (recipient in ('customer', 'business')),
+  title             text not null,
+  body              text not null,
+  read_at           timestamptz,
+  push_status       text not null default 'pending' check (push_status in ('pending', 'sent', 'failed', 'skipped')),
+  push_attempts     int not null default 0,
+  push_locked_until timestamptz,
+  created_at        timestamptz not null default now(),
+  unique (appointment_id, kind, recipient)
+);
+create index inbox_user_idx on public.inbox (user_id, created_at desc);
+create index inbox_push_pending_idx on public.inbox (created_at) where push_status = 'pending';
 
 -- ---------------------------------------------------------------------
 -- 2) Yardımcı fonksiyonlar ve tetikleyiciler
@@ -355,6 +416,11 @@ begin
   values (new.id, coalesce(v_owner_name, new.name));
 
   update public.profiles set role = 'business' where id = new.owner_id;
+
+  -- 7 gün ücretsiz deneme: Pro paketin tüm özellikleri.
+  update public.businesses
+  set plan_id = 'pro', subscription_ends_at = now() + interval '7 days', trial_ends_at = now() + interval '7 days'
+  where id = new.id;
   return new;
 end;
 $$;
@@ -368,11 +434,13 @@ create trigger businesses_after_insert
 -- ---------------------------------------------------------------------
 
 -- Belirli bir gün için boş saatler. p_staff_id boşsa tüm personel.
+-- p_ignore: ertelenen randevu; müşterisi veya işletmesi soruyorsa o randevunun saati boş sayılır.
 create function public.get_available_slots(
   p_business_id uuid,
   p_service_id  uuid,
   p_day         date,
-  p_staff_id    uuid default null
+  p_staff_id    uuid default null,
+  p_ignore      uuid default null
 )
 returns table (slot_start timestamptz, staff_id uuid)
 language plpgsql stable security definer set search_path = ''
@@ -421,6 +489,7 @@ begin
       where a.staff_id = st.id
         and a.status in ('pending', 'confirmed')
         and tstzrange(a.starts_at, a.ends_at) && tstzrange(g.s, g.s + v_duration)
+        and not coalesce(a.id = p_ignore and (a.customer_id = auth.uid() or public.is_business_owner(a.business_id)), false)
     )
     and not exists (
       select 1 from public.time_off t
@@ -432,7 +501,62 @@ begin
 end;
 $$;
 
+-- Müşterinin son 6 aydaki iptal (kendi iptal ettiği) ve gelmediği randevu sayısı; tüm işletmelerde.
+-- Hesapla veya telefon numarasının son 10 hanesiyle eşleşir.
+create function public.customer_history(p_customer uuid, p_phone text, out cancels int, out no_shows int)
+language sql stable security definer set search_path = ''
+as $$
+  select
+    (count(*) filter (where a.status = 'cancelled' and a.cancelled_by = 'customer'))::int,
+    (count(*) filter (where a.status = 'no_show'))::int
+  from public.appointments a
+  where a.starts_at > now() - interval '180 days'
+    and (
+      (p_customer is not null and a.customer_id = p_customer)
+      or (length(regexp_replace(coalesce(p_phone, ''), '\D', '', 'g')) >= 10
+          and right(regexp_replace(a.customer_phone, '\D', '', 'g'), 10) = right(regexp_replace(p_phone, '\D', '', 'g'), 10))
+    );
+$$;
+
+-- Randevu yazılırken: geçmiş sayıları ve "sık iptal eden müşteri" işareti (yalnız eklerken),
+-- iptal edenin kim olduğu (durum iptale dönünce). İstemci bu alanları elle değiştiremez.
+create function public.appointments_before_write()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  v_owner boolean := public.is_business_owner(new.business_id);
+begin
+  if tg_op = 'INSERT' then
+    select h.cancels, h.no_shows into new.prior_cancels, new.prior_no_shows
+    from public.customer_history(new.customer_id, new.customer_phone) h;
+    -- Son 6 ayda 3 iptal veya 2 gelmeme: işletme uyarılır, müşterinin aldığı randevu onaya düşer.
+    new.customer_flagged := new.prior_cancels >= 3 or new.prior_no_shows >= 2;
+    if new.customer_flagged and not v_owner and new.status = 'confirmed' then
+      new.status := 'pending';
+    end if;
+    new.cancelled_by := case when new.status = 'cancelled' then 'business' end;
+  else
+    new.prior_cancels := old.prior_cancels;
+    new.prior_no_shows := old.prior_no_shows;
+    new.customer_flagged := old.customer_flagged;
+    new.cancelled_by := case
+      when new.status <> 'cancelled' then null
+      when old.status = 'cancelled' then old.cancelled_by
+      when not v_owner and new.customer_id = auth.uid() then 'customer'
+      else 'business'
+    end;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger appointments_before_write
+  before insert or update on public.appointments
+  for each row execute function public.appointments_before_write();
+
 -- Müşteri (girişli veya misafir) randevu alır. p_staff_id boşsa uygun ilk personel.
+-- Dönen: {id, status}. Sık iptal eden müşterinin randevusu işletme onayına düşer (status = pending).
 create function public.book_appointment(
   p_business_id    uuid,
   p_service_id     uuid,
@@ -443,14 +567,15 @@ create function public.book_appointment(
   p_note           text default '',
   p_customer_email text default null
 )
-returns uuid
+returns jsonb
 language plpgsql volatile security definer set search_path = ''
 as $$
 declare
-  b       public.businesses;
-  s       public.services;
-  v_staff uuid;
-  v_id    uuid;
+  b        public.businesses;
+  s        public.services;
+  v_staff  uuid;
+  v_id     uuid;
+  v_status text;
   v_email text := nullif(lower(trim(coalesce(p_customer_email, ''))), '');
 begin
   if length(trim(coalesce(p_customer_name, ''))) < 2 then
@@ -493,9 +618,9 @@ begin
     p_starts_at, p_starts_at + make_interval(mins => s.duration_minutes),
     case when b.auto_confirm then 'confirmed' else 'pending' end
   )
-  returning id into v_id;
+  returning id, status into v_id, v_status;
 
-  return v_id;
+  return jsonb_build_object('id', v_id, 'status', v_status);
 exception
   when exclusion_violation then
     raise exception 'Bu saat artık müsait değil, lütfen başka bir saat seçin.';
@@ -520,7 +645,62 @@ begin
 end;
 $$;
 
--- Müşteri tamamlanan randevusunu değerlendirir.
+-- Gelecekteki randevunun saatini değiştirir: müşterisi (girişli) veya işletme sahibi.
+-- Yeni saat boş saatlerden olmalı. p_staff_id boşsa uygun ilk personel.
+-- Müşteri değiştirdiyse ve işletme randevuları elle onaylıyorsa randevu yeniden onay bekler.
+create function public.reschedule_appointment(p_id uuid, p_starts_at timestamptz, p_staff_id uuid default null)
+returns void
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  a        public.appointments;
+  b        public.businesses;
+  v_owner  boolean;
+  v_staff  uuid;
+  v_mins   int;
+begin
+  select * into a from public.appointments where id = p_id for update;
+  if not found then
+    raise exception 'Bu randevunun saati değiştirilemiyor.';
+  end if;
+  v_owner := public.is_business_owner(a.business_id);
+  if not (v_owner or coalesce(a.customer_id = auth.uid(), false))
+     or a.status not in ('pending', 'confirmed')
+     or a.starts_at <= now() then
+    raise exception 'Bu randevunun saati değiştirilemiyor.';
+  end if;
+
+  select duration_minutes into v_mins from public.services where id = a.service_id;
+  if v_mins is null then
+    raise exception 'Bu hizmet artık sunulmuyor; saati değiştirmek için işletmeyle görüşün.';
+  end if;
+
+  select * into b from public.businesses where id = a.business_id;
+  select x.staff_id into v_staff
+  from public.get_available_slots(
+    a.business_id, a.service_id, (p_starts_at at time zone b.timezone)::date, p_staff_id, a.id
+  ) x
+  where x.slot_start = p_starts_at
+  limit 1;
+
+  if v_staff is null then
+    raise exception 'Bu saat artık müsait değil, lütfen başka bir saat seçin.';
+  end if;
+
+  update public.appointments
+  set starts_at = p_starts_at,
+      ends_at = p_starts_at + make_interval(mins => v_mins),
+      staff_id = v_staff,
+      status = case when not v_owner and not b.auto_confirm then 'pending' else a.status end
+  where id = a.id;
+exception
+  when exclusion_violation then
+    raise exception 'Bu saat artık müsait değil, lütfen başka bir saat seçin.';
+end;
+$$;
+
+-- Müşteri gerçekleşen randevusunu değerlendirir: tamamlanan veya saati geçmiş onaylı randevu
+-- (işletme "Tamamlandı" işaretlemese de). İptal ve gelmedi değerlendirilemez.
 create function public.add_review(p_appointment_id uuid, p_rating int, p_comment text default '')
 returns void
 language plpgsql volatile security definer set search_path = ''
@@ -530,7 +710,8 @@ declare
   v_name text;
 begin
   select * into a from public.appointments
-  where id = p_appointment_id and customer_id = auth.uid() and status = 'completed';
+  where id = p_appointment_id and customer_id = auth.uid()
+    and (status = 'completed' or (status = 'confirmed' and ends_at <= now()));
   if not found then
     raise exception 'Sadece tamamlanan randevularınızı değerlendirebilirsiniz.';
   end if;
@@ -571,6 +752,21 @@ create trigger reviews_refresh_rating
   after insert or delete on public.reviews
   for each row execute function public.refresh_business_rating();
 
+-- İşletme sahibi değerlendirmeye herkese açık cevap yazar; boş cevap cevabı kaldırır.
+create function public.reply_review(p_id uuid, p_reply text)
+returns void
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  v_reply text := left(trim(coalesce(p_reply, '')), 1000);
+begin
+  update public.reviews r
+  set reply = v_reply, replied_at = case when v_reply = '' then null else now() end
+  where r.id = p_id and public.is_business_owner(r.business_id);
+  if not found then raise exception 'Bu değerlendirmeye cevap veremezsiniz.'; end if;
+end;
+$$;
+
 -- İşletme sahibi puan, abonelik ve askı alanlarını elle değiştiremez;
 -- bunları sadece refresh_business_rating, apply_subscription ve admin_* fonksiyonları yazar.
 create function public.protect_business_columns()
@@ -584,12 +780,14 @@ begin
       new.rating_count := 0;
       new.plan_id := null;
       new.subscription_ends_at := null;
+      new.trial_ends_at := null;
       new.is_suspended := false;
     else
       new.rating_avg := old.rating_avg;
       new.rating_count := old.rating_count;
       new.plan_id := old.plan_id;
       new.subscription_ends_at := old.subscription_ends_at;
+      new.trial_ends_at := old.trial_ends_at;
       new.is_suspended := old.is_suspended;
     end if;
   end if;
@@ -713,16 +911,85 @@ revoke execute on function public.activate_subscription(text, numeric) from publ
 revoke execute on function public.fail_payment(text) from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------
--- E-posta bildirimleri
+-- Bildirimler (e-posta, uygulama içi ve anlık bildirim)
 -- ---------------------------------------------------------------------
 
--- Randevu alınınca, onaylanınca veya iptal edilince ilgili tarafa e-posta kuyruğa girer.
+-- "12 Ekim Pazartesi, 14:30" (e-postalardaki biçim)
+create function public.format_when(p_at timestamptz, p_tz text)
+returns text
+language sql stable set search_path = ''
+as $$
+  select extract(day from l)::int || ' '
+    || (array['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos',
+              'Eylül', 'Ekim', 'Kasım', 'Aralık'])[extract(month from l)::int] || ' '
+    || (array['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'])[extract(isodow from l)::int]
+    || ', ' || to_char(l, 'HH24:MI')
+  from (select p_at at time zone p_tz as l) t;
+$$;
+
+-- Uygulama içi bildirim ekler; eklendiyse 1 döner.
+create function public.inbox_insert(p_user uuid, p_kind text, p_recipient text, a public.appointments)
+returns int
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  v_business text;
+  v_when     text;
+  v_title    text;
+  v_body     text;
+  v_flagged  boolean := p_recipient = 'business' and p_kind = 'booked' and a.customer_flagged;
+  r          public.reviews;
+  v_n        int;
+begin
+  select b.name, public.format_when(a.starts_at, b.timezone) into v_business, v_when
+  from public.businesses b where b.id = a.business_id;
+  if p_kind = 'reviewed' then
+    select * into r from public.reviews where appointment_id = a.id;
+  end if;
+
+  v_title := case
+    when p_kind = 'reviewed' then 'Yeni değerlendirme: ' || repeat('★', r.rating) || repeat('☆', 5 - r.rating)
+    when p_kind = 'review' then 'Hizmet nasıldı?'
+    when v_flagged then 'Dikkat: sık iptal eden müşteri'
+    when p_recipient = 'business' and p_kind = 'rescheduled' and a.status = 'pending' then 'Saat değişikliği onay bekliyor'
+    when p_recipient = 'business' and p_kind = 'rescheduled' then 'Randevu saati değişti'
+    when p_kind = 'rescheduled' then 'Randevunuzun saati değişti'
+    when p_recipient = 'business' and p_kind = 'cancelled' then 'Randevu iptal edildi'
+    when p_recipient = 'business' and a.status = 'pending' then 'Onay bekleyen randevu'
+    when p_recipient = 'business' then 'Yeni randevu'
+    when p_kind = 'cancelled' then 'Randevunuz iptal edildi'
+    when p_kind = 'reminder' then 'Randevunuz yaklaşıyor'
+    when a.status = 'pending' then 'Randevu talebiniz alındı'
+    else 'Randevunuz onaylandı'
+  end;
+
+  v_body := case
+    when p_kind = 'reviewed' then concat_ws(' · ', r.customer_name, a.service_name, nullif(left(r.comment, 120), ''))
+    when p_kind = 'review' then concat_ws(' · ', v_business, a.service_name, 'Puan vermek için dokunun')
+    else concat_ws(' · ', case when p_recipient = 'business' then a.customer_name else v_business end,
+                   a.service_name, v_when,
+                   case when v_flagged then format('Son 6 ayda %s iptal, %s gelmedi', a.prior_cancels, a.prior_no_shows) end,
+                   case when v_flagged and a.status = 'pending' then 'Onayınızı bekliyor' end)
+  end;
+
+  insert into public.inbox (user_id, appointment_id, kind, recipient, title, body)
+  values (p_user, a.id, p_kind, p_recipient, v_title, v_body)
+  on conflict do nothing;
+  get diagnostics v_n = row_count;
+  return v_n;
+end;
+$$;
+
+-- Randevu alınınca, onaylanınca, iptal edilince veya saati değişince ilgili tarafa e-posta kuyruğa girer.
+-- Uygulama içi bildirim (ve push) sadece karşı tarafa gider: kendi aldığı randevu için
+-- müşteriye, kendi eklediği randevu için işletmeye bildirim gitmez.
 create function public.queue_appointment_notifications()
 returns trigger
 language plpgsql security definer set search_path = ''
 as $$
 declare
   v_owner_email text;
+  v_owner_id    uuid;
   v_by_owner    boolean := public.is_business_owner(new.business_id);
   v_kind        text;
   v_to          text;
@@ -734,13 +1001,22 @@ begin
     v_kind := 'booked';
     -- İşletme kendi eklediği randevu için kendine e-posta almaz.
     v_to := case when v_by_owner then 'customer' else 'both' end;
-  elsif old.status = 'pending' and new.status = 'confirmed' then
-    v_kind := 'confirmed';
-    v_to := 'customer';
   elsif old.status in ('pending', 'confirmed') and new.status = 'cancelled' then
     v_kind := 'cancelled';
     -- İptal edene değil, karşı tarafa haber verilir.
     v_to := case when v_by_owner then 'customer' else 'business' end;
+  elsif old.status in ('pending', 'confirmed') and new.status in ('pending', 'confirmed')
+        and new.starts_at <> old.starts_at then
+    v_kind := 'rescheduled';
+    v_to := case when v_by_owner then 'customer' else 'business' end;
+    -- Her saat değişikliği yeniden bildirilir; hatırlatma ve onay yeni saat için tekrar gidebilir.
+    delete from public.notifications
+    where appointment_id = new.id and kind in ('rescheduled', 'reminder', 'confirmed');
+    delete from public.inbox
+    where appointment_id = new.id and kind in ('rescheduled', 'reminder', 'confirmed');
+  elsif old.status = 'pending' and new.status = 'confirmed' then
+    v_kind := 'confirmed';
+    v_to := 'customer';
   else
     return null;
   end if;
@@ -752,7 +1028,7 @@ begin
   end if;
 
   if v_to in ('business', 'both') then
-    select u.email into v_owner_email
+    select u.email, u.id into v_owner_email, v_owner_id
     from public.businesses b join auth.users u on u.id = b.owner_id
     where b.id = new.business_id;
     if v_owner_email is not null then
@@ -761,38 +1037,110 @@ begin
       on conflict do nothing;
     end if;
   end if;
+
+  if v_to = 'customer' and new.customer_id is not null then
+    perform public.inbox_insert(new.customer_id, v_kind, 'customer', new);
+  elsif v_to in ('business', 'both') and v_owner_id is not null then
+    perform public.inbox_insert(v_owner_id, v_kind, 'business', new);
+  end if;
   return null;
 end;
 $$;
 
 create trigger appointments_queue_notifications
-  after insert or update of status on public.appointments
+  after insert or update of status, starts_at on public.appointments
   for each row execute function public.queue_appointment_notifications();
 
 -- Zamanı gelen hatırlatmaları kuyruğa ekler; eklenen sayıyı döner.
 -- Önceden alınan randevuya 24 saat kala, 24 saatten kısa süre kala alınana 2 saat kala
 -- hatırlatılır. Başlamasına 3 saatten az kala alınan randevuya hatırlatma gitmez.
+-- Girişli müşteriye uygulama içi bildirim de eklenir.
 create function public.queue_due_reminders()
 returns int
-language sql volatile security definer set search_path = ''
+language plpgsql volatile security definer set search_path = ''
 as $$
-  with ins as (
-    insert into public.notifications (appointment_id, kind, recipient, email)
-    select a.id, 'reminder', 'customer', a.customer_email
-    from public.appointments a
-    where a.status = 'confirmed'
-      and a.customer_email is not null
-      and a.starts_at > now()
-      and a.created_at < a.starts_at - interval '3 hours'
-      and a.starts_at <= now() + case
-            when a.created_at <= a.starts_at - interval '24 hours' then interval '24 hours'
+declare
+  a   public.appointments;
+  v_n int := 0;
+  v_i int;
+begin
+  for a in
+    select * from public.appointments ap
+    where ap.status = 'confirmed'
+      and (ap.customer_email is not null or ap.customer_id is not null)
+      and ap.starts_at > now()
+      and ap.created_at < ap.starts_at - interval '3 hours'
+      and ap.starts_at <= now() + case
+            when ap.created_at <= ap.starts_at - interval '24 hours' then interval '24 hours'
             else interval '2 hours'
           end
-    on conflict do nothing
-    returning 1
-  )
-  select count(*)::int from ins;
+  loop
+    if a.customer_email is not null then
+      insert into public.notifications (appointment_id, kind, recipient, email)
+      values (a.id, 'reminder', 'customer', a.customer_email)
+      on conflict do nothing;
+      get diagnostics v_i = row_count;
+      v_n := v_n + v_i;
+    end if;
+    if a.customer_id is not null then
+      v_n := v_n + public.inbox_insert(a.customer_id, 'reminder', 'customer', a);
+    end if;
+  end loop;
+  return v_n;
+end;
 $$;
+
+-- Randevu bittikten 2 saat sonra girişli müşteriye "Hizmet nasıldı?" (e-posta ve uygulama içi) gider.
+-- Değerlendirilmiş, iptal edilmiş, gelinmemiş ya da 3 günden eski randevuya gitmez. Eklenen sayıyı döner.
+create function public.queue_review_requests()
+returns int
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  a   public.appointments;
+  v_n int := 0;
+  v_i int;
+begin
+  for a in
+    select * from public.appointments ap
+    where ap.customer_id is not null
+      and ap.status in ('confirmed', 'completed')
+      and ap.ends_at <= now() - interval '2 hours'
+      and ap.ends_at > now() - interval '3 days'
+      and not exists (select 1 from public.reviews r where r.appointment_id = ap.id)
+  loop
+    if a.customer_email is not null then
+      insert into public.notifications (appointment_id, kind, recipient, email)
+      values (a.id, 'review', 'customer', a.customer_email)
+      on conflict do nothing;
+      get diagnostics v_i = row_count;
+      v_n := v_n + v_i;
+    end if;
+    v_n := v_n + public.inbox_insert(a.customer_id, 'review', 'customer', a);
+  end loop;
+  return v_n;
+end;
+$$;
+
+-- Yeni değerlendirme işletme sahibine uygulama içi bildirim (ve push) olarak gider.
+create function public.review_after_insert()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  a public.appointments;
+  v_owner uuid;
+begin
+  select * into a from public.appointments where id = new.appointment_id;
+  select owner_id into v_owner from public.businesses where id = new.business_id;
+  perform public.inbox_insert(v_owner, 'reviewed', 'business', a);
+  return null;
+end;
+$$;
+
+create trigger reviews_notify_business
+  after insert on public.reviews
+  for each row execute function public.review_after_insert();
 
 -- Gönderilecek e-postaları randevu ve işletme bilgileriyle birlikte alır.
 -- Alınan kayıt 5 dakika kilitlenir; aynı anda çalışan ikinci istek onu almaz.
@@ -812,19 +1160,27 @@ returns table (
   business_name    text,
   business_slug    text,
   business_phone   text,
-  business_address text
+  business_address text,
+  prior_cancels    int,
+  prior_no_shows   int,
+  customer_flagged boolean
 )
 language plpgsql volatile security definer set search_path = ''
 as $$
 #variable_conflict use_column
 begin
-  -- Artık anlamı kalmayanlar: başlamış randevu, iptal edilen randevunun onayı/hatırlatması.
+  -- Artık anlamı kalmayanlar: başlamış randevu, iptal edilen randevunun onayı/hatırlatması;
+  -- "hizmet nasıldı?" için değerlendirilmiş, iptal edilmiş veya gelinmemiş randevu.
   update public.notifications n
   set status = 'skipped'
   from public.appointments a
   where a.id = n.appointment_id
     and n.status = 'pending'
-    and (a.starts_at <= now() or (n.kind <> 'cancelled' and a.status not in ('pending', 'confirmed')));
+    and case
+          when n.kind = 'review' then a.status not in ('confirmed', 'completed')
+                                   or exists (select 1 from public.reviews r where r.appointment_id = a.id)
+          else a.starts_at <= now() or (n.kind <> 'cancelled' and a.status not in ('pending', 'confirmed'))
+        end;
 
   return query
   with picked as (
@@ -844,7 +1200,8 @@ begin
     c.id, c.kind, c.recipient, c.email,
     a.customer_name, a.customer_phone, a.service_name, a.note, a.price, a.starts_at, a.status,
     b.name, b.slug, b.phone,
-    concat_ws(', ', nullif(b.address, ''), nullif(b.district, ''), nullif(b.city, ''))
+    concat_ws(', ', nullif(b.address, ''), nullif(b.district, ''), nullif(b.city, '')),
+    a.prior_cancels, a.prior_no_shows, a.customer_flagged
   from claimed c
   join public.appointments a on a.id = c.appointment_id
   join public.businesses b on b.id = a.business_id
@@ -864,8 +1221,115 @@ as $$
   where id = p_id;
 $$;
 
+-- Gönderilecek anlık bildirimleri kullanıcının telefon adresleriyle birlikte alır.
+-- Telefonu kayıtlı olmayanlar ve anlamı kalmayanlar atlanır; alınan kayıt 5 dakika kilitlenir.
+create function public.claim_push(p_limit int default 50)
+returns table (
+  id             uuid,
+  kind           text,
+  recipient      text,
+  appointment_id uuid,
+  title          text,
+  body           text,
+  tokens         text[]
+)
+language plpgsql volatile security definer set search_path = ''
+as $$
+#variable_conflict use_column
+begin
+  update public.inbox i
+  set push_status = 'skipped'
+  from public.appointments a
+  where a.id = i.appointment_id
+    and i.push_status = 'pending'
+    and (not exists (select 1 from public.push_tokens t where t.user_id = i.user_id)
+         or case
+              when i.kind = 'reviewed' then false
+              when i.kind = 'review' then a.status not in ('confirmed', 'completed')
+                                       or exists (select 1 from public.reviews r where r.appointment_id = a.id)
+              else a.starts_at <= now() or (i.kind <> 'cancelled' and a.status not in ('pending', 'confirmed'))
+            end);
+
+  return query
+  with picked as (
+    select i.id from public.inbox i
+    where i.push_status = 'pending' and (i.push_locked_until is null or i.push_locked_until < now())
+    order by i.created_at
+    limit p_limit
+    for update skip locked
+  ), claimed as (
+    update public.inbox i
+    set push_locked_until = now() + interval '5 minutes', push_attempts = i.push_attempts + 1
+    from picked
+    where i.id = picked.id
+    returning i.*
+  )
+  select c.id, c.kind, c.recipient, c.appointment_id, c.title, c.body,
+         array(select t.token from public.push_tokens t where t.user_id = c.user_id order by t.token)
+  from claimed c
+  order by c.created_at;
+end;
+$$;
+
+-- Gönderim sonucu; finish_notification ile aynı kurallar.
+create function public.finish_push(p_id uuid, p_error text default null)
+returns void
+language sql volatile security definer set search_path = ''
+as $$
+  update public.inbox
+  set push_status = case when p_error is null then 'sent' when push_attempts >= 5 then 'failed' else 'pending' end
+  where id = p_id;
+$$;
+
+-- Expo'nun "DeviceNotRegistered" dediği adresler (uygulama kaldırılmış) silinir.
+create function public.drop_push_tokens(p_tokens text[])
+returns void
+language sql volatile security definer set search_path = ''
+as $$
+  delete from public.push_tokens where token = any (p_tokens);
+$$;
+
+-- Telefon adresini giriş yapan kullanıcıya bağlar. Aynı telefonda hesap değişirse adres yeni hesaba geçer.
+create function public.register_push_token(p_token text, p_platform text)
+returns void
+language plpgsql volatile security definer set search_path = ''
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Giriş yapmalısınız.';
+  end if;
+  insert into public.push_tokens (token, user_id, platform)
+  values (p_token, auth.uid(), p_platform)
+  on conflict (token) do update set user_id = excluded.user_id, platform = excluded.platform, updated_at = now();
+end;
+$$;
+
+-- Çıkış yaparken çağrılır.
+create function public.unregister_push_token(p_token text)
+returns void
+language sql volatile security definer set search_path = ''
+as $$
+  delete from public.push_tokens where token = p_token and user_id = auth.uid();
+$$;
+
+-- Bildirimi okundu yapar; p_id boşsa hepsini.
+create function public.mark_inbox_read(p_id uuid default null)
+returns void
+language sql volatile security definer set search_path = ''
+as $$
+  update public.inbox set read_at = now()
+  where user_id = auth.uid() and read_at is null and (p_id is null or id = p_id);
+$$;
+
 revoke execute on function public.queue_due_reminders() from public, anon, authenticated;
+revoke execute on function public.queue_review_requests() from public, anon, authenticated;
+-- Başka birinin geçmişini sorgulamak mümkün olmasın; sadece tetikleyici kullanır.
+revoke execute on function public.customer_history(uuid, text) from public, anon, authenticated;
 revoke execute on function public.claim_notifications(int) from public, anon, authenticated;
+revoke execute on function public.inbox_insert(uuid, text, text, public.appointments) from public, anon, authenticated;
+revoke execute on function public.claim_push(int) from public, anon, authenticated;
+revoke execute on function public.finish_push(uuid, text) from public, anon, authenticated;
+revoke execute on function public.drop_push_tokens(text[]) from public, anon, authenticated;
 revoke execute on function public.finish_notification(uuid, text) from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------
@@ -967,6 +1431,7 @@ end;
 $$;
 
 -- Genel bakış sayıları ve son 30 günün günlük serisi (İstanbul günleri).
+-- "active", "mrr" ve "by_plan" ücretli abonelikleri sayar; ücretsiz denemedekiler "trial"da.
 create function public.admin_stats()
 returns jsonb
 language plpgsql stable security definer set search_path = ''
@@ -980,16 +1445,21 @@ begin
     'users_30d', (select count(*) from auth.users where created_at > now() - interval '30 days'),
     'businesses', (select count(*) from public.businesses),
     'businesses_30d', (select count(*) from public.businesses where created_at > now() - interval '30 days'),
-    'active', (select count(*) from public.businesses where subscription_ends_at > now()),
+    'active', (select count(*) from public.businesses
+               where subscription_ends_at > now() and subscription_ends_at is distinct from trial_ends_at),
+    'trial', (select count(*) from public.businesses
+              where subscription_ends_at > now() and subscription_ends_at = trial_ends_at),
     'live', (select count(*) from public.businesses
              where subscription_ends_at > now() and is_published and not is_suspended),
     'suspended', (select count(*) from public.businesses where is_suspended),
     'expiring_7d', (select count(*) from public.businesses
                     where subscription_ends_at > now() and subscription_ends_at <= now() + interval '7 days'),
     'expired', (select count(*) from public.businesses where subscription_ends_at <= now()),
-    'never_paid', (select count(*) from public.businesses where subscription_ends_at is null),
+    'never_paid', (select count(*) from public.businesses b
+                   where not exists (select 1 from public.payments py where py.business_id = b.id and py.status = 'paid')),
     'mrr', (select coalesce(sum(p.price), 0) from public.businesses b
-            join public.plans p on p.id = b.plan_id where b.subscription_ends_at > now()),
+            join public.plans p on p.id = b.plan_id
+            where b.subscription_ends_at > now() and b.subscription_ends_at is distinct from b.trial_ends_at),
     'revenue_total', (select coalesce(sum(amount), 0) from public.payments where status = 'paid'),
     'revenue_30d', (select coalesce(sum(amount), 0) from public.payments
                     where status = 'paid' and paid_at > now() - interval '30 days'),
@@ -1007,7 +1477,8 @@ begin
     'by_plan', (select coalesce(jsonb_agg(jsonb_build_object(
                   'id', p.id, 'name', p.name, 'price', p.price,
                   'count', (select count(*) from public.businesses b
-                            where b.plan_id = p.id and b.subscription_ends_at > now())
+                            where b.plan_id = p.id and b.subscription_ends_at > now()
+                              and b.subscription_ends_at is distinct from b.trial_ends_at)
                 ) order by p.sort_order), '[]') from public.plans p),
     'by_category', (select coalesce(jsonb_object_agg(category, c), '{}') from (
                       select category, count(*) c from public.businesses group by category) x),
@@ -1097,6 +1568,12 @@ alter table public.plans          enable row level security;
 alter table public.payments       enable row level security;
 -- Politika yok: sadece sunucu (service_role) ve yukarıdaki fonksiyonlar erişir.
 alter table public.notifications  enable row level security;
+alter table public.push_tokens    enable row level security;
+-- Kullanıcı kendi bildirimlerini okur; okundu işaretini mark_inbox_read ile koyar.
+alter table public.inbox          enable row level security;
+
+create policy "bildirim: kendininkini okur" on public.inbox
+  for select using (user_id = auth.uid());
 
 -- profiles
 create policy "profil: kendini okur" on public.profiles
@@ -1194,11 +1671,11 @@ create policy "admin: paket günceller" on public.plans
   for update using (public.is_admin()) with check (public.is_admin());
 
 -- ---------------------------------------------------------------------
--- 5) Canlı güncelleme (panelde yeni randevular anında görünür)
+-- 5) Canlı güncelleme (panelde yeni randevular ve bildirimler anında görünür)
 -- ---------------------------------------------------------------------
 do $$
 begin
   if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
-    alter publication supabase_realtime add table public.appointments;
+    alter publication supabase_realtime add table public.appointments, public.inbox;
   end if;
 end $$;
