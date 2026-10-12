@@ -19,7 +19,7 @@ import {
   Tablet,
 } from "lucide-react";
 import { Reveal } from "@/components/reveal";
-import { Coin } from "@/components/three/coin";
+import { Shop } from "@/components/three/shop";
 import { Tilt } from "@/components/tilt";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
 import {
@@ -227,10 +227,10 @@ function HeroVisual() {
   ];
   return (
     <div className="relative mx-auto h-[36rem] max-w-lg lg:h-[38rem] lg:max-w-none">
-      {/* Işık ve 3D madalyon */}
+      {/* Işık ve 3D dükkân */}
       <div className="absolute right-0 top-6 -z-10 size-80 rounded-full bg-gold/10 blur-3xl" />
       <div className="absolute bottom-10 left-0 -z-10 size-72 rounded-full bg-brand-400/15 blur-3xl" />
-      <Coin
+      <Shop
         className="absolute inset-0"
         focus={{ x: 0.28, y: 0.38 }}
         scale={1.25}

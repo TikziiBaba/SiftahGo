@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Giriş Yap" };
 
 export default function LoginPage() {
   return (
-    <AuthShell title="Giriş Yap">
+    <AuthShell title="Tekrar hoş geldiniz" subtitle="Randevularınıza ve işletme panelinize devam edin.">
       <LoginForm />
     </AuthShell>
   );

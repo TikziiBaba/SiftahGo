@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Şifremi Unuttum" };
 
 export default function ForgotPasswordPage() {
   return (
-    <AuthShell title="Şifremi Unuttum">
+    <AuthShell title="Şifremi unuttum" subtitle="E-posta adresinizi girin, size şifre yenileme bağlantısı gönderelim.">
       <ForgotPasswordForm />
     </AuthShell>
   );

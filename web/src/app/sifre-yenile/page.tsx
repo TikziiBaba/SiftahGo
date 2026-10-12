@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Yeni Şifre" };
 
 export default function ResetPasswordPage() {
   return (
-    <AuthShell title="Yeni Şifre Belirleyin">
+    <AuthShell title="Yeni şifre belirleyin" subtitle="Hesabınız için yeni bir şifre seçin.">
       <ResetPasswordForm />
     </AuthShell>
   );

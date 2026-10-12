@@ -3,12 +3,51 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Loader2, MailCheck, Store, User } from "lucide-react";
+import { AlertCircle, Eye, EyeOff, Loader2, Lock, Mail, MailCheck, Phone, Store, User, type LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { errorMessage } from "@/lib/format";
 
 function safeNext(next: string | null) {
   return next && next.startsWith("/") && !next.startsWith("//") ? next : null;
+}
+
+type InputProps = React.InputHTMLAttributes<HTMLInputElement> & { id: string };
+
+/** Solunda ikon olan giriş alanı; `type="password"` ise göster/gizle düğmesi eklenir. */
+function Field({ label, icon: Icon, aside, ...input }: InputProps & { label: string; icon: LucideIcon; aside?: React.ReactNode }) {
+  const [show, setShow] = useState(false);
+  const isPassword = input.type === "password";
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center justify-between">
+        <label className="label mb-0" htmlFor={input.id}>{label}</label>
+        {aside}
+      </div>
+      <div className="relative">
+        <Icon className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-3" />
+        <input {...input} type={isPassword && show ? "text" : input.type} className={`input py-3 pl-10 ${isPassword ? "pr-11" : ""}`} />
+        {isPassword && (
+          <button
+            type="button"
+            onClick={() => setShow(!show)}
+            aria-label={show ? "Şifreyi gizle" : "Şifreyi göster"}
+            className="absolute right-1.5 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-lg text-ink-3 transition hover:bg-white/[0.05] hover:text-ink"
+          >
+            {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FormError({ children }: { children: React.ReactNode }) {
+  return (
+    <p role="alert" className="flex items-start gap-2 rounded-xl border border-rose-500/20 bg-rose-500/10 px-3.5 py-2.5 text-sm text-rose-300">
+      <AlertCircle className="mt-0.5 size-4 shrink-0" />
+      <span>{children}</span>
+    </p>
+  );
 }
 
 /**
@@ -53,7 +92,7 @@ function GoogleButton({ next, business }: { next: string | null; business?: bool
       <button type="button" disabled={busy} onClick={go} className="btn btn-secondary w-full py-3">
         {busy ? <Loader2 className="size-4 animate-spin" /> : <GoogleMark />} Google ile devam et
       </button>
-      {error && <p className="mt-2 text-sm text-rose-400">{error}</p>}
+      {error && <div className="mt-2"><FormError>{error}</FormError></div>}
       <div className="my-5 flex items-center gap-3 text-xs text-ink-3">
         <span className="h-px flex-1 bg-line" /> veya e-posta ile <span className="h-px flex-1 bg-line" />
       </div>
@@ -107,18 +146,19 @@ export function LoginForm() {
   return (
     <form onSubmit={submit} className="space-y-4">
       <GoogleButton next={safeNext(params.get("next"))} />
-      <div>
-        <label className="label" htmlFor="email">E-posta</label>
-        <input id="email" type="email" required autoComplete="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} />
-      </div>
-      <div>
-        <div className="mb-1.5 flex items-center justify-between">
-          <label className="label mb-0" htmlFor="password">Şifre</label>
-          <Link href="/sifremi-unuttum" className="text-sm text-brand-300 hover:underline">Şifremi unuttum</Link>
-        </div>
-        <input id="password" type="password" required autoComplete="current-password" className="input" value={password} onChange={(e) => setPassword(e.target.value)} />
-      </div>
-      {error && <p className="text-sm text-rose-400">{error}</p>}
+      <Field id="email" label="E-posta" icon={Mail} type="email" required autoComplete="email" placeholder="ornek@eposta.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+      <Field
+        id="password"
+        label="Şifre"
+        icon={Lock}
+        type="password"
+        required
+        autoComplete="current-password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        aside={<Link href="/sifremi-unuttum" className="text-sm text-brand-300 hover:underline">Şifremi unuttum</Link>}
+      />
+      {error && <FormError>{error}</FormError>}
       <button disabled={busy} className="btn btn-primary w-full py-3">
         {busy && <Loader2 className="size-4 animate-spin" />} Giriş Yap
       </button>
@@ -176,41 +216,37 @@ export function SignupForm() {
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Hesap türü">
         {([
-          ["customer", "Randevu almak istiyorum", User],
-          ["business", "İşletmem var", Store],
-        ] as const).map(([value, text, Icon]) => (
+          ["customer", "Müşteriyim", "Randevu almak istiyorum", User],
+          ["business", "İşletmem var", "Randevu vermek istiyorum", Store],
+        ] as const).map(([value, text, hint, Icon]) => (
           <button
             key={value}
             type="button"
+            role="radio"
+            aria-checked={role === value}
             onClick={() => setRole(value)}
-            className={`flex flex-col items-center gap-1.5 rounded-xl border p-3 text-sm font-medium transition ${
-              role === value ? "border-brand-400 bg-brand-400/10 text-brand-300 ring-2 ring-brand-400/20" : "border-line text-ink-2"
+            className={`flex flex-col items-start gap-2.5 rounded-2xl border p-3.5 text-left transition duration-300 ease-spring ${
+              role === value ? "border-brand-400/60 bg-brand-400/10 ring-4 ring-brand-400/10" : "border-line hover:border-line-strong hover:bg-white/[0.02]"
             }`}
           >
-            <Icon className="size-5" /> {text}
+            <span className={`grid size-8 place-items-center rounded-lg ${role === value ? "bg-brand-400 text-brand-950" : "bg-white/[0.05] text-ink-2"}`}>
+              <Icon className="size-4" />
+            </span>
+            <span>
+              <span className={`block text-sm font-medium ${role === value ? "text-ink" : "text-ink-2"}`}>{text}</span>
+              <span className="mt-0.5 block text-xs leading-snug text-ink-3">{hint}</span>
+            </span>
           </button>
         ))}
       </div>
       <GoogleButton next={target} business={role === "business"} />
-      <div>
-        <label className="label" htmlFor="full_name">Ad Soyad</label>
-        <input id="full_name" required autoComplete="name" className="input" value={form.full_name} onChange={set("full_name")} />
-      </div>
-      <div>
-        <label className="label" htmlFor="phone">Telefon</label>
-        <input id="phone" type="tel" autoComplete="tel" placeholder="05xx xxx xx xx" className="input" value={form.phone} onChange={set("phone")} />
-      </div>
-      <div>
-        <label className="label" htmlFor="email">E-posta</label>
-        <input id="email" type="email" required autoComplete="email" className="input" value={form.email} onChange={set("email")} />
-      </div>
-      <div>
-        <label className="label" htmlFor="password">Şifre</label>
-        <input id="password" type="password" required minLength={6} autoComplete="new-password" className="input" value={form.password} onChange={set("password")} />
-      </div>
-      {error && <p className="text-sm text-rose-400">{error}</p>}
+      <Field id="full_name" label="Ad Soyad" icon={User} required autoComplete="name" value={form.full_name} onChange={set("full_name")} />
+      <Field id="phone" label="Telefon" icon={Phone} type="tel" autoComplete="tel" placeholder="05xx xxx xx xx" value={form.phone} onChange={set("phone")} />
+      <Field id="email" label="E-posta" icon={Mail} type="email" required autoComplete="email" placeholder="ornek@eposta.com" value={form.email} onChange={set("email")} />
+      <Field id="password" label="Şifre" icon={Lock} type="password" required minLength={6} autoComplete="new-password" placeholder="En az 6 karakter" value={form.password} onChange={set("password")} />
+      {error && <FormError>{error}</FormError>}
       <button disabled={busy} className="btn btn-primary w-full py-3">
         {busy && <Loader2 className="size-4 animate-spin" />} {role === "business" ? "İşletme Hesabı Aç" : "Hesap Aç"}
       </button>
@@ -258,12 +294,8 @@ export function ForgotPasswordForm() {
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <p className="text-sm text-ink-2">Hesabınızın e-posta adresini girin, size şifre yenileme bağlantısı gönderelim.</p>
-      <div>
-        <label className="label" htmlFor="email">E-posta</label>
-        <input id="email" type="email" required autoComplete="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} />
-      </div>
-      {error && <p className="text-sm text-rose-400">{error}</p>}
+      <Field id="email" label="E-posta" icon={Mail} type="email" required autoComplete="email" placeholder="ornek@eposta.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+      {error && <FormError>{error}</FormError>}
       <button disabled={busy} className="btn btn-primary w-full py-3">
         {busy && <Loader2 className="size-4 animate-spin" />} Bağlantı Gönder
       </button>
@@ -298,14 +330,11 @@ export function ResetPasswordForm() {
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <div>
-        <label className="label" htmlFor="password">Yeni şifre</label>
-        <input id="password" type="password" required minLength={6} autoComplete="new-password" className="input" value={password} onChange={(e) => setPassword(e.target.value)} />
-      </div>
+      <Field id="password" label="Yeni şifre" icon={Lock} type="password" required minLength={6} autoComplete="new-password" placeholder="En az 6 karakter" value={password} onChange={(e) => setPassword(e.target.value)} />
       {error && (
-        <p className="text-sm text-rose-400">
+        <FormError>
           {error} <Link href="/sifremi-unuttum" className="underline">Yeni bağlantı iste</Link>
-        </p>
+        </FormError>
       )}
       <button disabled={busy} className="btn btn-primary w-full py-3">
         {busy && <Loader2 className="size-4 animate-spin" />} Şifreyi Kaydet

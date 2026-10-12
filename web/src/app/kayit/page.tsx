@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Kayıt Ol" };
 
 export default function SignupPage() {
   return (
-    <AuthShell title="Hesap Aç">
+    <AuthShell title="Hesap aç" subtitle="Ücretsiz, bir dakikadan kısa sürer.">
       <SignupForm />
     </AuthShell>
   );
