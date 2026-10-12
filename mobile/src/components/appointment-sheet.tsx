@@ -26,7 +26,7 @@ export function AppointmentSheet({
   /** Durum değişti; mesaj ekranda gösterilir */
   onChanged: (message: string) => void;
 }) {
-  const [busy, setBusy] = useState<AppointmentStatus | null>(null);
+  const [busy, setBusy] = useState<AppointmentStatus | 'block' | null>(null);
   const [error, setError] = useState('');
   // Saat seçimi açık olan randevu; başka randevu açılınca kendiliğinden kapanır.
   const [movingId, setMovingId] = useState<string | null>(null);
@@ -48,6 +48,30 @@ export function AppointmentSheet({
       { text: 'Vazgeç', style: 'cancel' },
       { text: 'İptal et', style: 'destructive', onPress: () => setStatus('cancelled') },
     ]);
+  }
+
+  // Müşteriyi engeller: sayfadan online randevu alamaz, bu işletmedeki yaklaşan randevuları iptal olur.
+  function confirmBlock() {
+    if (!a) return;
+    Alert.alert(
+      `${a.customer_name} engellensin mi?`,
+      'Online randevu alamaz ve yaklaşan randevuları iptal edilir. Engeli web panelindeki Ayarlar’dan kaldırabilirsiniz.',
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        {
+          text: 'Engelle',
+          style: 'destructive',
+          onPress: async () => {
+            setBusy('block');
+            setError('');
+            const { error } = await supabase.rpc('block_customer', { p_appointment_id: a.id });
+            setBusy(null);
+            if (error) return setError(errorMessage(error));
+            onChanged(`${a.customer_name} engellendi`);
+          },
+        },
+      ],
+    );
   }
 
   function close() {
@@ -149,6 +173,9 @@ export function AppointmentSheet({
                   ))}
               </View>
             </View>
+          )}
+          {a.customer_id && (
+            <Button title="Müşteriyi engelle" icon="ban-outline" variant="dangerGhost" onPress={confirmBlock} loading={busy === 'block'} />
           )}
         </>
       )}

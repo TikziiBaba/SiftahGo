@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AuthShell, GoogleButton, PasswordField } from '@/components/auth-shell';
+import { useCaptcha } from '@/components/turnstile';
 import { Banner, Button, Empty, Field, styles, Text } from '@/components/ui';
 import { WEB_URL, type IconName } from '@/lib/constants';
 import { errorMessage } from '@/lib/format';
@@ -23,6 +24,7 @@ export default function SignupScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [sentTo, setSentTo] = useState('');
+  const captcha = useCaptcha();
 
   async function submit() {
     if (form.full_name.trim().length < 2) return setError('Adınızı ve soyadınızı yazın.');
@@ -36,11 +38,13 @@ export default function SignupScreen() {
       options: {
         data: { full_name: form.full_name.trim(), phone: form.phone.trim(), role },
         emailRedirectTo: `${WEB_URL}/auth/callback?next=${role === 'business' ? '/panel' : '/hesabim'}`,
+        captchaToken: captcha.token,
       },
     });
     setBusy(false);
     if (error) {
       haptic.error();
+      captcha.retry();
       return setError(errorMessage(error));
     }
     if (!data.session) return setSentTo(form.email.trim());
@@ -103,8 +107,9 @@ export default function SignupScreen() {
       {role === 'business' && (
         <Banner icon="storefront-outline" text="Sonraki adımda işletmenizin adını, kategorisini ve şehrini girip sayfanızı oluşturacaksınız." />
       )}
+      {captcha.widget}
       {error ? <Banner tone="danger" icon="alert-circle-outline" text={error} /> : null}
-      <Button title={role === 'business' ? 'İşletme hesabı aç' : 'Hesap aç'} size="lg" onPress={submit} loading={busy} />
+      <Button title={role === 'business' ? 'İşletme hesabı aç' : 'Hesap aç'} size="lg" onPress={submit} loading={busy} disabled={!captcha.ready} />
       <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 4, marginTop: 8 }}>
         <Text tone="muted">Zaten hesabınız var mı?</Text>
         <Button title="Giriş yapın" variant="ghost" size="sm" onPress={() => router.replace('/giris')} />

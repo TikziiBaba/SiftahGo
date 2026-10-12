@@ -140,3 +140,27 @@ export type Appointment = {
   customer_flagged: boolean;
   created_at: string;
 };
+
+// Site ayarları (tek satır). phone_verification açıkken randevu için WhatsApp ile telefon doğrulaması gerekir.
+export type AppSettings = {
+  phone_verification: boolean;
+  whatsapp_number: string;
+};
+
+export type PhoneVerification = {
+  user_id: string;
+  code: string | null;
+  code_expires_at: string | null;
+  phone: string | null;
+  verified_at: string | null;
+};
+
+// İşletmenin online randevusunu engellediği müşteri
+export type BlockedCustomer = {
+  id: string;
+  business_id: string;
+  customer_id: string | null;
+  phone_key: string | null;
+  customer_name: string;
+  created_at: string;
+};

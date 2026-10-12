@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { View } from 'react-native';
 
 import { AuthShell } from '@/components/auth-shell';
+import { useCaptcha } from '@/components/turnstile';
 import { Banner, Button, Empty, Field, styles } from '@/components/ui';
 import { WEB_URL } from '@/lib/constants';
 import { errorMessage } from '@/lib/format';
@@ -13,6 +14,7 @@ export default function ForgotPasswordScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [sent, setSent] = useState(false);
+  const captcha = useCaptcha();
 
   async function submit() {
     if (!email.trim()) return setError('E-posta adresinizi yazın.');
@@ -21,9 +23,13 @@ export default function ForgotPasswordScreen() {
     // Yeni şifre web sitesinde belirlenir (web ile aynı akış).
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
       redirectTo: `${WEB_URL}/auth/callback?next=/sifre-yenile`,
+      captchaToken: captcha.token,
     });
     setBusy(false);
-    if (error) return setError(errorMessage(error));
+    if (error) {
+      captcha.retry();
+      return setError(errorMessage(error));
+    }
     setSent(true);
   }
 
@@ -53,8 +59,9 @@ export default function ForgotPasswordScreen() {
         onSubmitEditing={submit}
         returnKeyType="send"
       />
+      {captcha.widget}
       {error ? <Banner tone="danger" icon="alert-circle-outline" text={error} /> : null}
-      <Button title="Bağlantı gönder" size="lg" onPress={submit} loading={busy} />
+      <Button title="Bağlantı gönder" size="lg" onPress={submit} loading={busy} disabled={!captcha.ready} />
     </AuthShell>
   );
 }

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { View } from 'react-native';
 
 import { AuthShell, GoogleButton, PasswordField } from '@/components/auth-shell';
+import { useCaptcha } from '@/components/turnstile';
 import { Banner, Button, Field, Text } from '@/components/ui';
 import { errorMessage } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
@@ -13,15 +14,17 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const captcha = useCaptcha();
 
   async function submit() {
     if (!email.trim() || !password) return setError('E-posta ve şifrenizi yazın.');
     setBusy(true);
     setError('');
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password, options: { captchaToken: captcha.token } });
     setBusy(false);
     if (error) {
       haptic.error();
+      captcha.retry();
       return setError(errorMessage(error));
     }
     router.back();
@@ -45,8 +48,9 @@ export default function LoginScreen() {
       <View style={{ alignItems: 'flex-end', marginTop: -4 }}>
         <Button title="Şifremi unuttum" variant="ghost" size="sm" onPress={() => router.push('/sifremi-unuttum')} />
       </View>
+      {captcha.widget}
       {error ? <Banner tone="danger" icon="alert-circle-outline" text={error} /> : null}
-      <Button title="Giriş Yap" size="lg" onPress={submit} loading={busy} />
+      <Button title="Giriş Yap" size="lg" onPress={submit} loading={busy} disabled={!captcha.ready} />
       <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 4, marginTop: 8 }}>
         <Text tone="muted">Hesabınız yok mu?</Text>
         <Button title="Kayıt olun" variant="ghost" size="sm" onPress={() => router.replace('/kayit')} />
