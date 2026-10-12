@@ -1104,7 +1104,7 @@ function Faq() {
     ],
     [
       "Randevu hatırlatması nasıl gidiyor?",
-      "Randevunun yanındaki “WhatsApp ile hatırlat” düğmesi, tarih ve saatin yazılı olduğu hazır mesajı açar; tek dokunuşla gönderirsiniz.",
+      "Müşterinize randevudan 1 gün ve 2 saat önce otomatik e-posta ve uygulama bildirimi gider. Ayrıca randevunun yanındaki “WhatsApp ile hatırlat” düğmesi, tarih ve saatin yazılı olduğu hazır mesajı açar; tek dokunuşla gönderirsiniz.",
     ],
     [
       "Öğle arası, tatil ya da izin günü?",

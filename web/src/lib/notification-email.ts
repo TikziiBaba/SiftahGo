@@ -4,7 +4,7 @@ import type { AppointmentStatus } from "@/lib/types";
 /** claim_notifications satırı */
 export type QueuedNotification = {
   id: string;
-  kind: "booked" | "confirmed" | "cancelled" | "rescheduled" | "reminder" | "review";
+  kind: "booked" | "confirmed" | "cancelled" | "rescheduled" | "reminder" | "reminder_soon" | "review";
   recipient: "customer" | "business";
   email: string;
   customer_name: string;
@@ -154,6 +154,14 @@ function content(n: QueuedNotification, appUrl: string): Content {
         subject: `Hatırlatma: ${n.business_name}, ${when}`,
         title: "Randevunuzu hatırlatırız",
         intro: `Merhaba ${n.customer_name.split(" ")[0]}, randevunuz yaklaşıyor. Gelemeyecekseniz lütfen işletmeye haber verin.`,
+        rows: forCustomer,
+        action: businessPage,
+      };
+    case "reminder_soon":
+      return {
+        subject: `2 saat sonra: ${n.business_name}, ${when}`,
+        title: "Randevunuza az kaldı",
+        intro: `Merhaba ${n.customer_name.split(" ")[0]}, randevunuz yaklaşık 2 saat sonra. Gelemeyecekseniz lütfen hemen işletmeye haber verin.`,
         rows: forCustomer,
         action: businessPage,
       };

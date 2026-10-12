@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AlertCircle, Eye, EyeOff, Loader2, Lock, Mail, MailCheck, Phone, Store, User, type LucideIcon } from "lucide-react";
+import { Turnstile, turnstileEnabled } from "@/components/turnstile";
 import { createClient } from "@/lib/supabase/client";
 import { errorMessage } from "@/lib/format";
 
@@ -39,6 +40,21 @@ function Field({ label, icon: Icon, aside, ...input }: InputProps & { label: str
       </div>
     </div>
   );
+}
+
+/** Bot kontrolü token'ı. Token tek kullanımlık: her denemeden sonra `retry` ile yenilenir. */
+function useCaptcha() {
+  const [token, setToken] = useState<string | null>(null);
+  const [key, setKey] = useState(0);
+  return {
+    token: token ?? undefined,
+    ready: !turnstileEnabled || !!token,
+    widget: <Turnstile key={key} onToken={setToken} />,
+    retry: () => {
+      setToken(null);
+      setKey((k) => k + 1);
+    },
+  };
 }
 
 function FormError({ children }: { children: React.ReactNode }) {
@@ -117,6 +133,7 @@ export function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const captcha = useCaptcha();
   const [error, setError] = useState(
     params.get("hata") === "google"
       ? "Google ile giriş tamamlanamadı. Lütfen tekrar deneyin."
@@ -130,9 +147,10 @@ export function LoginForm() {
     setBusy(true);
     setError("");
     const supabase = createClient();
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password, options: { captchaToken: captcha.token } });
     if (error) {
       setBusy(false);
+      captcha.retry();
       return setError(errorMessage(error));
     }
     const [{ data: profile }, { data: admin }] = await Promise.all([
@@ -158,8 +176,9 @@ export function LoginForm() {
         onChange={(e) => setPassword(e.target.value)}
         aside={<Link href="/sifremi-unuttum" className="text-sm text-brand-300 hover:underline">Şifremi unuttum</Link>}
       />
+      {captcha.widget}
       {error && <FormError>{error}</FormError>}
-      <button disabled={busy} className="btn btn-primary w-full py-3">
+      <button disabled={busy || !captcha.ready} className="btn btn-primary w-full py-3">
         {busy && <Loader2 className="size-4 animate-spin" />} Giriş Yap
       </button>
       <p className="text-center text-sm text-ink-3">
@@ -178,6 +197,7 @@ export function SignupForm() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [checkEmail, setCheckEmail] = useState(false);
+  const captcha = useCaptcha();
 
   const target = role === "business" ? "/panel" : safeNext(params.get("next")) ?? "/hesabim";
 
@@ -191,10 +211,14 @@ export function SignupForm() {
       options: {
         data: { full_name: form.full_name.trim(), phone: form.phone.trim(), role },
         emailRedirectTo: `${location.origin}/auth/callback?next=${encodeURIComponent(target)}`,
+        captchaToken: captcha.token,
       },
     });
     setBusy(false);
-    if (error) return setError(errorMessage(error));
+    if (error) {
+      captcha.retry();
+      return setError(errorMessage(error));
+    }
     if (!data.session) return setCheckEmail(true);
     router.replace(target);
     router.refresh();
@@ -246,8 +270,9 @@ export function SignupForm() {
       <Field id="phone" label="Telefon" icon={Phone} type="tel" autoComplete="tel" placeholder="05xx xxx xx xx" value={form.phone} onChange={set("phone")} />
       <Field id="email" label="E-posta" icon={Mail} type="email" required autoComplete="email" placeholder="ornek@eposta.com" value={form.email} onChange={set("email")} />
       <Field id="password" label="Şifre" icon={Lock} type="password" required minLength={6} autoComplete="new-password" placeholder="En az 6 karakter" value={form.password} onChange={set("password")} />
+      {captcha.widget}
       {error && <FormError>{error}</FormError>}
-      <button disabled={busy} className="btn btn-primary w-full py-3">
+      <button disabled={busy || !captcha.ready} className="btn btn-primary w-full py-3">
         {busy && <Loader2 className="size-4 animate-spin" />} {role === "business" ? "İşletme Hesabı Aç" : "Hesap Aç"}
       </button>
       <p className="text-center text-xs leading-relaxed text-ink-3">
@@ -268,6 +293,7 @@ export function ForgotPasswordForm() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
+  const captcha = useCaptcha();
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -275,9 +301,13 @@ export function ForgotPasswordForm() {
     setError("");
     const { error } = await createClient().auth.resetPasswordForEmail(email.trim(), {
       redirectTo: `${location.origin}/auth/callback?next=/sifre-yenile`,
+      captchaToken: captcha.token,
     });
     setBusy(false);
-    if (error) return setError(errorMessage(error));
+    if (error) {
+      captcha.retry();
+      return setError(errorMessage(error));
+    }
     setSent(true);
   }
 
@@ -295,8 +325,9 @@ export function ForgotPasswordForm() {
   return (
     <form onSubmit={submit} className="space-y-4">
       <Field id="email" label="E-posta" icon={Mail} type="email" required autoComplete="email" placeholder="ornek@eposta.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+      {captcha.widget}
       {error && <FormError>{error}</FormError>}
-      <button disabled={busy} className="btn btn-primary w-full py-3">
+      <button disabled={busy || !captcha.ready} className="btn btn-primary w-full py-3">
         {busy && <Loader2 className="size-4 animate-spin" />} Bağlantı Gönder
       </button>
       <p className="text-center text-sm">

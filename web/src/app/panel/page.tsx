@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, CalendarClock, CalendarPlus, ChevronLeft, ChevronRight, Loader2, MessageCircle, Phone, X } from "lucide-react";
+import { AlertTriangle, Ban, CalendarClock, CalendarPlus, ChevronLeft, ChevronRight, Loader2, MessageCircle, Phone, X } from "lucide-react";
 import { useBusiness } from "@/components/panel-context";
 import { RescheduleDialog } from "@/components/reschedule-dialog";
 import { createClient } from "@/lib/supabase/client";
@@ -88,6 +88,15 @@ export default function AppointmentsPage() {
     load();
   }
 
+  // Müşteriyi engeller: sayfadan online randevu alamaz, bu işletmedeki yaklaşan randevuları iptal olur.
+  async function block(r: Row) {
+    if (!confirm(`${r.customer_name} engellensin mi? Online randevu alamaz ve yaklaşan randevuları iptal edilir. Engeli Ayarlar'dan kaldırabilirsiniz.`)) return;
+    setError("");
+    const { error } = await supabase.rpc("block_customer", { p_appointment_id: r.id });
+    if (error) setError(errorMessage(error));
+    load();
+  }
+
   const active = (rows ?? []).filter((r) => r.status !== "cancelled");
   const revenue = active.filter((r) => r.status !== "no_show").reduce((sum, r) => sum + Number(r.price), 0);
 
@@ -133,6 +142,11 @@ export default function AppointmentsPage() {
                 </span>
                 <button className="btn btn-primary py-1.5" onClick={() => setStatus(r.id, "confirmed")}>Onayla</button>
                 <button className="btn btn-ghost py-1.5 text-rose-400" onClick={() => setStatus(r.id, "cancelled")}>Reddet</button>
+                {r.customer_id && (
+                  <button className="btn btn-ghost py-1.5 text-rose-400" onClick={() => block(r)} title="Reddet ve engelle">
+                    <Ban className="size-4" /> Engelle
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -178,6 +192,11 @@ export default function AppointmentsPage() {
                     {["pending", "confirmed"].includes(r.status) && r.service_id && new Date(r.starts_at).getTime() > loadedAt && (
                       <button onClick={() => setMoving(r)} className="inline-flex items-center gap-1 text-brand-300">
                         <CalendarClock className="size-3.5" /> Saati değiştir
+                      </button>
+                    )}
+                    {r.customer_id && (
+                      <button onClick={() => block(r)} className="inline-flex items-center gap-1 text-rose-400">
+                        <Ban className="size-3.5" /> Engelle
                       </button>
                     )}
                   </div>

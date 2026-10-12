@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { CalendarPlus, CheckCircle2, ChevronLeft, Loader2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { BadgeCheck, CalendarPlus, CheckCircle2, ChevronLeft, Loader2 } from "lucide-react";
+import { PhoneVerify } from "@/components/phone-verify";
 import { bookableDays, DayStrip, SlotGrid } from "@/components/slot-picker";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -14,7 +15,7 @@ import {
   googleCalendarLink,
   todayStr,
 } from "@/lib/format";
-import type { Business, Service, Staff, StaffService, WorkingHour } from "@/lib/types";
+import type { AppSettings, Business, Service, Staff, StaffService, WorkingHour } from "@/lib/types";
 
 type Props = { business: Business; services: Service[]; staff: Staff[]; staffServices: StaffService[]; hours: WorkingHour[] };
 
@@ -27,8 +28,12 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
   const [day, setDay] = useState(() => days.find((d) => d.open)?.day ?? todayStr());
   const [slotResult, setSlotResult] = useState<{ key: string; times: string[] } | null>(null);
   const [time, setTime] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: "", phone: "", email: "", note: "" });
-  const [loggedIn, setLoggedIn] = useState(false);
+  const [form, setForm] = useState({ name: "", phone: "", note: "" });
+  // null: oturum henüz bilinmiyor. Randevu için giriş zorunlu.
+  const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
+  // WhatsApp ile doğrulanmış numara; doğrulama açıksa randevuya bu yazılır.
+  const [verifiedPhone, setVerifiedPhone] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   // Alınan randevunun durumu; sık iptal eden müşteride işletme ayarından bağımsız "pending" olur.
@@ -45,13 +50,28 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
 
 
   useEffect(() => {
+    supabase
+      .from("app_settings")
+      .select("phone_verification, whatsapp_number")
+      .maybeSingle()
+      .then(({ data }) => setSettings(data));
     supabase.auth.getUser().then(async ({ data }) => {
-      if (!data.user) return;
+      if (!data.user) return setLoggedIn(false);
       setLoggedIn(true);
-      const { data: p } = await supabase.from("profiles").select("full_name, phone").eq("id", data.user.id).maybeSingle();
+      const [{ data: p }, { data: v }] = await Promise.all([
+        supabase.from("profiles").select("full_name, phone").eq("id", data.user.id).maybeSingle(),
+        supabase.from("phone_verifications").select("phone, verified_at").maybeSingle(),
+      ]);
       if (p) setForm((f) => ({ ...f, name: f.name || p.full_name, phone: f.phone || p.phone || "" }));
+      if (v?.verified_at && v.phone) setVerifiedPhone(v.phone);
     });
   }, [supabase]);
+
+  const onVerified = useCallback((phone: string) => {
+    setVerifiedPhone(phone);
+    setError("");
+  }, []);
+  const needsVerification = !!settings?.phone_verification && !verifiedPhone;
 
   useEffect(() => {
     if (!serviceId) return;
@@ -85,10 +105,8 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
       p_staff_id: staffId || null,
       p_starts_at: time,
       p_customer_name: form.name,
-      p_customer_phone: form.phone,
+      p_customer_phone: settings?.phone_verification && verifiedPhone ? verifiedPhone : form.phone,
       p_note: form.note,
-      // Girişli müşteride boş bırakılır; hesap e-postası kullanılır.
-      p_customer_email: form.email || null,
     });
     setBusy(false);
     if (error) {
@@ -135,11 +153,7 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
           >
             <CalendarPlus className="size-4" /> Takvime ekle
           </a>
-          {loggedIn ? (
-            <Link href="/hesabim" className="btn btn-primary">Randevularım</Link>
-          ) : (
-            <Link href="/kayit" className="btn btn-primary">Hesap aç, randevularını takip et</Link>
-          )}
+          <Link href="/hesabim" className="btn btn-primary">Randevularım</Link>
           <button
             className="btn btn-secondary"
             onClick={() => {
@@ -227,7 +241,25 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
         </Step>
       )}
 
-      {service && time && (
+      {service && time && loggedIn === false && (
+        <div className="mt-6 rounded-2xl bg-surface-2 p-4 text-center md:p-5">
+          <button type="button" onClick={() => setTime(null)} className="mb-3 flex items-center gap-1 text-sm text-ink-3">
+            <ChevronLeft className="size-4" /> Saati değiştir
+          </button>
+          <p className="font-medium">
+            {formatDate(time)}, {formatTime(time)} · {service.name}
+          </p>
+          <p className="mt-2 text-sm text-ink-3">
+            Randevuyu tamamlamak için giriş yapın. Hesabınızla randevularınızı takip eder, gerekirse erteler veya iptal edersiniz.
+          </p>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            <Link href={`/giris?next=/${business.slug}`} className="btn btn-primary">Giriş yap</Link>
+            <Link href={`/kayit?next=/${business.slug}`} className="btn btn-secondary">Hesap aç</Link>
+          </div>
+        </div>
+      )}
+
+      {service && time && loggedIn && (
         <form onSubmit={submit} className="mt-6 rounded-2xl bg-surface-2 p-4 md:p-5">
           <button type="button" onClick={() => setTime(null)} className="mb-3 flex items-center gap-1 text-sm text-ink-3">
             <ChevronLeft className="size-4" /> Saati değiştir
@@ -242,28 +274,29 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
             </div>
             <div>
               <label className="label" htmlFor="phone">Telefon</label>
-              <input
-                id="phone"
-                required
-                type="tel"
-                placeholder="05xx xxx xx xx"
-                className="input"
-                value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              />
-            </div>
-            {!loggedIn && (
-              <div className="sm:col-span-2">
-                <label className="label" htmlFor="email">E-posta (isteğe bağlı)</label>
+              {settings?.phone_verification ? (
+                verifiedPhone ? (
+                  <p id="phone" className="input flex items-center gap-2 text-ink-2">
+                    {verifiedPhone} <BadgeCheck className="size-4 text-emerald-400" aria-label="Doğrulandı" />
+                  </p>
+                ) : (
+                  <p id="phone" className="input text-ink-3">Aşağıdan doğrulayın</p>
+                )
+              ) : (
                 <input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  placeholder="Onay ve hatırlatma e-postası için"
+                  id="phone"
+                  required
+                  type="tel"
+                  placeholder="05xx xxx xx xx"
                   className="input"
-                  value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
                 />
+              )}
+            </div>
+            {needsVerification && settings && (
+              <div className="sm:col-span-2">
+                <PhoneVerify whatsappNumber={settings.whatsapp_number} onVerified={onVerified} />
               </div>
             )}
             <div className="sm:col-span-2">
@@ -272,18 +305,13 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
             </div>
           </div>
           {error && <p className="mt-3 text-sm text-rose-400">{error}</p>}
-          <button disabled={busy} className="btn btn-primary mt-4 w-full py-3 text-base">
+          <button disabled={busy || needsVerification} className="btn btn-primary mt-4 w-full py-3 text-base">
             {busy && <Loader2 className="size-4 animate-spin" />} Randevuyu Onayla
           </button>
           <p className="mt-3 text-center text-xs text-ink-3">
             Randevu bilgileriniz işletmeye iletilir; kişisel verileriniz{" "}
             <Link href="/yasal/gizlilik" className="underline">Gizlilik ve KVKK metnine</Link> göre işlenir.
           </p>
-          {!loggedIn && (
-            <p className="mt-3 text-center text-xs text-ink-3">
-              Randevularınızı takip etmek için <Link href="/giris" className="underline">giriş yapabilirsiniz</Link>.
-            </p>
-          )}
         </form>
       )}
     </section>
