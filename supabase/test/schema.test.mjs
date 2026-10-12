@@ -89,15 +89,15 @@ ok((await db.query(`select subscription_ends_at from businesses where id = $1`, 
 await expectError(() => as(C, `select * from create_payment('esnaf')`), /Önce işletmenizi/, 'işletmesi olmayan ödeme başlatamaz');
 await expectError(() => as(A, `select * from create_payment('yok')`), /Paket bulunamadı/, 'olmayan paket reddedildi');
 const pay = (await as(A, `select * from create_payment('esnaf')`)).rows[0];
-ok(/^SG[0-9a-f0-9]+$/i.test(pay.merchant_oid) && Number(pay.amount) === 449, `ödeme kaydı: ${pay.merchant_oid} ₺${pay.amount}`);
+ok(/^SG[0-9a-f0-9]+$/i.test(pay.merchant_oid) && Number(pay.amount) === 649, `ödeme kaydı: ${pay.merchant_oid} ₺${pay.amount}`);
 ok((await as(A, `select id from payments`)).rows.length === 1 && (await as(C, `select id from payments`)).rows.length === 0, 'ödemeleri sadece işletme sahibi görür');
-await expectError(() => as(A, `select activate_subscription($1, 449)`, [pay.merchant_oid]), /permission denied/, 'abonelik istemciden onaylanamaz');
+await expectError(() => as(A, `select activate_subscription($1, 649)`, [pay.merchant_oid]), /permission denied/, 'abonelik istemciden onaylanamaz');
 await expectError(() => db.query(`select activate_subscription($1, 400)`, [pay.merchant_oid]), /eksik/, 'eksik tutarla onay reddedildi');
-await db.query(`select activate_subscription($1, 449)`, [pay.merchant_oid]);
+await db.query(`select activate_subscription($1, 649)`, [pay.merchant_oid]);
 const sub1 = (await db.query(`select plan_id, subscription_ends_at from businesses where id = $1`, [biz])).rows[0];
 const days = (sub1.subscription_ends_at - Date.now()) / 864e5;
 ok(sub1.plan_id === 'esnaf' && days > 29.9 && days < 30.1, `ödeme sonrası 30 gün Esnaf paketi: ${days.toFixed(2)} gün`);
-await db.query(`select activate_subscription($1, 449)`, [pay.merchant_oid]);
+await db.query(`select activate_subscription($1, 649)`, [pay.merchant_oid]);
 ok((await db.query(`select subscription_ends_at from businesses where id = $1`, [biz])).rows[0].subscription_ends_at.getTime() === sub1.subscription_ends_at.getTime(), 'tekrar gelen bildirim süreyi uzatmaz');
 
 // sayfa özelleştirme
@@ -482,7 +482,7 @@ ok((await slots(svc30, monday)).length === 0, 'işletme kapalı gün');
 
 // paket düşürme: Başlangıç (1 personel) -> fazla personel pasif olur
 const pay2 = (await as(A, `select * from create_payment('baslangic')`)).rows[0];
-await db.query(`select activate_subscription($1, 249)`, [pay2.merchant_oid]);
+await db.query(`select activate_subscription($1, 349)`, [pay2.merchant_oid]);
 const sub2 = (await db.query(`select plan_id, subscription_ends_at from businesses where id = $1`, [biz])).rows[0];
 ok(sub2.plan_id === 'baslangic' && (sub2.subscription_ends_at - Date.now()) / 864e5 > 59.9, 'yeni ödeme kalan süreye eklendi (60 gün)');
 ok((await db.query(`select count(*)::int c from staff where business_id = $1 and is_active`, [biz])).rows[0].c === 1, 'küçük pakete geçince fazla personel pasif oldu');
@@ -537,7 +537,7 @@ await db.exec(`insert into auth.users values ('${B}', 'b@x.com', '{"full_name":"
 const bizB = (await as(B, `insert into businesses (owner_id, slug, name) values ($1, 'berna-kuafor', 'Berna Kuaför') returning id`, [B])).rows[0].id;
 const stats = (await as(ADM, `select admin_stats() s`)).rows[0].s;
 ok(stats.users === 6 && stats.businesses === 2 && stats.active === 1 && stats.trial === 1 && stats.never_paid === 1
-  && Number(stats.mrr) === 749 && Number(stats.revenue_total) === 449 + 249 + 1500
+  && Number(stats.mrr) === 999 && Number(stats.revenue_total) === 649 + 349 + 1500
   && stats.daily.length === 30 && stats.by_plan.find((p) => p.id === 'pro').count === 1,
   `istatistikler (deneme ayrı): ${JSON.stringify({ u: stats.users, b: stats.businesses, active: stats.active, trial: stats.trial, never: stats.never_paid, mrr: stats.mrr, rev: stats.revenue_total })}`);
 await db.query(`delete from businesses where id = $1`, [bizB]);

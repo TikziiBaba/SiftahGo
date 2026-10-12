@@ -98,9 +98,9 @@ create table public.plans (
 );
 
 insert into public.plans (id, name, price, staff_limit, features, sort_order) values
-  ('baslangic', 'Başlangıç', 249, 1, '{}', 1),
-  ('esnaf', 'Esnaf', 449, 5, '{customers,reports,announcement,links}', 2),
-  ('pro', 'Pro', 749, null, '{customers,reports,announcement,links,theme}', 3);
+  ('baslangic', 'Başlangıç', 349, 1, '{}', 1),
+  ('esnaf', 'Esnaf', 649, 5, '{customers,reports,announcement,links}', 2),
+  ('pro', 'Pro', 999, null, '{customers,reports,announcement,links,theme}', 3);
 
 create table public.businesses (
   id                 uuid primary key default gen_random_uuid(),
