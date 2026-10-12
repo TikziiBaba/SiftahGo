@@ -11,6 +11,10 @@
 drop trigger if exists on_auth_user_created on auth.users;
 
 drop table if exists
+  public.appointment_reminders,
+  public.blocked_customers,
+  public.phone_verifications,
+  public.app_settings,
   public.inbox,
   public.push_tokens,
   public.notifications,
@@ -50,7 +54,7 @@ begin
         'format_when', 'inbox_insert', 'register_push_token', 'unregister_push_token',
         'mark_inbox_read', 'claim_push', 'finish_push', 'drop_push_tokens',
         'customer_history', 'appointments_before_write', 'queue_review_requests', 'review_after_insert',
-        'reply_review'
+        'reply_review', 'start_phone_verification', 'confirm_phone_verification', 'block_customer'
       )
   loop
     execute 'drop function if exists ' || r.sig || ' cascade';
@@ -278,7 +282,7 @@ create index payments_business_idx on public.payments (business_id, created_at d
 create table public.notifications (
   id             uuid primary key default gen_random_uuid(),
   appointment_id uuid not null references public.appointments (id) on delete cascade,
-  kind           text not null check (kind in ('booked', 'confirmed', 'cancelled', 'rescheduled', 'reminder', 'review')),
+  kind           text not null check (kind in ('booked', 'confirmed', 'cancelled', 'rescheduled', 'reminder', 'reminder_soon', 'review')),
   recipient      text not null check (recipient in ('customer', 'business')),
   email          text not null,
   status         text not null default 'pending' check (status in ('pending', 'sent', 'failed', 'skipped')),
@@ -291,6 +295,15 @@ create table public.notifications (
   unique (appointment_id, kind, recipient)
 );
 create index notifications_pending_idx on public.notifications (created_at) where status = 'pending';
+
+-- Gönderilen hatırlatma aşamaları (1 = bir gün önce, 2 = iki saat önce); queue_due_reminders yazar.
+-- Randevunun saati değişince silinir, hatırlatmalar yeni saat için tekrar gider.
+create table public.appointment_reminders (
+  appointment_id uuid not null references public.appointments (id) on delete cascade,
+  stage          smallint not null check (stage in (1, 2)),
+  sent_at        timestamptz not null default now(),
+  primary key (appointment_id, stage)
+);
 
 -- Telefonların Expo push adresleri. Uygulama register_push_token ile ekler.
 create table public.push_tokens (
@@ -321,6 +334,41 @@ create table public.inbox (
 );
 create index inbox_user_idx on public.inbox (user_id, created_at desc);
 create index inbox_push_pending_idx on public.inbox (created_at) where push_status = 'pending';
+
+-- Site ayarları (tek satır). Yönetici panelinden değişir.
+-- phone_verification: açıkken randevu için hesabın telefonu WhatsApp ile doğrulanmış olmalı.
+create table public.app_settings (
+  id                 boolean primary key default true check (id),
+  phone_verification boolean not null default false,
+  -- Doğrulama kodunun gönderileceği WhatsApp Business numarası (ülke koduyla, sadece rakam).
+  whatsapp_number    text not null default '' check (whatsapp_number ~ '^[0-9]{0,15}$'),
+  check (not phone_verification or length(whatsapp_number) >= 10)
+);
+insert into public.app_settings default values;
+
+-- Telefon doğrulama (WhatsApp ters doğrulama): müşteri start_phone_verification ile kod alır ve
+-- kodu SiftahGo WhatsApp numarasına yollar; sunucu (/api/whatsapp) gönderenin numarasıyla
+-- confirm_phone_verification çağırır. Kullanıcı bu tabloya yazamaz.
+create table public.phone_verifications (
+  user_id         uuid primary key references public.profiles (id) on delete cascade,
+  code            text unique,
+  code_expires_at timestamptz,
+  -- Doğrulanmış numara ('+905551112233'). Bir numara tek hesaba ait olur.
+  phone           text unique,
+  verified_at     timestamptz
+);
+
+-- İşletmenin online randevusunu engellediği müşteriler (hesap ve/veya telefonun son 10 hanesi).
+create table public.blocked_customers (
+  id            uuid primary key default gen_random_uuid(),
+  business_id   uuid not null references public.businesses (id) on delete cascade,
+  customer_id   uuid references public.profiles (id) on delete cascade,
+  phone_key     text check (phone_key ~ '^[0-9]{10}$'),
+  customer_name text not null default '',
+  created_at    timestamptz not null default now(),
+  check (customer_id is not null or phone_key is not null)
+);
+create index blocked_customers_business_idx on public.blocked_customers (business_id);
 
 -- ---------------------------------------------------------------------
 -- 2) Yardımcı fonksiyonlar ve tetikleyiciler
@@ -555,7 +603,10 @@ create trigger appointments_before_write
   before insert or update on public.appointments
   for each row execute function public.appointments_before_write();
 
--- Müşteri (girişli veya misafir) randevu alır. p_staff_id boşsa uygun ilk personel.
+-- Girişli müşteri randevu alır. p_staff_id boşsa uygun ilk personel.
+-- Telefon doğrulaması açıksa randevuya hesabın doğrulanmış numarası yazılır (p_customer_phone yok sayılır).
+-- Sahte randevuya karşı: işletmenin engellediği müşteri alamaz; aynı işletmede en fazla 3, toplamda
+-- en fazla 10 yaklaşan randevu; 24 saatte en fazla 10 randevu.
 -- Dönen: {id, status}. Sık iptal eden müşterinin randevusu işletme onayına düşer (status = pending).
 create function public.book_appointment(
   p_business_id    uuid,
@@ -573,26 +624,60 @@ as $$
 declare
   b        public.businesses;
   s        public.services;
+  v_uid    uuid := auth.uid();
   v_staff  uuid;
   v_id     uuid;
   v_status text;
+  v_phone  text := trim(coalesce(p_customer_phone, ''));
   v_email text := nullif(lower(trim(coalesce(p_customer_email, ''))), '');
 begin
+  if v_uid is null then
+    raise exception 'Randevu almak için giriş yapın.';
+  end if;
   if length(trim(coalesce(p_customer_name, ''))) < 2 then
     raise exception 'Lütfen adınızı girin.';
   end if;
-  if length(regexp_replace(coalesce(p_customer_phone, ''), '\D', '', 'g')) < 10 then
+  if (select st.phone_verification from public.app_settings st) then
+    select pv.phone into v_phone from public.phone_verifications pv
+    where pv.user_id = v_uid and pv.verified_at is not null;
+    if v_phone is null then
+      raise exception 'Randevu almak için telefon numaranızı doğrulayın.';
+    end if;
+  end if;
+  if length(regexp_replace(v_phone, '\D', '', 'g')) < 10 then
     raise exception 'Lütfen geçerli bir telefon numarası girin.';
   end if;
   if v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then
     raise exception 'Lütfen geçerli bir e-posta adresi girin.';
   end if;
   if v_email is null then
-    select u.email into v_email from auth.users u where u.id = auth.uid();
+    select u.email into v_email from auth.users u where u.id = v_uid;
   end if;
 
   select * into b from public.businesses where id = p_business_id and public.is_bookable(id);
   if not found then raise exception 'Bu işletme şu an online randevu almıyor.'; end if;
+
+  if exists (
+    select 1 from public.blocked_customers bc
+    where bc.business_id = b.id
+      and (bc.customer_id = v_uid or bc.phone_key = right(regexp_replace(v_phone, '\D', '', 'g'), 10))
+  ) then
+    raise exception 'Bu işletmeden online randevu alamıyorsunuz. Lütfen işletmeyi arayın.';
+  end if;
+
+  if (select count(*) from public.appointments a
+      where a.customer_id = v_uid and a.business_id = b.id
+        and a.status in ('pending', 'confirmed') and a.starts_at > now()) >= 3 then
+    raise exception 'Bu işletmede en fazla 3 yaklaşan randevunuz olabilir.';
+  end if;
+  if (select count(*) from public.appointments a
+      where a.customer_id = v_uid and a.status in ('pending', 'confirmed') and a.starts_at > now()) >= 10 then
+    raise exception 'En fazla 10 yaklaşan randevunuz olabilir.';
+  end if;
+  if (select count(*) from public.appointments a
+      where a.customer_id = v_uid and a.created_at > now() - interval '24 hours') >= 10 then
+    raise exception 'Son 24 saatte çok fazla randevu aldınız, lütfen daha sonra deneyin.';
+  end if;
 
   select * into s from public.services
   where id = p_service_id and business_id = p_business_id and is_active;
@@ -613,8 +698,8 @@ begin
     business_id, service_id, staff_id, customer_id, service_name,
     customer_name, customer_phone, customer_email, note, price, starts_at, ends_at, status
   ) values (
-    b.id, s.id, v_staff, auth.uid(), s.name,
-    trim(p_customer_name), trim(p_customer_phone), v_email, left(coalesce(p_note, ''), 500), s.price,
+    b.id, s.id, v_staff, v_uid, s.name,
+    trim(p_customer_name), v_phone, v_email, left(coalesce(p_note, ''), 500), s.price,
     p_starts_at, p_starts_at + make_interval(mins => s.duration_minutes),
     case when b.auto_confirm then 'confirmed' else 'pending' end
   )
@@ -626,6 +711,96 @@ exception
     raise exception 'Bu saat artık müsait değil, lütfen başka bir saat seçin.';
 end;
 $$;
+
+-- Telefon doğrulama kodu üretir (15 dakika geçerli). Müşteri kodu WhatsApp'tan gönderir.
+create function public.start_phone_verification()
+returns text
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  v_code text;
+begin
+  if auth.uid() is null then raise exception 'Giriş yapmalısınız.'; end if;
+  loop
+    v_code := 'SG' || lpad(floor(random() * 1000000)::int::text, 6, '0');
+    begin
+      insert into public.phone_verifications (user_id, code, code_expires_at)
+      values (auth.uid(), v_code, now() + interval '15 minutes')
+      on conflict (user_id) do update set code = excluded.code, code_expires_at = excluded.code_expires_at;
+      return v_code;
+    exception when unique_violation then
+      -- Kod başka bir kullanıcıda; yenisini dene.
+    end;
+  end loop;
+end;
+$$;
+
+-- Sunucu (WhatsApp webhook) çağırır: p_from mesajı gönderen numara. Kod geçerliyse numarayı
+-- hesaba bağlar; numara başka hesapta doğrulanmışsa oradan kaldırılır. Doğrulanan kullanıcıyı döner.
+create function public.confirm_phone_verification(p_code text, p_from text)
+returns uuid
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  v_user  uuid;
+  v_phone text := '+' || regexp_replace(coalesce(p_from, ''), '\D', '', 'g');
+begin
+  if length(v_phone) < 11 then return null; end if;
+  select pv.user_id into v_user from public.phone_verifications pv
+  where pv.code = upper(trim(p_code)) and pv.code_expires_at > now();
+  if v_user is null then return null; end if;
+
+  update public.phone_verifications set phone = null, verified_at = null
+  where phone = v_phone and user_id <> v_user;
+  update public.phone_verifications
+  set phone = v_phone, verified_at = now(), code = null, code_expires_at = null
+  where user_id = v_user;
+  update public.profiles set phone = v_phone where id = v_user;
+  return v_user;
+end;
+$$;
+
+-- İşletme, randevunun müşterisini engeller (hesap + telefon) ve müşterinin bu işletmedeki
+-- yaklaşan randevularını iptal eder. İptal edilen randevu sayısını döner.
+create function public.block_customer(p_appointment_id uuid)
+returns int
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  a     public.appointments;
+  v_key text;
+  v_n   int;
+begin
+  select * into a from public.appointments where id = p_appointment_id;
+  if not found or not public.is_business_owner(a.business_id) then
+    raise exception 'Randevu bulunamadı.';
+  end if;
+  v_key := right(regexp_replace(a.customer_phone, '\D', '', 'g'), 10);
+  if length(v_key) < 10 then v_key := null; end if;
+  if a.customer_id is null and v_key is null then
+    raise exception 'Bu müşteri engellenemiyor.';
+  end if;
+
+  if not exists (
+    select 1 from public.blocked_customers bc
+    where bc.business_id = a.business_id
+      and (bc.customer_id = a.customer_id or bc.phone_key = v_key)
+  ) then
+    insert into public.blocked_customers (business_id, customer_id, phone_key, customer_name)
+    values (a.business_id, a.customer_id, v_key, a.customer_name);
+  end if;
+
+  update public.appointments ap set status = 'cancelled'
+  where ap.business_id = a.business_id
+    and ap.status in ('pending', 'confirmed') and ap.starts_at > now()
+    and (ap.customer_id = a.customer_id
+         or right(regexp_replace(ap.customer_phone, '\D', '', 'g'), 10) = v_key);
+  get diagnostics v_n = row_count;
+  return v_n;
+end;
+$$;
+
+revoke execute on function public.confirm_phone_verification(text, text) from public, anon, authenticated;
 
 -- Müşteri kendi gelecekteki randevusunu iptal eder.
 create function public.cancel_appointment(p_id uuid)
@@ -1011,9 +1186,10 @@ begin
     v_to := case when v_by_owner then 'customer' else 'business' end;
     -- Her saat değişikliği yeniden bildirilir; hatırlatma ve onay yeni saat için tekrar gidebilir.
     delete from public.notifications
-    where appointment_id = new.id and kind in ('rescheduled', 'reminder', 'confirmed');
+    where appointment_id = new.id and kind in ('rescheduled', 'reminder', 'reminder_soon', 'confirmed');
     delete from public.inbox
     where appointment_id = new.id and kind in ('rescheduled', 'reminder', 'confirmed');
+    delete from public.appointment_reminders where appointment_id = new.id;
   elsif old.status = 'pending' and new.status = 'confirmed' then
     v_kind := 'confirmed';
     v_to := 'customer';
@@ -1051,38 +1227,47 @@ create trigger appointments_queue_notifications
   after insert or update of status, starts_at on public.appointments
   for each row execute function public.queue_appointment_notifications();
 
--- Zamanı gelen hatırlatmaları kuyruğa ekler; eklenen sayıyı döner.
--- Önceden alınan randevuya 24 saat kala, 24 saatten kısa süre kala alınana 2 saat kala
--- hatırlatılır. Başlamasına 3 saatten az kala alınan randevuya hatırlatma gitmez.
--- Girişli müşteriye uygulama içi bildirim de eklenir.
+-- Onaylı randevuya iki hatırlatma (e-posta ve uygulama içi): 1 gün önce (en az 24 saat önceden alınan
+-- randevuya) ve 2 saat önce (en az 3 saat önceden alınana). 2 saat kalmışsa 1 günlük artık gönderilmez.
+-- Uygulamada tek "yaklaşıyor" bildirimi tutulur; 2 saat kala silinip yeniden eklenir, böylece yeni push gider
+-- (eski uygulama sürümleri yeni bildirim türlerini tanımaz). Eklenen bildirim sayısını döner.
 create function public.queue_due_reminders()
 returns int
 language plpgsql volatile security definer set search_path = ''
 as $$
 declare
-  a   public.appointments;
-  v_n int := 0;
-  v_i int;
+  a       public.appointments;
+  v_stage smallint;
+  v_n     int := 0;
+  v_i     int;
 begin
   for a in
     select * from public.appointments ap
     where ap.status = 'confirmed'
       and (ap.customer_email is not null or ap.customer_id is not null)
       and ap.starts_at > now()
-      and ap.created_at < ap.starts_at - interval '3 hours'
-      and ap.starts_at <= now() + case
-            when ap.created_at <= ap.starts_at - interval '24 hours' then interval '24 hours'
-            else interval '2 hours'
-          end
+      and ap.starts_at <= now() + interval '24 hours'
+      and ap.created_at <= ap.starts_at - interval '3 hours'
   loop
+    v_stage := case
+      when a.starts_at <= now() + interval '2 hours' then 2
+      when a.created_at <= a.starts_at - interval '24 hours' then 1
+    end;
+    continue when v_stage is null;
+    insert into public.appointment_reminders (appointment_id, stage) values (a.id, v_stage)
+    on conflict do nothing;
+    get diagnostics v_i = row_count;
+    continue when v_i = 0;
+
     if a.customer_email is not null then
       insert into public.notifications (appointment_id, kind, recipient, email)
-      values (a.id, 'reminder', 'customer', a.customer_email)
+      values (a.id, case when v_stage = 1 then 'reminder' else 'reminder_soon' end, 'customer', a.customer_email)
       on conflict do nothing;
       get diagnostics v_i = row_count;
       v_n := v_n + v_i;
     end if;
     if a.customer_id is not null then
+      delete from public.inbox where appointment_id = a.id and kind = 'reminder' and recipient = 'customer';
       v_n := v_n + public.inbox_insert(a.customer_id, 'reminder', 'customer', a);
     end if;
   end loop;
@@ -1569,11 +1754,30 @@ alter table public.payments       enable row level security;
 -- Politika yok: sadece sunucu (service_role) ve yukarıdaki fonksiyonlar erişir.
 alter table public.notifications  enable row level security;
 alter table public.push_tokens    enable row level security;
+alter table public.appointment_reminders enable row level security;
 -- Kullanıcı kendi bildirimlerini okur; okundu işaretini mark_inbox_read ile koyar.
 alter table public.inbox          enable row level security;
 
 create policy "bildirim: kendininkini okur" on public.inbox
   for select using (user_id = auth.uid());
+
+-- app_settings: herkes okur, yönetici değiştirir.
+alter table public.app_settings        enable row level security;
+-- phone_verifications: kullanıcı kendi satırını okur; yazma sadece fonksiyonlarla.
+alter table public.phone_verifications enable row level security;
+alter table public.blocked_customers   enable row level security;
+
+create policy "ayar: herkes okur" on public.app_settings
+  for select using (true);
+create policy "ayar: yönetici günceller" on public.app_settings
+  for update using (public.is_admin()) with check (public.is_admin());
+create policy "telefon doğrulama: kendininkini okur" on public.phone_verifications
+  for select using (user_id = auth.uid());
+-- Engelleme block_customer ile eklenir; işletme listeyi görür ve engeli kaldırır.
+create policy "engel: işletme okur" on public.blocked_customers
+  for select using (public.is_business_owner(business_id));
+create policy "engel: işletme kaldırır" on public.blocked_customers
+  for delete using (public.is_business_owner(business_id));
 
 -- profiles
 create policy "profil: kendini okur" on public.profiles
