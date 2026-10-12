@@ -335,29 +335,6 @@ create table public.inbox (
 create index inbox_user_idx on public.inbox (user_id, created_at desc);
 create index inbox_push_pending_idx on public.inbox (created_at) where push_status = 'pending';
 
--- Site ayarları (tek satır). Yönetici panelinden değişir.
--- phone_verification: açıkken randevu için hesabın telefonu WhatsApp ile doğrulanmış olmalı.
-create table public.app_settings (
-  id                 boolean primary key default true check (id),
-  phone_verification boolean not null default false,
-  -- Doğrulama kodunun gönderileceği WhatsApp Business numarası (ülke koduyla, sadece rakam).
-  whatsapp_number    text not null default '' check (whatsapp_number ~ '^[0-9]{0,15}$'),
-  check (not phone_verification or length(whatsapp_number) >= 10)
-);
-insert into public.app_settings default values;
-
--- Telefon doğrulama (WhatsApp ters doğrulama): müşteri start_phone_verification ile kod alır ve
--- kodu SiftahGo WhatsApp numarasına yollar; sunucu (/api/whatsapp) gönderenin numarasıyla
--- confirm_phone_verification çağırır. Kullanıcı bu tabloya yazamaz.
-create table public.phone_verifications (
-  user_id         uuid primary key references public.profiles (id) on delete cascade,
-  code            text unique,
-  code_expires_at timestamptz,
-  -- Doğrulanmış numara ('+905551112233'). Bir numara tek hesaba ait olur.
-  phone           text unique,
-  verified_at     timestamptz
-);
-
 -- İşletmenin online randevusunu engellediği müşteriler (hesap ve/veya telefonun son 10 hanesi).
 create table public.blocked_customers (
   id            uuid primary key default gen_random_uuid(),
@@ -604,7 +581,6 @@ create trigger appointments_before_write
   for each row execute function public.appointments_before_write();
 
 -- Girişli müşteri randevu alır. p_staff_id boşsa uygun ilk personel.
--- Telefon doğrulaması açıksa randevuya hesabın doğrulanmış numarası yazılır (p_customer_phone yok sayılır).
 -- Sahte randevuya karşı: işletmenin engellediği müşteri alamaz; aynı işletmede en fazla 3, toplamda
 -- en fazla 10 yaklaşan randevu; 24 saatte en fazla 10 randevu.
 -- Dönen: {id, status}. Sık iptal eden müşterinin randevusu işletme onayına düşer (status = pending).
@@ -636,13 +612,6 @@ begin
   end if;
   if length(trim(coalesce(p_customer_name, ''))) < 2 then
     raise exception 'Lütfen adınızı girin.';
-  end if;
-  if (select st.phone_verification from public.app_settings st) then
-    select pv.phone into v_phone from public.phone_verifications pv
-    where pv.user_id = v_uid and pv.verified_at is not null;
-    if v_phone is null then
-      raise exception 'Randevu almak için telefon numaranızı doğrulayın.';
-    end if;
   end if;
   if length(regexp_replace(v_phone, '\D', '', 'g')) < 10 then
     raise exception 'Lütfen geçerli bir telefon numarası girin.';
@@ -712,54 +681,6 @@ exception
 end;
 $$;
 
--- Telefon doğrulama kodu üretir (15 dakika geçerli). Müşteri kodu WhatsApp'tan gönderir.
-create function public.start_phone_verification()
-returns text
-language plpgsql volatile security definer set search_path = ''
-as $$
-declare
-  v_code text;
-begin
-  if auth.uid() is null then raise exception 'Giriş yapmalısınız.'; end if;
-  loop
-    v_code := 'SG' || lpad(floor(random() * 1000000)::int::text, 6, '0');
-    begin
-      insert into public.phone_verifications (user_id, code, code_expires_at)
-      values (auth.uid(), v_code, now() + interval '15 minutes')
-      on conflict (user_id) do update set code = excluded.code, code_expires_at = excluded.code_expires_at;
-      return v_code;
-    exception when unique_violation then
-      -- Kod başka bir kullanıcıda; yenisini dene.
-    end;
-  end loop;
-end;
-$$;
-
--- Sunucu (WhatsApp webhook) çağırır: p_from mesajı gönderen numara. Kod geçerliyse numarayı
--- hesaba bağlar; numara başka hesapta doğrulanmışsa oradan kaldırılır. Doğrulanan kullanıcıyı döner.
-create function public.confirm_phone_verification(p_code text, p_from text)
-returns uuid
-language plpgsql volatile security definer set search_path = ''
-as $$
-declare
-  v_user  uuid;
-  v_phone text := '+' || regexp_replace(coalesce(p_from, ''), '\D', '', 'g');
-begin
-  if length(v_phone) < 11 then return null; end if;
-  select pv.user_id into v_user from public.phone_verifications pv
-  where pv.code = upper(trim(p_code)) and pv.code_expires_at > now();
-  if v_user is null then return null; end if;
-
-  update public.phone_verifications set phone = null, verified_at = null
-  where phone = v_phone and user_id <> v_user;
-  update public.phone_verifications
-  set phone = v_phone, verified_at = now(), code = null, code_expires_at = null
-  where user_id = v_user;
-  update public.profiles set phone = v_phone where id = v_user;
-  return v_user;
-end;
-$$;
-
 -- İşletme, randevunun müşterisini engeller (hesap + telefon) ve müşterinin bu işletmedeki
 -- yaklaşan randevularını iptal eder. İptal edilen randevu sayısını döner.
 create function public.block_customer(p_appointment_id uuid)
@@ -799,8 +720,6 @@ begin
   return v_n;
 end;
 $$;
-
-revoke execute on function public.confirm_phone_verification(text, text) from public, anon, authenticated;
 
 -- Müşteri kendi gelecekteki randevusunu iptal eder.
 create function public.cancel_appointment(p_id uuid)
@@ -1761,18 +1680,8 @@ alter table public.inbox          enable row level security;
 create policy "bildirim: kendininkini okur" on public.inbox
   for select using (user_id = auth.uid());
 
--- app_settings: herkes okur, yönetici değiştirir.
-alter table public.app_settings        enable row level security;
--- phone_verifications: kullanıcı kendi satırını okur; yazma sadece fonksiyonlarla.
-alter table public.phone_verifications enable row level security;
 alter table public.blocked_customers   enable row level security;
 
-create policy "ayar: herkes okur" on public.app_settings
-  for select using (true);
-create policy "ayar: yönetici günceller" on public.app_settings
-  for update using (public.is_admin()) with check (public.is_admin());
-create policy "telefon doğrulama: kendininkini okur" on public.phone_verifications
-  for select using (user_id = auth.uid());
 -- Engelleme block_customer ile eklenir; işletme listeyi görür ve engeli kaldırır.
 create policy "engel: işletme okur" on public.blocked_customers
   for select using (public.is_business_owner(business_id));

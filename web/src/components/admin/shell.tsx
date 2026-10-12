@@ -10,7 +10,6 @@ import {
   Loader2,
   LogOut,
   Package,
-  Settings,
   ShieldAlert,
   ShieldCheck,
   Store,
@@ -26,7 +25,6 @@ const NAV = [
   { href: "/admin/odemeler", label: "Ödemeler", icon: CreditCard },
   { href: "/admin/randevular", label: "Randevular", icon: CalendarDays },
   { href: "/admin/paketler", label: "Paketler", icon: Package },
-  { href: "/admin/ayarlar", label: "Ayarlar", icon: Settings },
 ];
 
 const isActive = (pathname: string, href: string) =>

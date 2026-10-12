@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { BadgeCheck, CalendarPlus, CheckCircle2, ChevronLeft, Loader2 } from "lucide-react";
-import { PhoneVerify } from "@/components/phone-verify";
+import { useEffect, useMemo, useState } from "react";
+import { CalendarPlus, CheckCircle2, ChevronLeft, Loader2 } from "lucide-react";
 import { bookableDays, DayStrip, SlotGrid } from "@/components/slot-picker";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -15,7 +14,7 @@ import {
   googleCalendarLink,
   todayStr,
 } from "@/lib/format";
-import type { AppSettings, Business, Service, Staff, StaffService, WorkingHour } from "@/lib/types";
+import type { Business, Service, Staff, StaffService, WorkingHour } from "@/lib/types";
 
 type Props = { business: Business; services: Service[]; staff: Staff[]; staffServices: StaffService[]; hours: WorkingHour[] };
 
@@ -31,9 +30,6 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
   const [form, setForm] = useState({ name: "", phone: "", note: "" });
   // null: oturum henüz bilinmiyor. Randevu için giriş zorunlu.
   const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
-  const [settings, setSettings] = useState<AppSettings | null>(null);
-  // WhatsApp ile doğrulanmış numara; doğrulama açıksa randevuya bu yazılır.
-  const [verifiedPhone, setVerifiedPhone] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   // Alınan randevunun durumu; sık iptal eden müşteride işletme ayarından bağımsız "pending" olur.
@@ -50,28 +46,13 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
 
 
   useEffect(() => {
-    supabase
-      .from("app_settings")
-      .select("phone_verification, whatsapp_number")
-      .maybeSingle()
-      .then(({ data }) => setSettings(data));
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) return setLoggedIn(false);
       setLoggedIn(true);
-      const [{ data: p }, { data: v }] = await Promise.all([
-        supabase.from("profiles").select("full_name, phone").eq("id", data.user.id).maybeSingle(),
-        supabase.from("phone_verifications").select("phone, verified_at").maybeSingle(),
-      ]);
+      const { data: p } = await supabase.from("profiles").select("full_name, phone").eq("id", data.user.id).maybeSingle();
       if (p) setForm((f) => ({ ...f, name: f.name || p.full_name, phone: f.phone || p.phone || "" }));
-      if (v?.verified_at && v.phone) setVerifiedPhone(v.phone);
     });
   }, [supabase]);
-
-  const onVerified = useCallback((phone: string) => {
-    setVerifiedPhone(phone);
-    setError("");
-  }, []);
-  const needsVerification = !!settings?.phone_verification && !verifiedPhone;
 
   useEffect(() => {
     if (!serviceId) return;
@@ -105,7 +86,7 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
       p_staff_id: staffId || null,
       p_starts_at: time,
       p_customer_name: form.name,
-      p_customer_phone: settings?.phone_verification && verifiedPhone ? verifiedPhone : form.phone,
+      p_customer_phone: form.phone,
       p_note: form.note,
     });
     setBusy(false);
@@ -274,38 +255,23 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
             </div>
             <div>
               <label className="label" htmlFor="phone">Telefon</label>
-              {settings?.phone_verification ? (
-                verifiedPhone ? (
-                  <p id="phone" className="input flex items-center gap-2 text-ink-2">
-                    {verifiedPhone} <BadgeCheck className="size-4 text-emerald-400" aria-label="Doğrulandı" />
-                  </p>
-                ) : (
-                  <p id="phone" className="input text-ink-3">Aşağıdan doğrulayın</p>
-                )
-              ) : (
-                <input
-                  id="phone"
-                  required
-                  type="tel"
-                  placeholder="05xx xxx xx xx"
-                  className="input"
-                  value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                />
-              )}
+              <input
+                id="phone"
+                required
+                type="tel"
+                placeholder="05xx xxx xx xx"
+                className="input"
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              />
             </div>
-            {needsVerification && settings && (
-              <div className="sm:col-span-2">
-                <PhoneVerify whatsappNumber={settings.whatsapp_number} onVerified={onVerified} />
-              </div>
-            )}
             <div className="sm:col-span-2">
               <label className="label" htmlFor="note">Not (isteğe bağlı)</label>
               <textarea id="note" rows={2} maxLength={500} className="input" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
             </div>
           </div>
           {error && <p className="mt-3 text-sm text-rose-400">{error}</p>}
-          <button disabled={busy || needsVerification} className="btn btn-primary mt-4 w-full py-3 text-base">
+          <button disabled={busy} className="btn btn-primary mt-4 w-full py-3 text-base">
             {busy && <Loader2 className="size-4 animate-spin" />} Randevuyu Onayla
           </button>
           <p className="mt-3 text-center text-xs text-ink-3">

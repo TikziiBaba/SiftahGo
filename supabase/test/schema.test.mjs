@@ -441,34 +441,7 @@ await db.query(`update appointments set status = 'confirmed' where id = $1`, [gu
 const unblocked = (await book(G, svc30, tue('07:00'), 'Gizem', '0544 000 00 01')).rows[0].id;
 ok(!!unblocked, 'engel kalkınca randevu alındı');
 
-// WhatsApp ile telefon doğrulama
-await expectError(() => as(null, `select start_phone_verification()`), /Giriş yapmalısınız/, 'anonim doğrulama başlatamaz');
-const code = (await as(G, `select start_phone_verification() c`)).rows[0].c;
-ok(/^SG\d{6}$/.test(code), `doğrulama kodu üretildi: ${code}`);
-ok((await as(G, `select code from phone_verifications`)).rows[0]?.code === code && (await as(C, `select * from phone_verifications`)).rows.length === 0,
-  'kullanıcı sadece kendi doğrulamasını görür');
-ok((await as(G, `update phone_verifications set phone = '+900000000000', verified_at = now() returning user_id`)).rows.length === 0, 'kullanıcı numarasını kendisi doğrulayamaz');
-await expectError(() => as(G, `select confirm_phone_verification($1, '905441112233')`, [code]), /permission denied/, 'doğrulama istemciden onaylanamaz');
-ok((await asService(`select confirm_phone_verification('SG000000x', '905441112233') u`)).rows[0].u === null, 'yanlış kod reddedildi');
-ok((await asService(`select confirm_phone_verification($1, '905441112233') u`, [code.toLowerCase()])).rows[0].u === G, 'WhatsApp\'tan gelen kod numarayı doğruladı');
-const pv = (await as(G, `select phone, verified_at, code from phone_verifications`)).rows[0];
-ok(pv.phone === '+905441112233' && pv.verified_at && pv.code === null
-  && (await db.query(`select phone from profiles where id = $1`, [G])).rows[0].phone === '+905441112233', 'doğrulanan numara hesaba ve profile yazıldı');
-ok((await asService(`select confirm_phone_verification($1, '905441112233') u`, [code])).rows[0].u === null, 'kod ikinci kez kullanılamaz');
-
-await expectError(() => db.query(`update app_settings set phone_verification = true`), /check constraint/, 'WhatsApp numarası olmadan doğrulama açılamaz');
-ok((await as(A, `update app_settings set phone_verification = true, whatsapp_number = '905000000000' returning id`)).rows.length === 0, 'yönetici olmayan ayarı değiştiremez');
-await db.query(`update app_settings set phone_verification = true, whatsapp_number = '905000000000'`);
-ok((await as(null, `select whatsapp_number from app_settings`)).rows[0].whatsapp_number === '905000000000', 'ayarlar herkese açık okunur');
-await expectError(() => book(C, svc30, tue('08:00')), /doğrulayın/, 'doğrulama açıkken numarası doğrulanmamış müşteri randevu alamaz');
-const verified = (await book(G, svc30, tue('08:00'), 'Gizem', '0599 999 99 99')).rows[0].id;
-ok((await db.query(`select customer_phone from appointments where id = $1`, [verified])).rows[0].customer_phone === '+905441112233', 'randevuya yazılan numara değil, doğrulanmış numara kaydedildi');
-const codeC = (await as(C, `select start_phone_verification() c`)).rows[0].c;
-await asService(`select confirm_phone_verification($1, '905441112233')`, [codeC]);
-ok((await as(G, `select verified_at from phone_verifications`)).rows[0].verified_at === null
-  && (await as(C, `select phone from phone_verifications`)).rows[0].phone === '+905441112233', 'aynı numara başka hesapta doğrulanınca eski hesaptan düştü');
-await db.query(`update app_settings set phone_verification = false`);
-await db.query(`delete from appointments where id = any($1)`, [[...lim, unblocked, verified]]);
+await db.query(`delete from appointments where id = any($1)`, [[...lim, unblocked]]);
 
 // ikinci personel -> kapasite artar, izin düşer
 const st2 = (await as(A, `insert into staff (business_id, name) values ($1, 'Mehmet') returning id`, [biz])).rows[0].id;

@@ -7,7 +7,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Glow } from '@/components/brand';
 import { Logo } from '@/components/business-logo';
-import { PhoneVerify } from '@/components/phone-verify';
 import { Banner, Button, Card, Empty, Field, Loading, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { categoryIcon, categoryLabel, type IconName } from '@/lib/constants';
@@ -15,7 +14,7 @@ import { errorMessage, formatDate, formatDuration, formatPrice, formatTime, goog
 import { haptic } from '@/lib/haptics';
 import { supabase } from '@/lib/supabase';
 import { colors, shadows } from '@/lib/theme';
-import type { AppSettings, Business, Service } from '@/lib/types';
+import type { Business, Service } from '@/lib/types';
 
 type Data = { business: Business; service: Service; staffName: string | null };
 
@@ -27,9 +26,6 @@ export default function BookingScreen() {
   // null = kullanıcı henüz yazmadı; profil bilgisiyle doldurulur.
   const [input, setInput] = useState<{ name: string | null; phone: string | null; note: string }>({ name: null, phone: null, note: '' });
   const form = { name: input.name ?? profile?.full_name ?? '', phone: input.phone ?? profile?.phone ?? '', note: input.note };
-  const [settings, setSettings] = useState<AppSettings | null>(null);
-  // WhatsApp ile doğrulanmış numara; doğrulama açıksa randevuya bu yazılır.
-  const [verifiedPhone, setVerifiedPhone] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -48,28 +44,6 @@ export default function BookingScreen() {
     })();
   }, [slug, serviceId, staffId]);
 
-  useEffect(() => {
-    supabase
-      .from('app_settings')
-      .select('phone_verification, whatsapp_number')
-      .maybeSingle()
-      .then(({ data }) => setSettings(data));
-  }, []);
-
-  useEffect(() => {
-    if (!session) return;
-    supabase
-      .from('phone_verifications')
-      .select('phone, verified_at')
-      .maybeSingle()
-      .then(({ data }) => setVerifiedPhone(data?.verified_at && data.phone ? data.phone : null));
-  }, [session]);
-
-  function onVerified(phone: string) {
-    setVerifiedPhone(phone);
-    setError('');
-  }
-
   if (data === undefined) return <Loading full />;
   if (data === null) {
     return (
@@ -82,16 +56,14 @@ export default function BookingScreen() {
   }
 
   const { business, service } = data;
-  const verifyPhone = !!settings?.phone_verification;
-  const needsVerification = verifyPhone && !verifiedPhone;
   const errors = {
     name: form.name.trim().length < 2 ? 'Adınızı ve soyadınızı yazın.' : '',
-    phone: !verifyPhone && form.phone.replace(/\D/g, '').length < 10 ? 'Geçerli bir telefon numarası yazın.' : '',
+    phone: form.phone.replace(/\D/g, '').length < 10 ? 'Geçerli bir telefon numarası yazın.' : '',
   };
 
   async function book() {
     setTouched(true);
-    if (errors.name || errors.phone || needsVerification) return haptic.error();
+    if (errors.name || errors.phone) return haptic.error();
     setBusy(true);
     setError('');
     const { data: result, error } = await supabase.rpc('book_appointment', {
@@ -100,7 +72,7 @@ export default function BookingScreen() {
       p_staff_id: staffId || null,
       p_starts_at: time,
       p_customer_name: form.name.trim(),
-      p_customer_phone: verifyPhone && verifiedPhone ? verifiedPhone : form.phone.trim(),
+      p_customer_phone: form.phone.trim(),
       p_note: form.note.trim(),
     });
     setBusy(false);
@@ -197,25 +169,17 @@ export default function BookingScreen() {
               textContentType="name"
               error={touched ? errors.name : ''}
             />
-            {verifyPhone ? (
-              verifiedPhone ? (
-                <Field label="Telefon (doğrulandı)" icon="checkmark-circle-outline" value={verifiedPhone} editable={false} />
-              ) : (
-                settings && <PhoneVerify whatsappNumber={settings.whatsapp_number} onVerified={onVerified} />
-              )
-            ) : (
-              <Field
-                label="Telefon"
-                icon="call-outline"
-                value={form.phone}
-                onChangeText={(phone) => setInput({ ...input, phone })}
-                keyboardType="phone-pad"
-                placeholder="05xx xxx xx xx"
-                autoComplete="tel"
-                textContentType="telephoneNumber"
-                error={touched ? errors.phone : ''}
-              />
-            )}
+            <Field
+              label="Telefon"
+              icon="call-outline"
+              value={form.phone}
+              onChangeText={(phone) => setInput({ ...input, phone })}
+              keyboardType="phone-pad"
+              placeholder="05xx xxx xx xx"
+              autoComplete="tel"
+              textContentType="telephoneNumber"
+              error={touched ? errors.phone : ''}
+            />
             <Field
               label="Not (isteğe bağlı)"
               icon="chatbubble-outline"
@@ -234,7 +198,7 @@ export default function BookingScreen() {
           size="lg"
           onPress={book}
           loading={busy}
-          disabled={taken || !session || needsVerification}
+          disabled={taken || !session}
         />
       </View>
     </KeyboardAvoidingView>
