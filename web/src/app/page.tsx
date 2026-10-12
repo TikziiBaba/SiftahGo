@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { Reveal } from "@/components/reveal";
 import { Shop } from "@/components/three/shop";
-import { Tilt } from "@/components/tilt";
+import { GlowCard } from "@/components/glow-card";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
 import {
   APP_LINKS,
@@ -239,10 +239,7 @@ function HeroVisual() {
 
       {/* 3D eğik randevu paneli */}
       <div className="absolute bottom-0 left-0 w-full max-w-[24rem]">
-        <Tilt
-          className="bezel [--bx:6deg] [--by:-8deg] lg:[--bx:9deg] lg:[--by:-16deg]"
-          max={7}
-        >
+        <GlowCard className="tilt bezel [--bx:6deg] [--by:-8deg] lg:[--bx:9deg] lg:[--by:-16deg]">
           <div className="bezel-core p-5 [transform-style:preserve-3d]">
             <div className="depth-2 flex items-center justify-between">
               <div>
@@ -287,7 +284,7 @@ function HeroVisual() {
               ))}
             </ul>
           </div>
-        </Tilt>
+        </GlowCard>
       </div>
 
       {/* Yüzen bildirim */}
@@ -394,13 +391,13 @@ function BentoCard({
 }) {
   return (
     <Reveal delay={delay} className={className}>
-      <Tilt className="bezel h-full" max={4}>
+      <GlowCard className="bezel h-full">
         <div className="bezel-core flex h-full flex-col overflow-hidden p-6 md:p-7">
           <div className="flex-1">{children}</div>
           <h3 className="mt-6 text-lg font-semibold tracking-tight">{title}</h3>
           <p className="mt-1.5 text-sm leading-relaxed text-ink-3">{text}</p>
         </div>
-      </Tilt>
+      </GlowCard>
     </Reveal>
   );
 }
@@ -787,7 +784,7 @@ function Audiences() {
     <section className="mx-auto grid max-w-6xl gap-4 px-4 py-12 md:grid-cols-2">
       {sides.map((s, i) => (
         <Reveal key={s.eyebrow} delay={i * 120}>
-          <Tilt className="bezel h-full" max={4}>
+          <GlowCard className="bezel h-full">
             <div
               className={`bezel-core relative h-full overflow-hidden p-8 md:p-10 ${s.accent ? "bg-gradient-to-br from-brand-900/50 to-surface" : ""}`}
             >
@@ -821,7 +818,7 @@ function Audiences() {
                 </span>
               </Link>
             </div>
-          </Tilt>
+          </GlowCard>
         </Reveal>
       ))}
     </section>
@@ -873,9 +870,8 @@ async function Pricing() {
               delay={i * 100}
               className={popular ? "md:-mt-4" : "md:mt-4"}
             >
-              <Tilt
+              <GlowCard
                 className={`bezel h-full ${popular ? "ring-brand-400/40" : ""}`}
-                max={5}
               >
                 <div
                   className={`bezel-core relative flex h-full flex-col overflow-hidden p-7 ${popular ? "bg-gradient-to-b from-brand-900/50 to-surface" : ""}`}
@@ -938,7 +934,7 @@ async function Pricing() {
                     </span>
                   </Link>
                 </div>
-              </Tilt>
+              </GlowCard>
             </Reveal>
           );
         })}
