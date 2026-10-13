@@ -22,6 +22,7 @@ export default function SetupScreen() {
   const [form, setForm] = useState({ name: '', slug: '', category: 'berber', city: '', phone: profile?.phone ?? '' });
   const [slugTouched, setSlugTouched] = useState(false);
   const [cityOpen, setCityOpen] = useState(false);
+  const [referral, setReferral] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -48,6 +49,8 @@ export default function SetupScreen() {
       haptic.error();
       return setError(errorMessage(error));
     }
+    // Kod geçersizse kurulum yine biter; kod sonra Abonelik ekranından girilebilir.
+    if (referral.trim()) await supabase.rpc('apply_referral', { p_code: referral });
     haptic.success();
     // İşletme yüklenince ekran kendiliğinden panele geçer.
     await refresh();
@@ -106,6 +109,17 @@ export default function SetupScreen() {
         <SectionTitle title="İletişim" />
         <SelectField label="Şehir" icon="location-outline" value={form.city || null} onPress={() => setCityOpen(true)} />
         <Field label="İşletme telefonu" icon="call-outline" placeholder="0212 xxx xx xx" value={form.phone} onChangeText={(phone) => setForm({ ...form, phone })} keyboardType="phone-pad" />
+        <Field
+          label="Davet kodu (isteğe bağlı)"
+          icon="gift-outline"
+          placeholder="Sizi davet eden işletmenin kodu"
+          value={referral}
+          onChangeText={setReferral}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          maxLength={8}
+          hint="İlk ödemenizde hem size hem davet edene 1 ay hediye."
+        />
 
         {error ? <Banner tone="danger" icon="alert-circle-outline" text={error} /> : null}
         <Button title="İşletmeyi oluştur" icon="arrow-forward" size="lg" onPress={submit} loading={busy} style={{ marginTop: 8 }} />

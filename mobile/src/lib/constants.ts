@@ -69,8 +69,8 @@ export const RESERVED_SLUGS = [
 
 // Paket kartlarında gösterilen özellik metinleri (web ile aynı).
 export const PLAN_FEATURES: Record<string, string> = {
-  customers: 'Müşteri defteri',
-  reports: 'Ciro raporları',
+  customers: 'Müşteri defteri, notlar ve seans paketleri',
+  reports: 'Ciro, doluluk ve geri dönen müşteri raporları',
   announcement: 'Sayfada duyuru bandı',
   links: 'WhatsApp, Instagram ve web kısayolları',
   theme: 'Sayfa rengi seçimi',

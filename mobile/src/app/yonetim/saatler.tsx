@@ -1,10 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { TimeSheet } from '@/components/pickers';
+import { TimePill, TimeSheet } from '@/components/pickers';
 import { useToast } from '@/components/toast';
 import { Banner, Button, Card, Empty, IconButton, SectionTitle, Skeleton, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
@@ -12,7 +12,7 @@ import { WEEKDAYS } from '@/lib/constants';
 import { addDays, dayOf, errorMessage, formatDate, formatTime } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 import { supabase } from '@/lib/supabase';
-import { colors, radius } from '@/lib/theme';
+import { colors } from '@/lib/theme';
 import type { Business, Staff, TimeOff, WorkingHour } from '@/lib/types';
 
 export default function HoursScreen() {
@@ -200,27 +200,9 @@ function Hours({ business }: { business: Business }) {
   );
 }
 
-function TimePill({ value, label, onPress }: { value: string; label: string; onPress: () => void }) {
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${label}: ${value}`} style={({ pressed }) => [s.pill, pressed && { borderColor: colors.brandRing }]}>
-      <Text variant="bodyStrong" style={{ fontVariant: ['tabular-nums'] }}>
-        {value}
-      </Text>
-    </Pressable>
-  );
-}
-
 const s = StyleSheet.create({
   day: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 10, minHeight: 60 },
   dayBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.lineStrong },
-  pill: {
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: radius.sm,
-    backgroundColor: colors.surface2,
-    borderWidth: 1,
-    borderColor: colors.line,
-  },
   offIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: colors.goldTint, alignItems: 'center', justifyContent: 'center' },
   bar: {
     position: 'absolute',

@@ -1,15 +1,15 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Linking, View } from 'react-native';
 
 import { ReschedulePicker } from '@/components/reschedule-picker';
 import { Sheet } from '@/components/sheet';
 import { Banner, Button, Card, Chip, StatusBadge, styles, Text } from '@/components/ui';
 import { STATUS, type IconName } from '@/lib/constants';
-import { dayOf, errorMessage, formatDate, formatPrice, formatTime, isPast, relativeDay, reminderText, whatsappLink } from '@/lib/format';
+import { dayOf, errorMessage, formatDate, formatPrice, formatTime, isPast, phoneKey, relativeDay, reminderText, whatsappLink } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
-import type { Appointment, AppointmentStatus } from '@/lib/types';
+import type { Appointment, AppointmentStatus, SessionPackage } from '@/lib/types';
 
 export type AgendaRow = Appointment & { staff: { name: string } | null };
 
@@ -32,6 +32,31 @@ export function AppointmentSheet({
   const [movingId, setMovingId] = useState<string | null>(null);
   const a = appointment;
   const moving = !!a && movingId === a.id;
+  // Müşteri defterindeki not ve seans paketleri (paketinde defter yoksa boş gelir).
+  const [extra, setExtra] = useState<{ id: string; note: string; packages: SessionPackage[] } | null>(null);
+  const customerNote = a && extra?.id === a.id ? extra.note : '';
+  const pkg =
+    a && extra?.id === a.id
+      ? (extra.packages.find((p) => p.id === a.package_id) ??
+        (a.status === 'cancelled' ? undefined : extra.packages.find((p) => p.service_id === a.service_id && p.used < p.total)))
+      : undefined;
+  const aId = a?.id;
+  const aBusiness = a?.business_id;
+  const aKey = a ? phoneKey(a.customer_phone) : '';
+
+  useEffect(() => {
+    if (!aId || !aBusiness || !aKey) return;
+    let active = true;
+    Promise.all([
+      supabase.from('customer_notes').select('note').eq('business_id', aBusiness).eq('phone_key', aKey).maybeSingle(),
+      supabase.from('session_packages').select('*').eq('business_id', aBusiness).eq('phone_key', aKey).order('created_at'),
+    ]).then(([{ data }, { data: packages }]) => {
+      if (active) setExtra({ id: aId, note: data?.note ?? '', packages: (packages ?? []) as SessionPackage[] });
+    });
+    return () => {
+      active = false;
+    };
+  }, [aId, aBusiness, aKey]);
 
   async function setStatus(status: AppointmentStatus) {
     if (!a) return;
@@ -118,6 +143,14 @@ export function AppointmentSheet({
             <Info icon="call-outline" label="Telefon" value={a.customer_phone} />
             {a.customer_email && <Info icon="mail-outline" label="E-posta" value={a.customer_email} />}
             {a.note ? <Info icon="chatbubble-outline" label="Not" value={a.note} /> : null}
+            {customerNote ? <Info icon="document-text-outline" label="Notunuz" value={customerNote} /> : null}
+            {pkg ? (
+              <Info
+                icon="layers-outline"
+                label="Paket"
+                value={`${pkg.name} · ${pkg.total - pkg.used}/${pkg.total} seans kaldı${a.package_id === pkg.id ? ' · bu randevu düşüldü' : ''}`}
+              />
+            ) : null}
           </Card>
 
           <View style={{ flexDirection: 'row', gap: 8 }}>

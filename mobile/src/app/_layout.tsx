@@ -6,11 +6,15 @@ import { useEffect } from 'react';
 
 import { ToastProvider } from '@/components/toast';
 import { AuthProvider, useAuth } from '@/lib/auth';
+import { installErrorHandler } from '@/lib/error-log';
 import { InboxProvider } from '@/lib/inbox';
 import { useNotificationTaps, usePushRegistration } from '@/lib/notifications';
 import { colors, fonts } from '@/lib/theme';
 
 SplashScreen.preventAutoHideAsync();
+
+// Hata kaydı: yakalanmayan hatalar Supabase'deki error_logs tablosuna gider (web yönetim > Hatalar).
+installErrorHandler();
 
 const theme: Theme = {
   ...DarkTheme,

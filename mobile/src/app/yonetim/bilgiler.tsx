@@ -1,3 +1,5 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
+import * as Location from 'expo-location';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -54,7 +56,9 @@ function Info({ business }: { business: Business }) {
   });
   const [picker, setPicker] = useState<'category' | 'city' | null>(null);
   const [busy, setBusy] = useState(false);
+  const [locBusy, setLocBusy] = useState(false);
   const [error, setError] = useState('');
+  const located = business.latitude != null && business.longitude != null;
   const set = (patch: Partial<typeof form>) => {
     setForm({ ...form, ...patch });
     setError('');
@@ -74,6 +78,31 @@ function Info({ business }: { business: Business }) {
     if (error) return setError(errorMessage(error));
     await refresh();
     toast('Bilgiler kaydedildi.');
+  }
+
+  // Keşfet "Yakınımda" için telefonun şu anki konumu kaydedilir (clear: konumu kaldırır).
+  async function saveLocation(clear = false) {
+    setLocBusy(true);
+    setError('');
+    let latitude: number | null = null;
+    let longitude: number | null = null;
+    if (!clear) {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') throw new Error('izin yok');
+        const p = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+        latitude = Number(p.coords.latitude.toFixed(6));
+        longitude = Number(p.coords.longitude.toFixed(6));
+      } catch {
+        setLocBusy(false);
+        return setError('Konum alınamadı. Konum iznini açıp tekrar deneyin.');
+      }
+    }
+    const { error } = await supabase.from('businesses').update({ latitude, longitude }).eq('id', business.id);
+    setLocBusy(false);
+    if (error) return setError(errorMessage(error));
+    await refresh();
+    toast(clear ? 'Konum kaldırıldı.' : 'Konum kaydedildi.');
   }
 
   return (
@@ -107,6 +136,24 @@ function Info({ business }: { business: Business }) {
           <Field label="İlçe" value={form.district} onChangeText={(district) => set({ district })} containerStyle={{ flex: 1 }} />
         </View>
         <Field label="Adres" icon="map-outline" value={form.address} onChangeText={(address) => set({ address })} placeholder="Mahalle, cadde, no" />
+        {/* Ek dosya henüz çalıştırılmadıysa (konum sütunları yoksa) gizli kalır. */}
+        {'latitude' in business && (
+          <Card style={{ gap: 10 }}>
+            <View style={[styles.rowCenter, { gap: 10 }]}>
+              <Ionicons name={located ? 'navigate' : 'navigate-outline'} size={18} color={colors.brand300} />
+              <Text tone={located ? 'default' : 'muted'} style={{ flex: 1 }}>
+                {located ? 'Konum kayıtlı: Keşfet\'te "Yakınımda" aramasında görünürsünüz.' : 'Konum girilmedi: "Yakınımda" aramasında görünmezsiniz.'}
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <Button title="Bulunduğum yeri kaydet" icon="locate-outline" variant="secondary" size="sm" style={{ flex: 1 }} onPress={() => saveLocation()} loading={locBusy} />
+              {located && <Button title="Kaldır" variant="dangerGhost" size="sm" onPress={() => saveLocation(true)} />}
+            </View>
+            <Text variant="caption" tone="muted">
+              İşletmenizdeyken dokunun; telefonun konumu kaydedilir.
+            </Text>
+          </Card>
+        )}
 
         <SectionTitle title="Randevu kuralları" />
         <Text variant="label" tone="secondary">

@@ -16,7 +16,8 @@ export default function StaffScreen() {
   return business ? <StaffList business={business} /> : null;
 }
 
-type Data = { staff: Staff[]; services: Service[]; links: StaffService[] };
+// customHours: kendi çalışma saatleri olan personelin kimlikleri
+type Data = { staff: Staff[]; services: Service[]; links: StaffService[]; customHours: string[] };
 
 function StaffList({ business }: { business: Business }) {
   const plan = usePlan(business.plan_id);
@@ -31,8 +32,19 @@ function StaffList({ business }: { business: Business }) {
           supabase.from('services').select('*').eq('business_id', business.id).order('sort_order').order('created_at'),
         ]);
         const staff = (st.data ?? []) as Staff[];
-        const { data: links } = staff.length ? await supabase.from('staff_services').select('*').in('staff_id', staff.map((x) => x.id)) : { data: [] };
-        setData({ staff, services: (sv.data ?? []) as Service[], links: (links ?? []) as StaffService[] });
+        const ids = staff.map((x) => x.id);
+        const [{ data: links }, { data: hours }] = staff.length
+          ? await Promise.all([
+              supabase.from('staff_services').select('*').in('staff_id', ids),
+              supabase.from('staff_hours').select('staff_id').in('staff_id', ids),
+            ])
+          : [{ data: [] }, { data: [] }];
+        setData({
+          staff,
+          services: (sv.data ?? []) as Service[],
+          links: (links ?? []) as StaffService[],
+          customHours: (hours ?? []).map((h: { staff_id: string }) => h.staff_id),
+        });
       })();
     }, [business.id]),
   );
@@ -41,6 +53,7 @@ function StaffList({ business }: { business: Business }) {
   const staffList = data ? data.staff : [];
   const links = data ? data.links : [];
   const services = data ? data.services : [];
+  const customHours = data ? data.customHours : [];
   const activeCount = staffList.filter((x) => x.is_active).length;
 
   return (
@@ -96,7 +109,7 @@ function StaffList({ business }: { business: Business }) {
                   {!x.is_active && <Badge label="Pasif" />}
                 </View>
                 <Text variant="caption" tone="muted" numberOfLines={2}>
-                  {[x.title, summary].filter(Boolean).join(' · ')}
+                  {[x.title, summary, customHours.includes(x.id) && 'Kendi saatleri'].filter(Boolean).join(' · ')}
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={colors.ink3} />

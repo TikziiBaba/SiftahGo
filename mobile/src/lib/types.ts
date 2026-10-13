@@ -40,6 +40,13 @@ export type Business = {
   subscription_ends_at: string | null;
   // Ücretsiz deneme bitişi; subscription_ends_at buna eşitse işletme denemededir.
   trial_ends_at: string | null;
+  // Keşfet "Yakınımda" için konum (ikisi birlikte dolu ya da boş)
+  latitude: number | null;
+  longitude: number | null;
+  // Davet kodu; davetle geldiyse davet eden işletme ve ödülün verildiği tarih
+  referral_code: string;
+  referred_by: string | null;
+  referral_rewarded_at: string | null;
 };
 
 export type Service = {
@@ -77,6 +84,8 @@ export type Payment = {
   plan_id: string;
   merchant_oid: string;
   amount: number;
+  // 1: aylık (30 gün), 12: yıllık (365 gün)
+  months: number;
   status: "pending" | "paid" | "failed";
   created_at: string;
   paid_at: string | null;
@@ -105,6 +114,33 @@ export type WorkingHour = {
   open_time: string; // "09:00:00"
   close_time: string;
 };
+
+// Personelin kendi saatleri; bir gün için kaydı yoksa işletme saatleri geçerlidir.
+export type StaffHour = {
+  staff_id: string;
+  weekday: number;
+  is_open: boolean;
+  open_time: string;
+  close_time: string;
+};
+
+// Müşteriye satılan seans paketi (telefonun son 10 hanesine bağlı); kalan seans = total - used.
+export type SessionPackage = {
+  id: string;
+  business_id: string;
+  phone_key: string;
+  customer_name: string;
+  service_id: string | null;
+  name: string;
+  total: number;
+  used: number;
+  created_at: string;
+};
+
+// İşletmenin müşteri hakkındaki özel notu (telefonun son 10 hanesine bağlı).
+export type CustomerNote = { business_id: string; phone_key: string; note: string; updated_at: string };
+
+export type ReportSummary = { capacity_minutes: number; booked_minutes: number; customers: number; returning: number };
 
 export type TimeOff = {
   id: string;
@@ -138,6 +174,8 @@ export type Appointment = {
   prior_no_shows: number;
   // Sık iptal eden / gelmeyen müşteri
   customer_flagged: boolean;
+  // Seansı düşülen paket (tamamlanınca)
+  package_id: string | null;
   created_at: string;
 };
 

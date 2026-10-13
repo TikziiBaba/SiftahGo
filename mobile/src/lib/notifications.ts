@@ -67,13 +67,14 @@ export function usePushRegistration(userId: string | undefined) {
   }, [userId]);
 }
 
-type Target = { kind?: string; recipient: string; appointmentId?: string; startsAt?: string };
+type Target = { kind?: string; recipient: string; appointmentId?: string; startsAt?: string; slug?: string; day?: string };
 
 /**
  * Bildirimin ilgili ekranını açar: işletme o günün takvimine (yeni değerlendirmede Yorumlar'a),
- * müşteri randevularına gider.
+ * müşteri randevularına gider. Bekleme listesi haberi işletme sayfasını o gün seçili açar.
  */
-export async function openNotificationTarget({ kind, recipient, appointmentId, startsAt }: Target) {
+export async function openNotificationTarget({ kind, recipient, appointmentId, startsAt, slug, day }: Target) {
+  if (kind === 'waitlist' && slug) return router.navigate({ pathname: '/isletme/[slug]', params: { slug, ...(day ? { day } : {}) } });
   if (recipient !== 'business') return router.navigate('/randevular');
   if (kind === 'reviewed') return router.navigate('/yonetim/yorumlar');
   if (!startsAt && appointmentId) {
@@ -94,6 +95,8 @@ function handleTap(response: Notifications.NotificationResponse | null) {
       kind: typeof data.kind === 'string' ? data.kind : undefined,
       recipient: data.recipient,
       appointmentId: typeof data.appointmentId === 'string' ? data.appointmentId : undefined,
+      slug: typeof data.slug === 'string' ? data.slug : undefined,
+      day: typeof data.day === 'string' ? data.day : undefined,
     });
   }
 }

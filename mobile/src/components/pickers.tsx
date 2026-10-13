@@ -72,6 +72,17 @@ export function OptionSheet<T extends string>({
   );
 }
 
+/** Saat düğmesi; dokununca TimeSheet açılır. */
+export function TimePill({ value, label, onPress }: { value: string; label: string; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${label}: ${value}`} style={({ pressed }) => [s.pill, pressed && { borderColor: colors.brandRing }]}>
+      <Text variant="bodyStrong" style={{ fontVariant: ['tabular-nums'] }}>
+        {value}
+      </Text>
+    </Pressable>
+  );
+}
+
 /** "HH:mm" seçenekleri: from ile to arası (to dahil değil) */
 export function timeOptions(stepMinutes = 30, from = '00:00', to = '24:00') {
   const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
@@ -329,6 +340,14 @@ const s = StyleSheet.create({
     backgroundColor: colors.surface2,
   },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  pill: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
   timeChip: { flexBasis: '22%', flexGrow: 1, maxWidth: '24%', paddingHorizontal: 0 },
   monthHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   monthNav: {

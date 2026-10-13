@@ -1,17 +1,17 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { FlatList, Linking, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, FlatList, Linking, Pressable, StyleSheet, View } from 'react-native';
 
 import { Glow } from '@/components/brand';
 import { PlanGate } from '@/components/plan-gate';
 import { Sheet } from '@/components/sheet';
-import { Avatar, Banner, Button, Card, Empty, Field, IconButton, ScreenHeader, Skeleton, Stat, styles, Text } from '@/components/ui';
+import { Avatar, Banner, Button, Card, Chip, Empty, Field, IconButton, ScreenHeader, Skeleton, Stat, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
-import { errorMessage, formatDate, formatPrice, formatTime, whatsappLink } from '@/lib/format';
+import { errorMessage, formatDate, formatPrice, formatTime, phoneKey, whatsappLink } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
-import type { Business } from '@/lib/types';
+import type { Business, Service, SessionPackage } from '@/lib/types';
 
 type Customer = {
   phone: string;
@@ -43,15 +43,116 @@ function Customers({ business }: { business: Business }) {
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
   const [selected, setSelected] = useState<Customer | null>(null);
+  // Telefonun son 10 hanesi -> not (yalnızca işletme görür)
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [draft, setDraft] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+  const [noteError, setNoteError] = useState('');
+  const [packages, setPackages] = useState<SessionPackage[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
+  // Açık paket ekleme formu (seans sayısı metin olarak)
+  const [pkgForm, setPkgForm] = useState<{ service_id: string; total: string } | null>(null);
+  const [pkgBusy, setPkgBusy] = useState(false);
+  const [pkgError, setPkgError] = useState('');
 
   useFocusEffect(
     useCallback(() => {
-      supabase.rpc('get_customers', { p_business_id: business.id }).then(({ data, error }) => {
+      Promise.all([
+        supabase.rpc('get_customers', { p_business_id: business.id }),
+        supabase.from('customer_notes').select('phone_key, note').eq('business_id', business.id),
+        supabase.from('session_packages').select('*').eq('business_id', business.id).order('created_at'),
+        supabase.from('services').select('*').eq('business_id', business.id).eq('is_active', true).order('sort_order'),
+      ]).then(([{ data, error }, { data: noteRows }, { data: packageRows }, { data: serviceRows }]) => {
         setError(error ? errorMessage(error) : '');
         setCustomers((data ?? []) as Customer[]);
+        setNotes(Object.fromEntries((noteRows ?? []).map((n) => [n.phone_key, n.note])));
+        setPackages((packageRows ?? []) as SessionPackage[]);
+        setServices((serviceRows ?? []) as Service[]);
       });
     }, [business.id]),
   );
+
+  function open(c: Customer) {
+    setDraft(notes[phoneKey(c.phone)] ?? '');
+    setNoteError('');
+    setPkgForm(null);
+    setPkgError('');
+    setSelected(c);
+  }
+
+  async function addPackage() {
+    const service = services.find((x) => x.id === pkgForm?.service_id);
+    const total = Number(pkgForm?.total);
+    if (!selected || !service || !Number.isInteger(total) || total < 1 || total > 500) {
+      return setPkgError('Hizmet seçin ve 1 ile 500 arasında seans sayısı yazın.');
+    }
+    setPkgBusy(true);
+    setPkgError('');
+    const { data, error } = await supabase
+      .from('session_packages')
+      .insert({
+        business_id: business.id,
+        phone_key: phoneKey(selected.phone),
+        customer_name: selected.name,
+        service_id: service.id,
+        name: `${service.name} paketi`,
+        total,
+      })
+      .select('*')
+      .single();
+    setPkgBusy(false);
+    if (error) return setPkgError(errorMessage(error));
+    setPackages((all) => [...all, data as SessionPackage]);
+    setPkgForm(null);
+  }
+
+  async function setUsed(p: SessionPackage, used: number) {
+    if (used < 0 || used > p.total) return;
+    setPkgError('');
+    setPackages((all) => all.map((x) => (x.id === p.id ? { ...x, used } : x)));
+    const { error } = await supabase.from('session_packages').update({ used }).eq('id', p.id);
+    if (error) {
+      setPkgError(errorMessage(error));
+      setPackages((all) => all.map((x) => (x.id === p.id ? p : x)));
+    }
+  }
+
+  function removePackage(p: SessionPackage) {
+    Alert.alert(`"${p.name}" silinsin mi?`, 'Kalan seans bilgisi silinir.', [
+      { text: 'Vazgeç', style: 'cancel' },
+      {
+        text: 'Sil',
+        style: 'destructive',
+        onPress: async () => {
+          const { error } = await supabase.from('session_packages').delete().eq('id', p.id);
+          if (error) return setPkgError(errorMessage(error));
+          setPackages((all) => all.filter((x) => x.id !== p.id));
+        },
+      },
+    ]);
+  }
+
+  async function saveNote() {
+    const key = selected ? phoneKey(selected.phone) : '';
+    if (!key) return;
+    setSavingNote(true);
+    setNoteError('');
+    const text = draft.trim();
+    const { error } = text
+      ? await supabase
+          .from('customer_notes')
+          .upsert({ business_id: business.id, phone_key: key, note: text, updated_at: new Date().toISOString() })
+      : await supabase.from('customer_notes').delete().eq('business_id', business.id).eq('phone_key', key);
+    setSavingNote(false);
+    if (error) return setNoteError(errorMessage(error));
+    setNotes((all) => {
+      const next = { ...all };
+      if (text) next[key] = text;
+      else delete next[key];
+      return next;
+    });
+    setSelected(null);
+  }
 
   const q = query.trim().toLocaleLowerCase('tr-TR');
   const digits = query.replace(/\D/g, '');
@@ -94,7 +195,7 @@ function Customers({ business }: { business: Business }) {
           // Arama/WhatsApp düğmeleri ekran okuyucuda ayrı erişilsin diye kart değil satır dokunulabilir.
           <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 }}>
             <Pressable
-              onPress={() => setSelected(c)}
+              onPress={() => open(c)}
               accessibilityRole="button"
               accessibilityLabel={`${c.name}, ayrıntılar`}
               style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -114,6 +215,11 @@ function Customers({ business }: { business: Business }) {
                       ? `Son ziyaret: ${formatDate(c.last_visit, false)}`
                       : 'Henüz tamamlanan ziyaret yok'}
                 </Text>
+                {notes[phoneKey(c.phone)] ? (
+                  <Text variant="caption" tone="gold" numberOfLines={1}>
+                    {notes[phoneKey(c.phone)]}
+                  </Text>
+                ) : null}
               </View>
             </Pressable>
             <IconButton icon="call-outline" label={`${c.name} ara`} size={38} onPress={() => Linking.openURL(`tel:${c.phone}`)} />
@@ -133,6 +239,78 @@ function Customers({ business }: { business: Business }) {
               <Stat label="Gelmedi" value={String(selected.no_show)} icon="ban-outline" />
               <Stat label="İptal" value={String(selected.cancelled)} icon="close-circle-outline" />
             </View>
+            {phoneKey(selected.phone) ? (
+              <View style={{ gap: 8 }}>
+                <Field
+                  label="Notunuz"
+                  hint="Yalnızca siz görürsünüz; müşterinin randevusunda da gösterilir."
+                  placeholder="Örn. Kısa kesim sever, 3 numara"
+                  value={draft}
+                  onChangeText={setDraft}
+                  maxLength={1000}
+                  multiline
+                  error={noteError || undefined}
+                />
+                {draft.trim() !== (notes[phoneKey(selected.phone)] ?? '') && (
+                  <Button title="Notu kaydet" icon="save-outline" variant="secondary" onPress={saveNote} loading={savingNote} />
+                )}
+              </View>
+            ) : null}
+            {phoneKey(selected.phone) ? (
+              <View style={{ gap: 8 }}>
+                <Text variant="label" tone="secondary">
+                  Seans paketleri
+                </Text>
+                {packages
+                  .filter((p) => p.phone_key === phoneKey(selected.phone))
+                  .map((p) => {
+                    const left = p.total - p.used;
+                    return (
+                      <View key={p.id} style={s.pkg}>
+                        <Ionicons name="layers-outline" size={18} color={colors.brand300} />
+                        <View style={{ flex: 1 }}>
+                          <Text variant="bodyStrong" numberOfLines={1}>
+                            {p.name}
+                          </Text>
+                          <Text variant="caption" tone={left > 0 ? 'muted' : 'warning'}>
+                            {left > 0 ? `${left}/${p.total} seans kaldı` : 'Bitti'}
+                          </Text>
+                        </View>
+                        <IconButton icon="remove" label="Bir seans düş" size={34} onPress={() => setUsed(p, p.used + 1)} />
+                        <IconButton icon="add" label="Bir seans iade et" size={34} onPress={() => setUsed(p, p.used - 1)} />
+                        <IconButton icon="trash-outline" label="Paketi sil" size={34} color={colors.danger} onPress={() => removePackage(p)} />
+                      </View>
+                    );
+                  })}
+                {pkgForm ? (
+                  <View style={{ gap: 8 }}>
+                    <View style={styles.wrap}>
+                      {services.map((x) => (
+                        <Chip key={x.id} label={x.name} selected={pkgForm.service_id === x.id} onPress={() => setPkgForm({ ...pkgForm, service_id: x.id })} />
+                      ))}
+                    </View>
+                    <Field
+                      label="Seans sayısı"
+                      keyboardType="number-pad"
+                      maxLength={3}
+                      value={pkgForm.total}
+                      onChangeText={(total) => setPkgForm({ ...pkgForm, total: total.replace(/[^0-9]/g, '') })}
+                    />
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <Button title="Paketi ekle" style={{ flex: 1 }} onPress={addPackage} loading={pkgBusy} />
+                      <Button title="Vazgeç" variant="ghost" style={{ flex: 1 }} onPress={() => setPkgForm(null)} />
+                    </View>
+                  </View>
+                ) : services.length > 0 ? (
+                  <Button title="Seans paketi ekle" icon="add" variant="secondary" size="sm" onPress={() => setPkgForm({ service_id: services[0].id, total: '10' })} />
+                ) : null}
+                {pkgError ? (
+                  <Text variant="caption" tone="danger">
+                    {pkgError}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
             {selected.next_appointment ? (
               <View style={s.line}>
                 <Ionicons name="calendar-outline" size={18} color={colors.brand300} />
@@ -169,4 +347,5 @@ function Customers({ business }: { business: Business }) {
 
 const s = StyleSheet.create({
   line: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  pkg: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 12, paddingVertical: 6, paddingRight: 4, borderRadius: 14, backgroundColor: colors.surface2 },
 });

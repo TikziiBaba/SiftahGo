@@ -1,12 +1,12 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { RefreshControl, ScrollView, Share, StyleSheet, View } from 'react-native';
 
-import { Badge, Banner, Button, Card, SectionTitle, Skeleton, styles, Text } from '@/components/ui';
+import { Badge, Banner, Button, Card, Field, SectionTitle, Segmented, Skeleton, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { BASE_FEATURES, isSubscribed, isTrial, PLAN_FEATURES, WEB_URL } from '@/lib/constants';
-import { formatDate, formatPrice } from '@/lib/format';
+import { errorMessage, formatDate, formatPrice } from '@/lib/format';
 import { daysLeft } from '@/lib/plan';
 import { supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
@@ -30,17 +30,27 @@ function Subscription({ business }: { business: Business }) {
   const [plans, setPlans] = useState<Plan[] | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  // Ödeme dönemi: aylık veya yıllık (10 ay fiyatına)
+  const [period, setPeriod] = useState<'aylik' | 'yillik'>('aylik');
+  const yearly = period === 'yillik';
+  const [referrals, setReferrals] = useState<{ name: string; created_at: string; rewarded_at: string | null }[]>([]);
+  const [code, setCode] = useState('');
+  const [codeBusy, setCodeBusy] = useState(false);
+  const [codeMessage, setCodeMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const hasPaid = payments.some((p) => p.status === 'paid');
   const subscribed = isSubscribed(business);
   const trial = isTrial(business);
   const current = plans?.find((p) => p.id === business.plan_id);
 
   const load = useCallback(async () => {
-    const [p, pay] = await Promise.all([
+    const [p, pay, refs] = await Promise.all([
       supabase.from('plans').select('*').order('sort_order'),
       supabase.from('payments').select('*').eq('business_id', business.id).order('created_at', { ascending: false }).limit(10),
+      supabase.rpc('my_referrals'),
     ]);
     setPlans((p.data ?? []) as Plan[]);
     setPayments((pay.data ?? []) as Payment[]);
+    setReferrals(refs.data ?? []);
     setRefreshing(false);
   }, [business.id]);
 
@@ -51,9 +61,26 @@ function Subscription({ business }: { business: Business }) {
 
   // Ödeme web sitesindeki PayTR sayfasında yapılır; tarayıcı kapanınca durum tazelenir.
   async function pay() {
-    await WebBrowser.openBrowserAsync(`${WEB_URL}/panel/abonelik`);
+    await WebBrowser.openBrowserAsync(`${WEB_URL}/panel/abonelik${yearly ? '?donem=yillik' : ''}`);
     await refresh();
     load();
+  }
+
+  // Davet bağlantısı: kayıtta işletme hesabı seçili açılır, kod kurulumda dolu gelir.
+  function shareInvite() {
+    Share.share({
+      message: `SiftahGo'da online randevu sayfanı aç; davet kodum ${business.referral_code} ile ilk ödemende ikimize de 1 ay hediye: ${WEB_URL}/kayit?davet=${business.referral_code}`,
+    });
+  }
+
+  async function applyCode() {
+    setCodeBusy(true);
+    setCodeMessage(null);
+    const { data, error } = await supabase.rpc('apply_referral', { p_code: code });
+    setCodeBusy(false);
+    if (error) return setCodeMessage({ ok: false, text: errorMessage(error) });
+    setCodeMessage({ ok: true, text: `${data} sizi davet etti. İlk ödemenizde ikinize de 1 ay hediye eklenecek.` });
+    refresh();
   }
 
   return (
@@ -108,6 +135,14 @@ function Subscription({ business }: { business: Business }) {
       />
 
       <SectionTitle title="Paketler" />
+      <Segmented
+        options={[
+          { value: 'aylik', label: 'Aylık' },
+          { value: 'yillik', label: 'Yıllık · 2 ay bedava' },
+        ]}
+        value={period}
+        onChange={setPeriod}
+      />
       {plans === null ? (
         <>
           <Skeleton height={260} />
@@ -128,9 +163,14 @@ function Subscription({ business }: { business: Business }) {
                 ) : null}
               </View>
               <Text>
-                <Text variant="display">{formatPrice(plan.price)}</Text>
-                <Text tone="muted"> / ay</Text>
+                <Text variant="display">{formatPrice(yearly ? plan.price * 10 : plan.price)}</Text>
+                <Text tone="muted"> / {yearly ? 'yıl' : 'ay'}</Text>
               </Text>
+              {yearly && (
+                <Text variant="label" tone="brand">
+                  Aylık {formatPrice((plan.price * 10) / 12)} · {formatPrice(plan.price * 2)} kazanç
+                </Text>
+              )}
               <View style={{ gap: 8 }}>
                 <Feature>{plan.staff_limit ? `${plan.staff_limit} personel` : 'Sınırsız personel'}</Feature>
                 {BASE_FEATURES.map((f) => (
@@ -143,7 +183,7 @@ function Subscription({ business }: { business: Business }) {
                 ))}
               </View>
               <Button
-                title={isCurrent ? '30 gün uzat' : subscribed && !trial ? 'Bu pakete geç' : 'Seç ve öde'}
+                title={isCurrent ? (yearly ? '1 yıl uzat' : '30 gün uzat') : subscribed && !trial ? 'Bu pakete geç' : 'Seç ve öde'}
                 icon="open-outline"
                 variant={popular ? 'primary' : 'secondary'}
                 onPress={pay}
@@ -155,9 +195,63 @@ function Subscription({ business }: { business: Business }) {
       <View style={[styles.rowCenter, { paddingHorizontal: 4 }]}>
         <Ionicons name="shield-checkmark-outline" size={16} color={colors.brand300} />
         <Text variant="caption" tone="muted" style={{ flex: 1 }}>
-          Paketler aylıktır, taahhüt yok. Her ödeme 30 gün geçerlidir ve kalan sürenize eklenir.
+          Aylık (30 gün) ya da yıllık (365 gün, 2 ay bedava). Taahhüt ve otomatik yenileme yok; her ödeme kalan sürenize eklenir.
         </Text>
       </View>
+
+      {/* Ek dosya henüz çalıştırılmadıysa (davet sütunları yoksa) gizli kalır. */}
+      {'referral_code' in business && (
+        <>
+          <SectionTitle title="Esnaf arkadaşını getir" />
+          <Card style={{ gap: 12 }}>
+            <Text tone="secondary">Kodunuzla katılan işletme ilk ödemesini yaptığında hem size hem ona 1 ay hediye eklenir.</Text>
+            <View style={[styles.rowCenter, { gap: 10 }]}>
+              <Text variant="caption" tone="muted">
+                Davet kodunuz
+              </Text>
+              <Text variant="title" selectable style={{ letterSpacing: 3 }}>
+                {business.referral_code}
+              </Text>
+            </View>
+            <Button title="Davet bağlantısını paylaş" icon="share-social-outline" onPress={shareInvite} />
+            {referrals.map((r) => (
+              <View key={`${r.name}-${r.created_at}`} style={styles.rowCenter}>
+                <Text variant="bodyStrong" style={{ flex: 1 }} numberOfLines={1}>
+                  {r.name}
+                </Text>
+                {r.rewarded_at ? (
+                  <Badge label="1 ay kazandınız" fg={colors.success} bg={colors.successTint} />
+                ) : (
+                  <Badge label="İlk ödeme bekleniyor" fg={colors.ink3} bg={colors.white04} />
+                )}
+              </View>
+            ))}
+          </Card>
+          {business.referred_by ? (
+            <Text variant="caption" tone="muted">
+              Davet koduyla katıldınız. {business.referral_rewarded_at ? '1 ay hediyeniz eklendi.' : 'İlk ödemenizde 1 ay hediye eklenecek.'}
+            </Text>
+          ) : !hasPaid ? (
+            <Card style={{ gap: 10 }}>
+              <Field
+                label="Davet kodunuz var mı?"
+                placeholder="Örn. 3FA9C21B"
+                autoCapitalize="characters"
+                autoCorrect={false}
+                maxLength={8}
+                value={code}
+                onChangeText={setCode}
+              />
+              <Button title="Kodu uygula" variant="secondary" onPress={applyCode} loading={codeBusy} />
+              {codeMessage ? (
+                <Text variant="caption" tone={codeMessage.ok ? 'success' : 'danger'}>
+                  {codeMessage.text}
+                </Text>
+              ) : null}
+            </Card>
+          ) : null}
+        </>
+      )}
 
       {payments.length > 0 && (
         <>
@@ -167,7 +261,8 @@ function Subscription({ business }: { business: Business }) {
               <View key={p.id} style={styles.rowCenter}>
                 <View style={{ flex: 1 }}>
                   <Text variant="bodyStrong">
-                    {plans?.find((x) => x.id === p.plan_id)?.name ?? p.plan_id} · {formatPrice(p.amount)}
+                    {plans?.find((x) => x.id === p.plan_id)?.name ?? p.plan_id}
+                    {p.months === 12 ? ' · yıllık' : ''} · {formatPrice(p.amount)}
                   </Text>
                   <Text variant="caption" tone="muted">
                     {formatDate(p.created_at)}

@@ -59,6 +59,12 @@
           "color": "#2dd4bf",
           "defaultChannel": "default"
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Yakınınızdaki işletmeleri göstermek ve işletmenizin konumunu kaydetmek için konumunuz kullanılır."
+        }
       ]
     ],
     "experiments": {

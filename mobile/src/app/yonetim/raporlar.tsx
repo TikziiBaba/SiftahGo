@@ -8,7 +8,7 @@ import { addDays, dayBounds, dayOf, formatDate, formatPrice, todayStr } from '@/
 import { haptic } from '@/lib/haptics';
 import { supabase } from '@/lib/supabase';
 import { colors, radius } from '@/lib/theme';
-import type { AppointmentStatus, Business } from '@/lib/types';
+import type { AppointmentStatus, Business, ReportSummary } from '@/lib/types';
 
 type Row = { starts_at: string; status: AppointmentStatus; price: number; service_name: string; staff: { name: string } | null };
 
@@ -48,22 +48,25 @@ export default function ReportsScreen() {
 
 function Reports({ business }: { business: Business }) {
   const [period, setPeriod] = useState<string>('30');
-  const [result, setResult] = useState<{ period: string; rows: Row[] } | null>(null);
+  const [result, setResult] = useState<{ period: string; rows: Row[]; summary: ReportSummary | null } | null>(null);
   const { from, to } = range(period);
   const rows = result?.period === period ? result.rows : null;
+  const summary = result?.period === period ? result.summary : null;
 
   useEffect(() => {
     let active = true;
-    supabase
-      .from('appointments')
-      .select('starts_at, status, price, service_name, staff(name)')
-      .eq('business_id', business.id)
-      .gte('starts_at', dayBounds(from).from)
-      .lt('starts_at', dayBounds(to).to)
-      .limit(5000)
-      .then(({ data }) => {
-        if (active) setResult({ period, rows: (data ?? []) as unknown as Row[] });
-      });
+    Promise.all([
+      supabase
+        .from('appointments')
+        .select('starts_at, status, price, service_name, staff(name)')
+        .eq('business_id', business.id)
+        .gte('starts_at', dayBounds(from).from)
+        .lt('starts_at', dayBounds(to).to)
+        .limit(5000),
+      supabase.rpc('get_report_summary', { p_business_id: business.id, p_from: from, p_to: to }),
+    ]).then(([{ data }, { data: summaryData }]) => {
+      if (active) setResult({ period, rows: (data ?? []) as unknown as Row[], summary: (summaryData ?? null) as ReportSummary | null });
+    });
     return () => {
       active = false;
     };
@@ -136,6 +139,22 @@ function Reports({ business }: { business: Business }) {
             <Stat label="Ortalama sepet" value={formatPrice(stats.average)} icon="pricetag-outline" />
             <Stat label="Gelmeme oranı" value={`%${stats.noShowRate}`} hint={`${stats.cancelled} iptal`} icon="ban-outline" />
           </View>
+          {summary && (
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <Stat
+                label="Doluluk"
+                value={`%${summary.capacity_minutes ? Math.round((summary.booked_minutes / summary.capacity_minutes) * 100) : 0}`}
+                hint="Personel saatlerinin dolu kısmı"
+                icon="time-outline"
+              />
+              <Stat
+                label="Geri dönen"
+                value={`%${summary.customers ? Math.round((summary.returning / summary.customers) * 100) : 0}`}
+                hint={`${summary.customers} müşteriden ${summary.returning} kişi`}
+                icon="repeat-outline"
+              />
+            </View>
+          )}
           <DailyChart days={stats.days} />
           <Breakdown title="Hizmetlere göre" items={stats.byService} />
           <Breakdown title="Personele göre" items={stats.byStaff} />

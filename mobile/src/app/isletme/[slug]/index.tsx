@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, Modal, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,8 +11,9 @@ import { Logo } from '@/components/business-logo';
 import { CalendarSheet, DayStrip } from '@/components/pickers';
 import { Avatar, Badge, Button, Card, Chip, Empty, IconButton, Loading, SectionTitle, Skeleton, styles, Text } from '@/components/ui';
 import { AccentProvider, useAccent } from '@/lib/accent';
+import { useAuth } from '@/lib/auth';
 import { categoryIcon, categoryLabel, isSubscribed, WEB_URL, WEEKDAYS, type IconName } from '@/lib/constants';
-import { addDays, formatDate, formatDuration, formatPrice, formatTime, isoWeekday, mapsLink, todayStr, whatsappLink } from '@/lib/format';
+import { addDays, errorMessage, formatDate, formatDuration, formatPrice, formatTime, isoWeekday, mapsLink, todayStr, whatsappLink } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 import { supabase } from '@/lib/supabase';
 import { accentOf, alpha, colors, radius } from '@/lib/theme';
@@ -23,9 +24,26 @@ type Data = { business: Business; services: Service[]; staff: Staff[]; links: St
 const COVER = 230;
 
 export default function BusinessScreen() {
-  const { slug } = useLocalSearchParams<{ slug: string }>();
+  // service/staff: "Tekrar al" ile gelindiğinde önceki randevunun hizmeti ve personeli seçili açılır.
+  // day: bekleme listesi bildiriminden gelindiğinde o gün seçili açılır.
+  const {
+    slug,
+    service: rebookService,
+    staff: rebookStaff,
+    day: notifyDay,
+  } = useLocalSearchParams<{ slug: string; service?: string; staff?: string; day?: string }>();
+  const { session } = useAuth();
   const insets = useSafeAreaInsets();
   const [data, setData] = useState<Data | null | undefined>(undefined);
+  const [favorite, setFavorite] = useState(false);
+  // Bekleme listesine yazıldığı günler
+  const [waitDays, setWaitDays] = useState<string[]>([]);
+  const [waitBusy, setWaitBusy] = useState(false);
+  const [waitError, setWaitError] = useState('');
+  const scrollRef = useRef<ScrollView>(null);
+  const bodyY = useRef(0);
+  // "Tekrar al" ile gelindiyse ekran bir kez gün/saat seçimine kaydırılır.
+  const scrollToBooking = useRef(!!rebookService);
 
   const [serviceId, setServiceId] = useState<string | null>(null);
   const [staffId, setStaffId] = useState('');
@@ -54,12 +72,36 @@ export default function BusinessScreen() {
         ? await supabase.from('staff_services').select('*').in('staff_id', staff.map((x) => x.id))
         : { data: [] };
       setData({ business, services: s.data ?? [], staff, links: links ?? [], hours: h.data ?? [], reviews: r.data ?? [], features: plan.data?.features ?? [] });
-      // Bugün kapalıysa ilk açık gün seçili gelir.
+      if (rebookService && (s.data ?? []).some((x) => x.id === rebookService)) {
+        setServiceId(rebookService);
+        const linkList = links ?? [];
+        const offers = (p: Staff) =>
+          !linkList.some((l) => l.staff_id === p.id) || linkList.some((l) => l.staff_id === p.id && l.service_id === rebookService);
+        if (rebookStaff && staff.some((p) => p.id === rebookStaff && offers(p))) setStaffId(rebookStaff);
+      }
+      // Bildirimden gelinen gün açıksa o, değilse ilk açık gün seçili gelir (bugün kapalı olabilir).
       const open = (d: string) => (h.data ?? []).find((x) => x.weekday === isoWeekday(d))?.is_open ?? false;
-      const firstOpen = Array.from({ length: Math.min(business.booking_days, 30) + 1 }, (_, i) => addDays(todayStr(), i)).find(open);
-      if (firstOpen) setDay(firstOpen);
+      const bookable = Array.from({ length: Math.min(business.booking_days, 30) + 1 }, (_, i) => addDays(todayStr(), i));
+      const chosen = bookable.find((d) => d === notifyDay && open(d)) ?? bookable.find(open);
+      if (chosen) setDay(chosen);
     })();
-  }, [slug]);
+  }, [slug, rebookService, rebookStaff, notifyDay]);
+
+  useEffect(() => {
+    if (!session || !data) return;
+    let active = true;
+    Promise.all([
+      supabase.from('favorites').select('business_id').eq('business_id', data.business.id).maybeSingle(),
+      supabase.from('waitlist').select('day').eq('business_id', data.business.id),
+    ]).then(([{ data: row }, { data: waits }]) => {
+      if (!active) return;
+      setFavorite(!!row);
+      setWaitDays((waits ?? []).map((w: { day: string }) => w.day));
+    });
+    return () => {
+      active = false;
+    };
+  }, [session, data]);
 
   // Randevu ekranından dönüldüğünde (ör. saat dolmuşsa) boş saatleri tazele.
   useFocusEffect(
@@ -135,11 +177,46 @@ export default function BusinessScreen() {
     ...(location ? [{ icon: 'navigate-outline' as const, label: 'Yol tarifi', onPress: () => Linking.openURL(mapsLink(`${business.name} ${location}`)) }] : []),
     ...(custom && business.website ? [{ icon: 'globe-outline' as const, label: 'Web sitesi', onPress: () => Linking.openURL(business.website) }] : []),
     {
+      icon: favorite ? 'heart' : 'heart-outline',
+      label: favorite ? 'Favorilerde' : 'Favori',
+      onPress: toggleFavorite,
+    },
+    {
       icon: 'share-social-outline',
       label: 'Paylaş',
       onPress: () => Share.share({ message: `${business.name} — online randevu: ${WEB_URL}/${business.slug}` }),
     },
   ];
+
+  async function toggleFavorite() {
+    if (!session) return router.push('/giris');
+    const next = !favorite;
+    setFavorite(next);
+    const { error } = next
+      ? await supabase.from('favorites').insert({ customer_id: session.user.id, business_id: business.id })
+      : await supabase.from('favorites').delete().eq('business_id', business.id);
+    if (error) setFavorite(!next);
+  }
+
+  async function joinWaitlist() {
+    if (!session) return router.push('/giris');
+    setWaitBusy(true);
+    setWaitError('');
+    const { error } = await supabase.rpc('join_waitlist', { p_business_id: business.id, p_day: day });
+    setWaitBusy(false);
+    if (error) return setWaitError(errorMessage(error));
+    haptic.success();
+    setWaitDays((d) => [...d, day]);
+  }
+
+  async function leaveWaitlist() {
+    setWaitBusy(true);
+    setWaitError('');
+    const { error } = await supabase.from('waitlist').delete().eq('business_id', business.id).eq('day', day);
+    setWaitBusy(false);
+    if (error) return setWaitError(errorMessage(error));
+    setWaitDays((d) => d.filter((x) => x !== day));
+  }
 
   function selectService(id: string) {
     setServiceId(id === serviceId ? null : id);
@@ -160,11 +237,11 @@ export default function BusinessScreen() {
   return (
     <AccentProvider value={accent}>
       <View style={styles.screen}>
-        <ScrollView contentContainerStyle={{ paddingBottom: service ? 150 : 48 }} keyboardShouldPersistTaps="handled">
+        <ScrollView ref={scrollRef} contentContainerStyle={{ paddingBottom: service ? 150 : 48 }} keyboardShouldPersistTaps="handled">
           <Cover uri={business.cover_url} height={COVER + insets.top} />
           <View style={s.fade} />
 
-          <View style={[styles.content, { marginTop: -56, paddingBottom: 0 }]}>
+          <View style={[styles.content, { marginTop: -56, paddingBottom: 0 }]} onLayout={(e) => (bodyY.current = e.nativeEvent.layout.y)}>
             <View style={s.logo}>
               <Logo business={business} size={84} />
             </View>
@@ -249,7 +326,14 @@ export default function BusinessScreen() {
             })}
 
             {service && (
-              <Animated.View entering={FadeInDown.duration(250)} style={{ gap: 12 }}>
+              <Animated.View
+                entering={FadeInDown.duration(250)}
+                style={{ gap: 12 }}
+                onLayout={(e) => {
+                  if (!scrollToBooking.current) return;
+                  scrollToBooking.current = false;
+                  scrollRef.current?.scrollTo({ y: bodyY.current + e.nativeEvent.layout.y - insets.top - 64, animated: true });
+                }}>
                 {staff.length > 1 && (
                   <>
                     <SectionTitle title="Personel" />
@@ -281,11 +365,30 @@ export default function BusinessScreen() {
                     ))}
                   </View>
                 ) : times.length === 0 ? (
-                  <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                    <Ionicons name="moon-outline" size={22} color={colors.ink3} />
-                    <Text tone="muted" style={{ flex: 1 }}>
-                      {isOpen(day) ? 'Bu gün için boş saat kalmadı. Başka bir gün seçin.' : 'İşletme bu gün kapalı.'}
-                    </Text>
+                  <Card style={{ gap: 12 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                      <Ionicons name="moon-outline" size={22} color={colors.ink3} />
+                      <Text tone="muted" style={{ flex: 1 }}>
+                        {isOpen(day) ? 'Bu gün için boş saat kalmadı. Başka bir gün seçin.' : 'İşletme bu gün kapalı.'}
+                      </Text>
+                    </View>
+                    {isOpen(day) &&
+                      (waitDays.includes(day) ? (
+                        <View style={[styles.rowCenter, { gap: 10 }]}>
+                          <Ionicons name="notifications" size={18} color={accent.soft} />
+                          <Text tone="secondary" style={{ flex: 1 }}>
+                            Saat boşalırsa size haber vereceğiz.
+                          </Text>
+                          <Button title="Vazgeç" variant="ghost" size="sm" onPress={leaveWaitlist} loading={waitBusy} />
+                        </View>
+                      ) : (
+                        <Button title="Boşalırsa haber ver" icon="notifications-outline" variant="secondary" onPress={joinWaitlist} loading={waitBusy} />
+                      ))}
+                    {waitError ? (
+                      <Text variant="caption" tone="danger">
+                        {waitError}
+                      </Text>
+                    ) : null}
                   </Card>
                 ) : (
                   <View style={styles.wrap}>

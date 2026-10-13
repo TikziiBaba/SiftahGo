@@ -196,6 +196,10 @@ function AppointmentCard({
   const open = () => {
     if (b) router.push({ pathname: '/isletme/[slug]', params: { slug: b.slug } });
   };
+  // "Tekrar al": işletme sayfası önceki hizmet ve personel seçili açılır.
+  const rebook = () => {
+    if (b) router.push({ pathname: '/isletme/[slug]', params: { slug: b.slug, service: item.service_id ?? '', staff: item.staff_id ?? '' } });
+  };
   const place = b ? [b.address, b.district, b.city].filter(Boolean).join(', ') : '';
   return (
     // Kartın tamamı değil üst kısmı dokunulabilir; iç içe düğme ekran okuyucuda butonları gizler.
@@ -248,7 +252,7 @@ function AppointmentCard({
       ) : (
         b && (
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <Button title="Tekrar al" icon="repeat-outline" variant="secondary" size="sm" style={{ flex: 1 }} onPress={open} />
+            <Button title="Tekrar al" icon="repeat-outline" variant="secondary" size="sm" style={{ flex: 1 }} onPress={rebook} />
             {canReview && <Button title="Değerlendir" icon="star-outline" size="sm" style={{ flex: 1 }} onPress={onReview} />}
           </View>
         )
