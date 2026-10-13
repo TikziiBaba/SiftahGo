@@ -27,6 +27,11 @@ export default function PrivacyPage() {
         <li><strong>Kimlik ve iletişim:</strong> ad soyad, telefon, e-posta (isteğe bağlı).</li>
         <li><strong>Randevu bilgileri:</strong> işletme, hizmet, personel, tarih ve saat, randevu notu, randevunun durumu (onay, iptal, gelmeme) ve iptal edenin kim olduğu.</li>
         <li><strong>Değerlendirmeler:</strong> puanınız, yorumunuz ve randevuda yazdığınız ad.</li>
+        <li><strong>Favoriler ve bekleme listesi:</strong> favorilere eklediğiniz işletmeler; bekleme listesine yazıldığınız işletme ve gün.</li>
+        <li>
+          <strong>İşletmenin tuttuğu kayıtlar:</strong> randevu aldığınız işletmenin sizin hakkınızda yazdığı not ve size sattığı seans paketi
+          (kalan seans). Bu bilgileri yalnızca o işletme görür.
+        </li>
       </ul>
       <h3>İşletme sahipleri ve personel</h3>
       <ul>
@@ -39,6 +44,15 @@ export default function PrivacyPage() {
         <li>Hesap ve oturum bilgileri, Google ile girişte Google’ın paylaştığı ad ve e-posta.</li>
         <li>İşlem güvenliği kayıtları: IP adresi, tarayıcı ve cihaz bilgisi, giriş zamanları.</li>
         <li>Uygulamada bildirim izni verdiyseniz cihazınızın bildirim adresi (push token).</li>
+        <li>
+          <strong>Konum:</strong> Keşfet’te “Yakınımda” ile aradığınızda cihazınızın konumu yalnızca o aramada işletmeleri uzaklığa göre sıralamak
+          için kullanılır ve saklanmaz. İşletme sahibinin kaydettiği işletme konumu ise “Yakınımda” aramasında kullanılır.
+        </li>
+        <li>
+          <strong>Hata kayıtları:</strong> web sitesinde veya uygulamada bir hata oluştuğunda hata mesajı, sayfa adresi (sorgu kısmı olmadan),
+          tarayıcı/cihaz türü, uygulama sürümü ve giriş yaptıysanız kullanıcı numaranız. Bu kayıtlar kendi veritabanımızda tutulur, üçüncü bir hata
+          izleme hizmetine gönderilmez.
+        </li>
       </ul>
 
       <h2>3. İşleme amaçları ve hukuki sebepler</h2>
@@ -54,7 +68,8 @@ export default function PrivacyPage() {
           <strong>İptal ve gelmeme geçmişi:</strong> İşletmelerin boş kalan randevular nedeniyle zarar görmemesi için, son 6 ayda {SITE_NAME} genelinde
           (hesabınız veya telefon numaranız üzerinden) yaptığınız iptal ve gelmeme sayıları randevu aldığınız işletmeye gösterilir. 3 veya daha
           fazla iptal ya da 2 veya daha fazla gelmeme varsa işletme uyarılır ve randevunuz işletmenin onayına düşer. Hangi işletmede iptal ettiğiniz
-          gösterilmez, yalnızca sayılar gösterilir. <em>Hukuki sebep: veri sorumlusunun ve işletmelerin meşru menfaati (m. 5/2-f).</em>
+          gösterilmez, yalnızca sayılar gösterilir. Aynı işletmeye son 6 ayda 2 kez gelmeyen müşteri o işletmeden online randevu alamaz; işletme
+          bu engeli kaldırabilir. <em>Hukuki sebep: veri sorumlusunun ve işletmelerin meşru menfaati (m. 5/2-f).</em>
         </li>
         <li>
           Randevudan sonra “Hizmet nasıldı?” değerlendirme isteği gönderilmesi ve değerlendirmelerin işletme sayfasında yayımlanması.
@@ -93,6 +108,7 @@ export default function PrivacyPage() {
         <li>Randevu kayıtları, işletmenin randevu defteri olarak işletme hesabı açık kaldığı sürece saklanır.</li>
         <li>Ödeme ve muhasebe kayıtları ilgili mevzuatın öngördüğü süre boyunca saklanır.</li>
         <li>Bildirim adresleri, oturum kapatıldığında veya uygulama kaldırıldığında silinir.</li>
+        <li>Bekleme listesi kayıtları ilgili gün geçince silinir. Hata kayıtları en fazla 90 gün saklanır.</li>
       </ul>
 
       <h2>7. Haklarınız (KVKK m. 11)</h2>
