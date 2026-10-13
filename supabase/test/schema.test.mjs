@@ -405,6 +405,15 @@ const m3 = await manual(`${nextMon}T10:00:00Z`, 'cancelled');
 let gl = (await book(G, svc30, `${nextMon}T11:00:00Z`, 'Gelmeyen', noShowPhone)).rows[0];
 ok(gl.status === 'confirmed' && !(await row(gl.id)).customer_flagged, 'işletmenin iptal ettiği randevular müşteriye yazılmaz');
 await as(A, `update appointments set status = 'no_show' where id = any($1)`, [[m1, m2]]);
+const autoBlock = (await as(A, `select customer_id, phone_key, customer_name from blocked_customers`)).rows;
+ok(autoBlock.length === 1 && autoBlock[0].phone_key === '5321234567' && autoBlock[0].customer_name === 'Gelmeyen',
+  `2 kez gelmeyen müşteri otomatik engellendi: ${JSON.stringify(autoBlock)}`);
+await expectError(() => book(G, svc30, `${nextMon}T11:30:00Z`, 'Gelmeyen', noShowPhone), /alamıyorsunuz/, 'otomatik engellenen müşteri randevu alamaz');
+await as(A, `update appointments set status = 'cancelled' where id = $1`, [m3]);
+await as(A, `update appointments set status = 'no_show' where id = $1`, [m3]);
+ok((await db.query(`select count(*)::int c from blocked_customers`)).rows[0].c === 1, 'engel ikinci kez eklenmez');
+await as(A, `delete from blocked_customers`);
+await db.query(`update appointments set status = 'cancelled' where id = $1`, [m3]);
 const gl2 = (await book(G, svc30, `${nextMon}T11:30:00Z`, 'Gelmeyen', noShowPhone)).rows[0];
 const gl2Row = await row(gl2.id);
 ok(gl2.status === 'pending' && gl2Row.prior_no_shows === 2 && gl2Row.customer_flagged, `2 kez gelmeyen müşteri işaretli: ${JSON.stringify(gl2Row)}`);
@@ -455,6 +464,17 @@ await expectError(() => as(C, `insert into staff_services (staff_id, service_id)
 ok((await as(null, `select * from staff_services`)).rows.length === 1, 'eşleştirmeler herkese açık okunur');
 await as(A, `delete from staff_services where staff_id = $1`, [st2]);
 
+// personelin kendi saatleri (İstanbul 13:00-15:00 = 10:00-12:00 UTC), kapalı gün, yetki
+await as(A, `insert into staff_hours (staff_id, weekday, open_time, close_time) values ($1, 1, '13:00', '15:00')`, [st2]);
+let own = (await slots(svc30, monday)).filter((x) => x.staff_id === st2).map((x) => x.slot_start.toISOString().slice(11, 16));
+ok(own.join() === '10:00,10:30,11:00,11:30', `Mehmet yalnızca kendi saatlerinde: ${own.join()}`);
+await as(A, `update staff_hours set is_open = false where staff_id = $1`, [st2]);
+ok(!(await slots(svc30, monday)).some((x) => x.staff_id === st2), 'Mehmet o gün izinli, saati görünmez');
+ok((await slots(svc30, monday)).some((x) => x.staff_id === staff[0].id), 'diğer personel işletme saatleriyle devam eder');
+await expectError(() => as(C, `insert into staff_hours (staff_id, weekday) values ($1, 2)`, [st2]), /row-level security/, 'müşteri personel saati ekleyemez');
+ok((await as(null, `select * from staff_hours`)).rows.length === 1, 'personel saatleri herkese açık okunur');
+await as(A, `delete from staff_hours where staff_id = $1`, [st2]);
+
 // değerlendirme
 const tuesday = new Date(new Date(`${monday}T12:00:00Z`).getTime() + 864e5).toISOString().slice(0, 10);
 const done = (await book(C, svc30, `${tuesday}T07:00:00Z`)).rows[0].id;
@@ -471,6 +491,8 @@ ok(rv.length === 1 && rv[0].customer_name === 'Cem Y.', `yorum herkese açık, i
 await as(A, `update businesses set rating_avg = 1, rating_count = 99, name = 'Ahmet Berber' where id = $1`, [biz]);
 rb = (await db.query(`select rating_avg::text, rating_count from businesses where id = $1`, [biz])).rows[0];
 ok(rb.rating_avg === '4.0' && rb.rating_count === 1, 'işletme sahibi puanı elle değiştiremez');
+ok(Number((await db.query(`select rating_score from businesses where id = $1`, [biz])).rows[0].rating_score) === 4, 'tek 4 yıldızlı işletmenin sıralama puanı 4,0');
+await expectError(() => as(A, `update businesses set rating_score = 5 where id = $1`, [biz]), /rating_score/, 'sıralama puanı elle yazılamaz');
 
 // müşteri listesi
 const customers = (await as(A, `select * from get_customers($1)`, [biz])).rows;
@@ -478,6 +500,95 @@ const cem = customers.find((c) => c.phone.replace(/\D/g, '').endsWith('555111223
 ok(cem && Number(cem.total) === 3 && Number(cem.completed) === 1 && Number(cem.cancelled) === 1 && cem.spent === '300.00',
   `aynı telefonlu randevular tek müşteri: ${JSON.stringify(cem && { t: cem.total, c: cem.completed, x: cem.cancelled, s: cem.spent })}`);
 await expectError(() => as(C, `select * from get_customers($1)`, [biz]), /Yetkiniz yok/, 'başkası müşteri listesini göremez');
+
+// müşteri notu: yalnızca işletme
+await as(A, `insert into customer_notes (business_id, phone_key, note) values ($1, '5551112233', 'Kısa kesim sever')`, [biz]);
+ok((await as(A, `select note from customer_notes`)).rows[0]?.note === 'Kısa kesim sever', 'işletme müşteri notu yazdı');
+ok((await as(C, `select * from customer_notes`)).rows.length === 0 && (await as(null, `select * from customer_notes`)).rows.length === 0, 'notu müşteri ve ziyaretçi göremez');
+await expectError(() => as(C, `insert into customer_notes (business_id, phone_key) values ($1, '5550000000')`, [biz]), /row-level security/, 'başkası not yazamaz');
+await expectError(() => as(A, `insert into customer_notes (business_id, phone_key) values ($1, '555')`, [biz]), /check constraint/, 'geçersiz telefon anahtarı reddedildi');
+
+// favoriler: müşteri yalnızca kendi listesini görür ve yönetir
+await as(C, `insert into favorites (customer_id, business_id) values ($1, $2)`, [C, biz]);
+ok((await as(C, `select business_id from favorites`)).rows.length === 1, 'müşteri işletmeyi favorilere ekledi');
+ok((await as(G, `select * from favorites`)).rows.length === 0 && (await as(null, `select * from favorites`)).rows.length === 0, 'başkası favorileri göremez');
+await expectError(() => as(G, `insert into favorites (customer_id, business_id) values ($1, $2)`, [C, biz]), /row-level security/, 'başkası adına favori eklenemez');
+await as(C, `delete from favorites where business_id = $1`, [biz]);
+ok((await as(C, `select * from favorites`)).rows.length === 0, 'favoriden çıkarıldı');
+
+// bekleme listesi: dolu güne yazılır, saat boşalınca haber kuyruğa girer, o güne randevu alınca listeden düşer
+const nextWed = new Date(new Date(`${nextMon}T12:00:00Z`).getTime() + 2 * 864e5).toISOString().slice(0, 10);
+await expectError(() => as(null, `select join_waitlist($1, $2)`, [biz, nextWed]), /giriş yapın/, 'giriş yapmayan bekleme listesine yazılamaz');
+await expectError(() => as(C, `select join_waitlist($1, '2020-01-01')`, [biz]), /yazılamazsınız/, 'geçmiş güne bekleme listesi yok');
+const freed = (await book(G, svc30, `${nextWed}T07:00:00Z`, 'Gizem', '0544 000 00 01')).rows[0].id;
+await as(C, `select join_waitlist($1, $2)`, [biz, nextWed]);
+await as(C, `select join_waitlist($1, $2)`, [biz, nextWed]);
+ok((await as(C, `select day::text from waitlist`)).rows.map((r) => r.day).join() === nextWed, 'müşteri bekleme listesine bir kez yazıldı');
+ok((await as(G, `select * from waitlist`)).rows.length === 0, 'başkasının bekleme kaydı görünmez');
+await expectError(() => as(C, `insert into waitlist (business_id, customer_id, day) values ($1, $2, $3)`, [biz, C, nextWed]), /row-level security/, 'bekleme listesine doğrudan yazılamaz');
+await expectError(() => as(C, `select * from claim_waitlist()`), /permission denied/, 'haber kuyruğu istemciden alınamaz');
+await as(G, `select cancel_appointment($1)`, [freed]);
+const wl = (await asService(`select day::text as day, email, customer_name, business_slug, tokens from claim_waitlist()`)).rows;
+ok(wl.length === 1 && wl[0].email === 'c@x.com' && wl[0].day === nextWed && wl[0].business_slug === 'ahmet-berber' && Array.isArray(wl[0].tokens),
+  `saat boşalınca bekleyene haber kuyruğa girdi: ${JSON.stringify(wl)}`);
+ok((await asService(`select * from claim_waitlist()`)).rows.length === 0, 'haber bir kez alınır');
+const freed2 = (await book(G, svc30, `${nextWed}T08:00:00Z`, 'Gizem', '0544 000 00 01')).rows[0].id;
+await as(G, `select cancel_appointment($1)`, [freed2]);
+ok((await asService(`select * from claim_waitlist()`)).rows.length === 0, '30 dakika içinde ikinci haber gitmez');
+await db.query(`update waitlist set notified_at = now() - interval '1 hour'`);
+const freed3 = (await book(G, svc30, `${nextWed}T08:30:00Z`, 'Gizem', '0544 000 00 01')).rows[0].id;
+await as(A, `update appointments set starts_at = starts_at + interval '1 day', ends_at = ends_at + interval '1 day' where id = $1`, [freed3]);
+ok((await asService(`select * from claim_waitlist()`)).rows.length === 1, 'randevu başka güne alınınca da haber gider');
+await book(C, svc30, `${nextWed}T09:00:00Z`);
+ok((await as(C, `select * from waitlist`)).rows.length === 0, 'o güne randevu alan bekleme listesinden çıkar');
+await db.query(`delete from appointments where id = any($1) or (customer_id = $2 and starts_at::date = $3)`, [[freed, freed2, freed3], C, nextWed]);
+
+// seans paketi: tamamlanan randevu paketteki hizmetten bir seans düşer, geri alınınca iade edilir
+const pkg = (await as(A, `insert into session_packages (business_id, phone_key, customer_name, service_id, name, total)
+  values ($1, '5551112233', 'Cem', $2, 'Saç kesimi paketi', 3) returning id`, [biz, svc30])).rows[0].id;
+const pkgUsed = async () => (await db.query(`select used from session_packages where id = $1`, [pkg])).rows[0].used;
+const pkgOf = async (id) => (await db.query(`select package_id from appointments where id = $1`, [id])).rows[0].package_id;
+const pkgAppt = (await book(C, svc30, `${nextWed}T10:00:00Z`)).rows[0].id;
+const otherAppt = (await book(C, svc60, `${nextWed}T11:00:00Z`)).rows[0].id;
+await as(A, `update appointments set status = 'completed' where id = any($1)`, [[pkgAppt, otherAppt]]);
+ok((await pkgUsed()) === 1 && (await pkgOf(pkgAppt)) === pkg && (await pkgOf(otherAppt)) === null,
+  'tamamlanan randevu kendi hizmetinin paketinden bir seans düştü, başka hizmet düşmedi');
+await as(A, `update appointments set status = 'confirmed' where id = $1`, [pkgAppt]);
+ok((await pkgUsed()) === 0 && (await pkgOf(pkgAppt)) === null, 'tamamlanma geri alınınca seans iade edildi');
+await expectError(() => as(A, `update session_packages set used = 4 where id = $1`, [pkg]), /check constraint/, 'kullanılan seans toplamı aşamaz');
+ok((await as(C, `select * from session_packages`)).rows.length === 0, 'müşteri işletmenin paket kaydını göremez');
+await expectError(() => as(C, `insert into session_packages (business_id, phone_key, name, total) values ($1, '5551112233', 'x', 1)`, [biz]), /row-level security/, 'başkası paket ekleyemez');
+await as(A, `update session_packages set used = total where id = $1`, [pkg]);
+await as(A, `update appointments set status = 'completed' where id = $1`, [pkgAppt]);
+ok((await pkgOf(pkgAppt)) === null && (await pkgUsed()) === 3, 'dolmuş paketten seans düşmez');
+await db.query(`delete from appointments where id = any($1)`, [[pkgAppt, otherAppt]]);
+await db.query(`delete from session_packages where id = $1`, [pkg]);
+
+// Keşfet: bugün müsait (bugün boş saati olanlar) ve yakınımda (uzaklığa göre)
+const nowTr = (await db.query(`select extract(isodow from now() at time zone 'Europe/Istanbul')::int d, extract(hour from now() at time zone 'Europe/Istanbul')::int h`)).rows[0];
+const savedHours = (await db.query(`select * from working_hours where business_id = $1 and weekday = $2`, [biz, nowTr.d])).rows[0];
+const savedNotice = (await db.query(`select min_notice_minutes m from businesses where id = $1`, [biz])).rows[0].m;
+await db.query(`update working_hours set is_open = true, open_time = '00:00', close_time = '23:59' where business_id = $1 and weekday = $2`, [biz, nowTr.d]);
+await db.query(`update businesses set min_notice_minutes = 0 where id = $1`, [biz]);
+if (nowTr.h < 23) ok((await as(null, `select * from available_today($1)`, [[biz]])).rows.length === 1, 'bugün boş saati olan işletme "bugün müsait"');
+await db.query(`update working_hours set is_open = false where business_id = $1 and weekday = $2`, [biz, nowTr.d]);
+ok((await as(null, `select * from available_today($1)`, [[biz]])).rows.length === 0, 'bugün kapalı işletme "bugün müsait" değil');
+await db.query(`update working_hours set is_open = $3, open_time = $4, close_time = $5 where business_id = $1 and weekday = $2`,
+  [biz, nowTr.d, savedHours.is_open, savedHours.open_time, savedHours.close_time]);
+await db.query(`update businesses set min_notice_minutes = $2 where id = $1`, [biz, savedNotice]);
+
+await expectError(() => as(A, `update businesses set latitude = 41 where id = $1`, [biz]), /businesses_location_check/, 'enlem boylamsız girilemez');
+await as(A, `update businesses set latitude = 40.99, longitude = 29.03 where id = $1`, [biz]);
+const near = (await as(null, `select slug, round(distance_km::numeric, 1)::text km from nearby_businesses(41.0, 29.0)`)).rows;
+ok(near.length === 1 && near[0].slug === 'ahmet-berber' && near[0].km === '2.8', `yakındaki işletme uzaklığıyla: ${JSON.stringify(near)}`);
+ok((await as(null, `select * from nearby_businesses(39.93, 32.85)`)).rows.length === 0, '50 km dışındaki işletme gelmez');
+ok((await as(null, `select * from nearby_businesses(41.0, 29.0, 'kuafor')`)).rows.length === 0, 'kategori süzgeci yakınımda da çalışır');
+
+// rapor özeti: doluluk ve geri dönen müşteri
+const sum = (await as(A, `select get_report_summary($1, $2, $3) s`, [biz, monday, tuesday])).rows[0].s;
+ok(sum.capacity_minutes === 2 * 2 * 600 && sum.booked_minutes > 0 && sum.customers >= 1 && sum.returning === 0,
+  `rapor özeti: ${JSON.stringify(sum)}`);
+await expectError(() => as(C, `select get_report_summary($1, $2, $3)`, [biz, monday, tuesday]), /Yetkiniz yok/, 'başkası rapor özetini göremez');
 
 // geçmiş randevu: işletme "tamamlandı" demese de değerlendirilir; "hizmet nasıldı?" bildirimi
 const pastAppt = (status, hoursAgo) => db.query(`insert into appointments (business_id, service_id, customer_id, service_name, customer_name, customer_phone, customer_email, starts_at, ends_at, status)
@@ -534,6 +645,8 @@ const sub2 = (await db.query(`select plan_id, subscription_ends_at from business
 ok(sub2.plan_id === 'baslangic' && (sub2.subscription_ends_at - Date.now()) / 864e5 > 59.9, 'yeni ödeme kalan süreye eklendi (60 gün)');
 ok((await db.query(`select count(*)::int c from staff where business_id = $1 and is_active`, [biz])).rows[0].c === 1, 'küçük pakete geçince fazla personel pasif oldu');
 await expectError(() => as(A, `select * from get_customers($1)`, [biz]), /paketinizde yok/, 'Başlangıç paketinde müşteri defteri yok');
+ok((await as(A, `select * from customer_notes`)).rows.length === 0, 'Başlangıç paketinde müşteri notları görünmez');
+await expectError(() => as(A, `insert into customer_notes (business_id, phone_key) values ($1, '5550000000')`, [biz]), /row-level security/, 'Başlangıç paketinde not yazılamaz');
 
 // yayından kaldırılan işletme
 await as(A, `update businesses set is_published = false where id = $1`, [biz]);
@@ -603,6 +716,63 @@ await as(ADM, `update plans set price = 999, staff_limit = 10 where id = 'pro'`)
 await as(ADM, `insert into plans (id, name, price, staff_limit, sort_order) values ('kurumsal', 'Kurumsal', 1999, null, 4)`);
 ok((await as(null, `select price::int p from plans where id = 'pro'`)).rows[0].p === 999 && (await as(null, `select id from plans`)).rows.length === 4, 'yönetici paket fiyatını değiştirdi ve yeni paket ekledi');
 await expectError(() => as(ADM, `update plans set price = 0 where id = 'pro'`), /check constraint/, 'sıfır fiyat reddedildi');
+
+// davet: yeni işletme (Rıza) Ahmet Berber'in koduyla gelir; kod ve davet eden istemciden yazılamaz
+const R = '00000000-0000-0000-0000-0000000000d1';
+await db.exec(`insert into auth.users values ('${R}', 'r@x.com', '{"full_name":"Rıza","role":"business"}')`);
+const bizR = (await as(R, `insert into businesses (owner_id, slug, name, referral_code, referred_by)
+  values ($1, 'riza-kuafor', 'Rıza Kuaför', 'HILE1234', $2) returning id, referral_code, referred_by`, [R, biz])).rows[0];
+ok(/^[0-9A-F]{8}$/.test(bizR.referral_code) && bizR.referral_code !== 'HILE1234' && bizR.referred_by === null,
+  `davet kodu otomatik, istemci yazamaz: ${bizR.referral_code}`);
+const codeA = (await db.query(`select referral_code from businesses where id = $1`, [biz])).rows[0].referral_code;
+await expectError(() => as(R, `select apply_referral('YANLIS99')`), /geçersiz/, 'olmayan davet kodu reddedildi');
+await expectError(() => as(R, `select apply_referral($1)`, [bizR.referral_code]), /geçersiz/, 'kendi koduyla davet olmaz');
+await expectError(() => as(A, `select apply_referral($1)`, [bizR.referral_code]), /ilk ödemeden/, 'ödeme yapmış işletme davet kodu giremez');
+ok((await as(R, `select apply_referral($1) n`, [` ${codeA.toLowerCase()} `])).rows[0].n === 'Ahmet Berber', 'davet kodu girildi (boşluk ve küçük harf sorun değil)');
+await expectError(() => as(R, `select apply_referral($1)`, [codeA]), /zaten/, 'davet kodu ikinci kez girilemez');
+await as(R, `update businesses set referred_by = null, referral_code = 'DEGISTI1' where id = $1`, [bizR.id]);
+const rRow = (await db.query(`select referred_by, referral_code from businesses where id = $1`, [bizR.id])).rows[0];
+ok(rRow.referred_by === biz && rRow.referral_code === bizR.referral_code, 'davet eden ve kod sonradan değiştirilemez');
+
+// yıllık ödeme: 10 ay fiyatına 365 gün; davetle gelenin ilk ödemesinde ikisine de 30 gün
+await expectError(() => as(R, `select * from create_payment('esnaf', 6)`), /Geçersiz ödeme dönemi/, '6 aylık ödeme yok');
+const endsAt = async (id) => (await db.query(`select subscription_ends_at e from businesses where id = $1`, [id])).rows[0].e;
+const aBefore = await endsAt(biz);
+const rBefore = await endsAt(bizR.id);
+const yearly = (await as(R, `select * from create_payment('esnaf', 12)`)).rows[0];
+ok(Number(yearly.amount) === 6490 && (await db.query(`select months from payments where merchant_oid = $1`, [yearly.merchant_oid])).rows[0].months === 12,
+  `yıllık Esnaf 10 ay fiyatına: ${yearly.amount}`);
+await expectError(() => db.query(`select activate_subscription($1, 649)`, [yearly.merchant_oid]), /eksik/, 'yıllık ödemede aylık tutar kabul edilmez');
+await db.query(`select activate_subscription($1, $2)`, [yearly.merchant_oid, yearly.amount]);
+const rDays = Math.round(((await endsAt(bizR.id)) - rBefore) / 864e5);
+ok(rDays === 365 + 30, `yıllık ödeme 365 gün, davet ödülü 30 gün: ${rDays}`);
+const aEnds = await endsAt(biz);
+const aDays = Math.round((aEnds - Math.max(aBefore, Date.now())) / 864e5);
+ok(aDays === 30, `davet eden işletmeye 30 gün eklendi: ${aDays}`);
+const second = (await as(R, `select * from create_payment('esnaf')`)).rows[0];
+await db.query(`select activate_subscription($1, $2)`, [second.merchant_oid, second.amount]);
+ok(Number(second.amount) === 649 && (await endsAt(biz)).getTime() === aEnds.getTime(), 'aylık ödeme tek ay fiyatı; davet ödülü yalnızca ilk ödemede');
+const refs = (await as(A, `select * from my_referrals()`)).rows;
+ok(refs.length === 1 && refs[0].name === 'Rıza Kuaför' && refs[0].rewarded_at, 'davet eden, davet ettiklerini ve ödülü görür');
+ok((await as(C, `select * from my_referrals()`)).rows.length === 0, 'başkası davet listesini göremez');
+
+// hata kaydı: girişsiz de yazılır, aynı hata tek satırda sayılır, yalnızca yönetici okur
+const stack = 'TypeError: x is undefined\n    at render (app.js:10:5)\n    at main (app.js:1:1)';
+await as(null, `select log_error('web', 'TypeError: x is undefined', $1, '/panel')`, [stack]);
+await as(C, `select log_error('web', 'TypeError: x is undefined', $1, '/kesfet')`, [stack]);
+await as(null, `select log_error('mobile', 'TypeError: x is undefined', $1)`, [stack]);
+await as(null, `select log_error('web', '   ')`);
+await as(null, `select log_error('hacker', 'x')`);
+const errs = (await as(ADM, `select source, count, url, last_user_id from error_logs order by source desc`)).rows;
+ok(errs.length === 2 && errs[0].source === 'web' && errs[0].count === 2 && errs[0].url === '/kesfet' && errs[0].last_user_id === C,
+  `aynı hata tek satırda sayıldı, boş/geçersiz kayıt yok: ${JSON.stringify(errs)}`);
+ok((await as(C, `select * from error_logs`)).rows.length === 0 && (await as(null, `select * from error_logs`)).rows.length === 0, 'hata kayıtlarını yalnızca yönetici görür');
+await expectError(() => as(C, `insert into error_logs (fingerprint, source, message) values ('x', 'web', 'x')`), /row-level security/, 'hata kaydı doğrudan yazılamaz');
+await as(ADM, `update error_logs set resolved_at = now() where source = 'web'`);
+await as(null, `select log_error('web', 'TypeError: x is undefined', $1)`, [stack]);
+ok((await as(ADM, `select resolved_at from error_logs where source = 'web'`)).rows[0].resolved_at === null, 'çözülen hata tekrar edince yeniden açıldı');
+await as(null, `select log_error('server', $1)`, ['x'.repeat(5000)]);
+ok((await as(ADM, `select length(message) n from error_logs where source = 'server'`)).rows[0].n === 1000, 'uzun mesaj kısaltıldı');
 
 console.log(failures ? `\n${failures} TEST BAŞARISIZ` : '\nTÜM TESTLER GEÇTİ');
 process.exit(failures ? 1 : 0);

@@ -11,6 +11,12 @@
 drop trigger if exists on_auth_user_created on auth.users;
 
 drop table if exists
+  public.error_logs,
+  public.waitlist,
+  public.session_packages,
+  public.favorites,
+  public.customer_notes,
+  public.staff_hours,
   public.appointment_reminders,
   public.blocked_customers,
   public.phone_verifications,
@@ -54,7 +60,10 @@ begin
         'format_when', 'inbox_insert', 'register_push_token', 'unregister_push_token',
         'mark_inbox_read', 'claim_push', 'finish_push', 'drop_push_tokens',
         'customer_history', 'appointments_before_write', 'queue_review_requests', 'review_after_insert',
-        'reply_review', 'start_phone_verification', 'confirm_phone_verification', 'block_customer'
+        'reply_review', 'start_phone_verification', 'confirm_phone_verification', 'block_customer',
+        'auto_block_no_show', 'get_report_summary', 'join_waitlist', 'waitlist_on_free_slot', 'claim_waitlist',
+        'use_package_session', 'available_today', 'nearby_businesses', 'apply_referral', 'my_referrals',
+        'log_error'
       )
   loop
     execute 'drop function if exists ' || r.sig || ' cascade';
@@ -145,13 +154,24 @@ create table public.businesses (
   -- Değerlendirmelerden tetikleyiciyle hesaplanır.
   rating_avg         numeric(2, 1) not null default 0,
   rating_count       int not null default 0,
+  -- Keşfet sıralaması: az yorumlu işletme 4,0'a çekilir (3 sanal oy); tek 5 yıldız, çok yorumlu 4,8'i geçemez.
+  rating_score       numeric generated always as ((rating_avg * rating_count + 12) / (rating_count + 3)) stored,
   -- Abonelik: sadece ödeme bildirimiyle (activate_subscription) değişir.
   plan_id              text references public.plans (id),
   subscription_ends_at timestamptz,
   -- Ücretsiz deneme bitişi (business_after_insert). subscription_ends_at buna eşitse işletme denemededir;
   -- ödeme veya yönetici süre ekleyince ayrışır.
   trial_ends_at        timestamptz,
-  created_at         timestamptz not null default now()
+  -- Keşfet "Yakınımda" için işletmenin konumu (sahibi ayarlardan girer); ikisi birlikte dolu ya da boş.
+  latitude           double precision check (latitude between -90 and 90),
+  longitude          double precision check (longitude between -180 and 180),
+  -- Davet ("esnaf esnafı getirsin"): her işletmenin kodu; davetle gelen işletme apply_referral ile girer.
+  -- Ödül activate_subscription'da: davetle gelenin ilk ödemesinde ikisine de 1 ay (referral_rewarded_at).
+  referral_code        text not null unique default upper(substr(md5(gen_random_uuid()::text), 1, 8)),
+  referred_by          uuid references public.businesses (id) on delete set null,
+  referral_rewarded_at timestamptz,
+  created_at         timestamptz not null default now(),
+  constraint businesses_location_check check ((latitude is null) = (longitude is null))
 );
 create index businesses_city_category_idx on public.businesses (city, category);
 
@@ -211,6 +231,22 @@ create table public.time_off (
 );
 create index time_off_business_idx on public.time_off (business_id, starts_at);
 
+-- Müşteriye satılan seans paketi (ör. 10 seans lazer); müşteri defterinde kalan seans görünür. Paketteki hizmetten
+-- tamamlanan her randevu bir seans düşer (use_package_session). Müşteri telefonunun son 10 hanesine bağlı.
+create table public.session_packages (
+  id            uuid primary key default gen_random_uuid(),
+  business_id   uuid not null references public.businesses (id) on delete cascade,
+  phone_key     text not null check (phone_key ~ '^[0-9]{10}$'),
+  customer_name text not null default '',
+  service_id    uuid references public.services (id) on delete set null,
+  name          text not null check (length(trim(name)) > 0),
+  total         int not null check (total between 1 and 500),
+  used          int not null default 0 check (used >= 0),
+  created_at    timestamptz not null default now(),
+  check (used <= total)
+);
+create index session_packages_customer_idx on public.session_packages (business_id, phone_key);
+
 create table public.appointments (
   id             uuid primary key default gen_random_uuid(),
   business_id    uuid not null references public.businesses (id) on delete cascade,
@@ -235,6 +271,8 @@ create table public.appointments (
   prior_cancels    int not null default 0,
   prior_no_shows   int not null default 0,
   customer_flagged boolean not null default false,
+  -- Seansı düşülen paket (use_package_session yazar).
+  package_id       uuid references public.session_packages (id) on delete set null,
   created_at     timestamptz not null default now(),
   check (ends_at > starts_at),
   -- Aynı personele aynı anda iki aktif randevu verilemez.
@@ -271,6 +309,8 @@ create table public.payments (
   plan_id      text not null references public.plans (id),
   merchant_oid text not null unique,
   amount       numeric(10, 2) not null,
+  -- Ödeme dönemi: 1 ay (30 gün) veya 12 ay (365 gün, 10 ay fiyatına: 2 ay bedava).
+  months       int not null default 1 check (months in (1, 12)),
   status       text not null default 'pending' check (status in ('pending', 'paid', 'failed')),
   created_at   timestamptz not null default now(),
   paid_at      timestamptz
@@ -346,6 +386,68 @@ create table public.blocked_customers (
   check (customer_id is not null or phone_key is not null)
 );
 create index blocked_customers_business_idx on public.blocked_customers (business_id);
+
+-- Personelin kendi çalışma saatleri. Bir gün için kaydı yoksa işletme saatleri geçerlidir.
+create table public.staff_hours (
+  staff_id   uuid not null references public.staff (id) on delete cascade,
+  weekday    smallint not null check (weekday between 1 and 7),
+  is_open    boolean not null default true,
+  open_time  time not null default '09:00',
+  close_time time not null default '19:00',
+  primary key (staff_id, weekday),
+  check (close_time > open_time)
+);
+
+-- İşletmenin müşteri hakkındaki özel notu ("kısa kesim sever"). Telefonun son 10 hanesine bağlı.
+create table public.customer_notes (
+  business_id uuid not null references public.businesses (id) on delete cascade,
+  phone_key   text not null check (phone_key ~ '^[0-9]{10}$'),
+  note        text not null default '' check (length(note) <= 1000),
+  updated_at  timestamptz not null default now(),
+  primary key (business_id, phone_key)
+);
+
+-- Uygulama hataları (web tarayıcı, web sunucu, mobil); log_error yazar, yalnızca yönetici okur. Dış servise
+-- veri gitmez. Aynı hata (kaynak + mesaj + yığının ilk satırı) tek satırda sayılır; tekrar edince çözüldü işareti kalkar.
+create table public.error_logs (
+  id           uuid primary key default gen_random_uuid(),
+  fingerprint  text not null unique,
+  source       text not null check (source in ('web', 'server', 'mobile')),
+  message      text not null,
+  stack        text not null default '',
+  url          text not null default '',
+  app_version  text not null default '',
+  user_agent   text not null default '',
+  last_user_id uuid references public.profiles (id) on delete set null,
+  count        int not null default 1,
+  first_seen   timestamptz not null default now(),
+  last_seen    timestamptz not null default now(),
+  resolved_at  timestamptz
+);
+create index error_logs_last_seen_idx on public.error_logs (last_seen desc);
+
+-- Müşterinin favori işletmeleri.
+create table public.favorites (
+  customer_id uuid not null references public.profiles (id) on delete cascade,
+  business_id uuid not null references public.businesses (id) on delete cascade,
+  created_at  timestamptz not null default now(),
+  primary key (customer_id, business_id)
+);
+
+-- Dolu güne bekleme listesi (join_waitlist ile yazılır). O gün işletmede bir randevu iptal edilince veya
+-- başka saate alınınca bekleyenlere haber gider (e-posta + anlık bildirim); ilk randevu alan kapar.
+create table public.waitlist (
+  id            uuid primary key default gen_random_uuid(),
+  business_id   uuid not null references public.businesses (id) on delete cascade,
+  customer_id   uuid not null references public.profiles (id) on delete cascade,
+  day           date not null,
+  -- 'pending': haber gönderilecek (waitlist_on_free_slot yazar), 'sent': gönderildi (claim_waitlist yazar).
+  notify_status text check (notify_status in ('pending', 'sent')),
+  notified_at   timestamptz,
+  created_at    timestamptz not null default now(),
+  unique (business_id, customer_id, day)
+);
+create index waitlist_pending_idx on public.waitlist (created_at) where notify_status = 'pending';
 
 -- ---------------------------------------------------------------------
 -- 2) Yardımcı fonksiyonlar ve tetikleyiciler
@@ -493,16 +595,19 @@ begin
   where business_id = p_business_id and weekday = extract(isodow from p_day);
   if not found or not wh.is_open then return; end if;
 
+  -- Personelin o günkü saatleri: kendi kaydı varsa o, yoksa işletmeninki.
   return query
   select g.s, st.id
-  from generate_series(
-         (p_day + wh.open_time) at time zone b.timezone,
-         ((p_day + wh.close_time) at time zone b.timezone) - v_duration,
+  from public.staff st
+  left join public.staff_hours sh on sh.staff_id = st.id and sh.weekday = wh.weekday
+  cross join lateral generate_series(
+         (p_day + coalesce(sh.open_time, wh.open_time)) at time zone b.timezone,
+         ((p_day + coalesce(sh.close_time, wh.close_time)) at time zone b.timezone) - v_duration,
          make_interval(mins => b.slot_minutes)
        ) as g(s)
-  cross join public.staff st
   where st.business_id = p_business_id
     and st.is_active
+    and coalesce(sh.is_open, true)
     and (p_staff_id is null or st.id = p_staff_id)
     and (
       not exists (select 1 from public.staff_services ss where ss.staff_id = st.id)
@@ -579,6 +684,41 @@ $$;
 create trigger appointments_before_write
   before insert or update on public.appointments
   for each row execute function public.appointments_before_write();
+
+-- Tamamlanan randevu, müşterinin o hizmetteki en eski açık paketinden bir seans düşer; tamamlanma geri alınırsa
+-- seans pakete iade edilir.
+create function public.use_package_session()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  v_pkg uuid;
+begin
+  if new.status = 'completed' and old.status is distinct from 'completed' and new.service_id is not null then
+    select p.id into v_pkg
+    from public.session_packages p
+    where p.business_id = new.business_id
+      and p.service_id = new.service_id
+      and p.phone_key = right(regexp_replace(new.customer_phone, '\D', '', 'g'), 10)
+      and p.used < p.total
+    order by p.created_at
+    limit 1
+    for update;
+    if v_pkg is not null then
+      update public.session_packages set used = used + 1 where id = v_pkg;
+      new.package_id := v_pkg;
+    end if;
+  elsif old.status = 'completed' and new.status is distinct from 'completed' and old.package_id is not null then
+    update public.session_packages set used = greatest(used - 1, 0) where id = old.package_id;
+    new.package_id := null;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger appointments_use_package_session
+  before update of status on public.appointments
+  for each row execute function public.use_package_session();
 
 -- Girişli müşteri randevu alır. p_staff_id boşsa uygun ilk personel.
 -- Sahte randevuya karşı: işletmenin engellediği müşteri alamaz; aynı işletmede en fazla 3, toplamda
@@ -673,6 +813,10 @@ begin
     case when b.auto_confirm then 'confirmed' else 'pending' end
   )
   returning id, status into v_id, v_status;
+
+  -- O gün için bekleme listesindeyse artık haber gerekmez.
+  delete from public.waitlist w
+  where w.customer_id = v_uid and w.business_id = b.id and w.day = (p_starts_at at time zone b.timezone)::date;
 
   return jsonb_build_object('id', v_id, 'status', v_status);
 exception
@@ -876,6 +1020,9 @@ begin
       new.subscription_ends_at := null;
       new.trial_ends_at := null;
       new.is_suspended := false;
+      new.referral_code := upper(substr(md5(gen_random_uuid()::text), 1, 8));
+      new.referred_by := null;
+      new.referral_rewarded_at := null;
     else
       new.rating_avg := old.rating_avg;
       new.rating_count := old.rating_count;
@@ -883,6 +1030,9 @@ begin
       new.subscription_ends_at := old.subscription_ends_at;
       new.trial_ends_at := old.trial_ends_at;
       new.is_suspended := old.is_suspended;
+      new.referral_code := old.referral_code;
+      new.referred_by := old.referred_by;
+      new.referral_rewarded_at := old.referral_rewarded_at;
     end if;
   end if;
   return new;
@@ -922,8 +1072,9 @@ create trigger staff_enforce_limit
   before insert or update of is_active on public.staff
   for each row execute function public.enforce_staff_limit();
 
--- İşletme sahibi ödeme başlatır; tutar paketten alınır (istemciden değil).
-create function public.create_payment(p_plan_id text)
+-- İşletme sahibi ödeme başlatır; tutar paketten alınır (istemciden değil). p_months: 1 (aylık) veya
+-- 12 (yıllık: 10 ay fiyatına, 2 ay bedava).
+create function public.create_payment(p_plan_id text, p_months int default 1)
 returns table (merchant_oid text, amount numeric, plan_name text)
 language plpgsql volatile security definer set search_path = ''
 as $$
@@ -931,17 +1082,20 @@ declare
   v_business uuid;
   v_plan public.plans;
   v_oid text;
+  v_amount numeric;
 begin
   select id into v_business from public.businesses where owner_id = auth.uid();
   if v_business is null then raise exception 'Önce işletmenizi oluşturun.'; end if;
   select * into v_plan from public.plans where id = p_plan_id;
   if not found then raise exception 'Paket bulunamadı.'; end if;
+  if p_months is null or p_months not in (1, 12) then raise exception 'Geçersiz ödeme dönemi.'; end if;
 
+  v_amount := v_plan.price * case when p_months = 12 then 10 else 1 end;
   v_oid := 'SG' || to_char(clock_timestamp(), 'YYMMDDHH24MISS') || substr(md5(gen_random_uuid()::text), 1, 10);
-  insert into public.payments (business_id, plan_id, merchant_oid, amount)
-  values (v_business, v_plan.id, v_oid, v_plan.price);
+  insert into public.payments (business_id, plan_id, merchant_oid, amount, months)
+  values (v_business, v_plan.id, v_oid, v_amount, p_months);
 
-  return query select v_oid, v_plan.price, v_plan.name;
+  return query select v_oid, v_amount, v_plan.name;
 end;
 $$;
 
@@ -973,13 +1127,16 @@ end;
 $$;
 
 -- PayTR "başarılı" bildirimi: sadece sunucu (service_role) çağırır.
--- Aynı bildirim tekrar gelirse bir şey yapmaz.
+-- Aynı bildirim tekrar gelirse bir şey yapmaz. Yıllık ödeme 365, aylık 30 gün ekler.
+-- Davetle gelen işletmenin ilk ödemesinde kendisine ve davet edene 1 ay (30 gün) hediye eklenir.
 create function public.activate_subscription(p_merchant_oid text, p_total_amount numeric)
 returns void
 language plpgsql volatile security definer set search_path = ''
 as $$
 declare
   pay public.payments;
+  b   public.businesses;
+  ref public.businesses;
 begin
   select * into pay from public.payments where merchant_oid = p_merchant_oid for update;
   if not found then raise exception 'Ödeme bulunamadı: %', p_merchant_oid; end if;
@@ -989,8 +1146,54 @@ begin
   end if;
 
   update public.payments set status = 'paid', paid_at = now() where id = pay.id;
-  perform public.apply_subscription(pay.business_id, pay.plan_id, 30);
+  perform public.apply_subscription(pay.business_id, pay.plan_id, case when pay.months = 12 then 365 else 30 end);
+
+  select * into b from public.businesses where id = pay.business_id for update;
+  if b.referred_by is not null and b.referral_rewarded_at is null then
+    update public.businesses set referral_rewarded_at = now() where id = b.id;
+    select * into ref from public.businesses where id = b.referred_by;
+    if found then
+      perform public.apply_subscription(b.id, pay.plan_id, 30);
+      perform public.apply_subscription(ref.id, coalesce(ref.plan_id, pay.plan_id), 30);
+    end if;
+  end if;
 end;
+$$;
+
+-- Yeni işletme kendisini davet eden işletmenin kodunu girer: bir kez ve ilk ödemeden önce.
+-- Dönen: davet eden işletmenin adı.
+create function public.apply_referral(p_code text)
+returns text
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  b   public.businesses;
+  ref public.businesses;
+begin
+  select * into b from public.businesses where owner_id = auth.uid() for update;
+  if not found then raise exception 'Önce işletmenizi oluşturun.'; end if;
+  if b.referred_by is not null then raise exception 'Davet kodu zaten girilmiş.'; end if;
+  if exists (select 1 from public.payments p where p.business_id = b.id and p.status = 'paid') then
+    raise exception 'Davet kodu ilk ödemeden önce girilebilir.';
+  end if;
+  select * into ref from public.businesses where referral_code = upper(trim(coalesce(p_code, '')));
+  if not found or ref.id = b.id then raise exception 'Davet kodu geçersiz.'; end if;
+
+  update public.businesses set referred_by = ref.id where id = b.id;
+  return ref.name;
+end;
+$$;
+
+-- İşletmenin davet ettiği işletmeler: ad, katılma tarihi ve ödülün verildiği tarih (ilk ödemeleri).
+create function public.my_referrals()
+returns table (name text, created_at timestamptz, rewarded_at timestamptz)
+language sql stable security definer set search_path = ''
+as $$
+  select r.name, r.created_at, r.referral_rewarded_at
+  from public.businesses r
+  join public.businesses me on me.id = r.referred_by
+  where me.owner_id = auth.uid()
+  order by r.created_at desc;
 $$;
 
 create function public.fail_payment(p_merchant_oid text)
@@ -1654,6 +1857,317 @@ begin
 end;
 $$;
 
+-- Aynı işletmeye son 6 ayda 2 kez gelmeyen müşteri (hesap veya telefon) online randevudan
+-- otomatik engellenir. İşletme engeli Ayarlar'dan kaldırabilir.
+create function public.auto_block_no_show()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  v_key text := right(regexp_replace(new.customer_phone, '\D', '', 'g'), 10);
+begin
+  if length(v_key) < 10 then v_key := null; end if;
+  if exists (
+    select 1 from public.blocked_customers bc
+    where bc.business_id = new.business_id
+      and (bc.customer_id = new.customer_id or bc.phone_key = v_key)
+  ) then
+    return new;
+  end if;
+  if (select count(*) from public.appointments a
+      where a.business_id = new.business_id
+        and a.status = 'no_show'
+        and a.starts_at > now() - interval '180 days'
+        and (a.customer_id = new.customer_id
+             or right(regexp_replace(a.customer_phone, '\D', '', 'g'), 10) = v_key)) >= 2 then
+    insert into public.blocked_customers (business_id, customer_id, phone_key, customer_name)
+    values (new.business_id, new.customer_id, v_key, new.customer_name);
+  end if;
+  return new;
+end;
+$$;
+
+create trigger appointments_auto_block_no_show
+  after update of status on public.appointments
+  for each row when (new.status = 'no_show' and old.status is distinct from 'no_show')
+  execute function public.auto_block_no_show();
+
+-- Rapor özeti (tarihler işletme saatine göre):
+-- doluluk = dolu randevu dakikası / personellerin çalışma dakikası;
+-- geri dönen = dönemde gelen müşterilerden daha önce de tamamlanmış randevusu olanlar.
+create function public.get_report_summary(p_business_id uuid, p_from date, p_to date)
+returns jsonb
+language plpgsql stable security definer set search_path = ''
+as $$
+declare
+  v_tz        text;
+  v_capacity  numeric;
+  v_booked    numeric;
+  v_customers int;
+  v_returning int;
+begin
+  if not public.is_business_owner(p_business_id) then
+    raise exception 'Yetkiniz yok.';
+  end if;
+  if not public.plan_has_feature(p_business_id, 'reports') then
+    raise exception 'Raporlar paketinizde yok.';
+  end if;
+  if p_to < p_from or p_to - p_from > 366 then
+    raise exception 'Geçersiz tarih aralığı.';
+  end if;
+  select timezone into v_tz from public.businesses where id = p_business_id;
+
+  select coalesce(sum(extract(epoch from coalesce(sh.close_time, wh.close_time) - coalesce(sh.open_time, wh.open_time)) / 60), 0)
+    into v_capacity
+  from generate_series(p_from, p_to, interval '1 day') as d(day)
+  join public.working_hours wh
+    on wh.business_id = p_business_id and wh.weekday = extract(isodow from d.day) and wh.is_open
+  join public.staff st on st.business_id = p_business_id and st.is_active
+  left join public.staff_hours sh on sh.staff_id = st.id and sh.weekday = wh.weekday
+  where coalesce(sh.is_open, true);
+
+  select coalesce(sum(extract(epoch from a.ends_at - a.starts_at) / 60), 0)
+    into v_booked
+  from public.appointments a
+  where a.business_id = p_business_id
+    and a.status in ('pending', 'confirmed', 'completed')
+    and (a.starts_at at time zone v_tz)::date between p_from and p_to;
+
+  with visits as (
+    select right(regexp_replace(a.customer_phone, '\D', '', 'g'), 10) as k, min(a.starts_at) as first_at
+    from public.appointments a
+    where a.business_id = p_business_id
+      and a.status in ('confirmed', 'completed')
+      and (a.starts_at at time zone v_tz)::date between p_from and p_to
+    group by 1
+  )
+  select count(*)::int,
+         (count(*) filter (where exists (
+           select 1 from public.appointments p
+           where p.business_id = p_business_id and p.status = 'completed'
+             and p.starts_at < v.first_at
+             and right(regexp_replace(p.customer_phone, '\D', '', 'g'), 10) = v.k
+         )))::int
+    into v_customers, v_returning
+  from visits v;
+
+  return jsonb_build_object(
+    'capacity_minutes', round(v_capacity),
+    'booked_minutes', round(v_booked),
+    'customers', v_customers,
+    'returning', v_returning
+  );
+end;
+$$;
+
+-- Girişli müşteri dolu güne bekleme listesine yazılır (aynı gün tekrar yazılırsa bir şey değişmez).
+create function public.join_waitlist(p_business_id uuid, p_day date)
+returns void
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  b       public.businesses;
+  v_uid   uuid := auth.uid();
+  v_today date;
+begin
+  if v_uid is null then
+    raise exception 'Bekleme listesi için giriş yapın.';
+  end if;
+  select * into b from public.businesses where id = p_business_id and public.is_bookable(id);
+  if not found then raise exception 'Bu işletme şu an online randevu almıyor.'; end if;
+  v_today := (now() at time zone b.timezone)::date;
+  if p_day is null or p_day < v_today or p_day > v_today + b.booking_days then
+    raise exception 'Bu gün için bekleme listesine yazılamazsınız.';
+  end if;
+  if exists (select 1 from public.blocked_customers bc where bc.business_id = b.id and bc.customer_id = v_uid) then
+    raise exception 'Bu işletmeden online randevu alamıyorsunuz. Lütfen işletmeyi arayın.';
+  end if;
+  if (select count(*) from public.waitlist w where w.customer_id = v_uid and w.day >= v_today) >= 10 then
+    raise exception 'En fazla 10 bekleme listesine yazılabilirsiniz.';
+  end if;
+
+  insert into public.waitlist (business_id, customer_id, day)
+  values (b.id, v_uid, p_day)
+  on conflict (business_id, customer_id, day) do nothing;
+end;
+$$;
+
+-- Saat boşaldı: gelecekteki aktif randevu iptal edildi ya da başka saate/personele alındı. O gün bekleme
+-- listesindekilere (iptal eden müşteri hariç) haber kuyruğa girer; aynı kişiye 30 dakikada bir haberden fazlası gitmez.
+create function public.waitlist_on_free_slot()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  if old.status in ('pending', 'confirmed') and old.starts_at > now()
+     and (new.status = 'cancelled' or new.starts_at <> old.starts_at or new.staff_id is distinct from old.staff_id) then
+    update public.waitlist w
+    set notify_status = 'pending'
+    from public.businesses b
+    where b.id = old.business_id
+      and w.business_id = old.business_id
+      and w.day = (old.starts_at at time zone b.timezone)::date
+      and w.customer_id is distinct from old.customer_id
+      and (w.notified_at is null or w.notified_at < now() - interval '30 minutes');
+  end if;
+  return new;
+end;
+$$;
+
+create trigger appointments_waitlist_free_slot
+  after update of status, starts_at, staff_id on public.appointments
+  for each row execute function public.waitlist_on_free_slot();
+
+-- Sunucu (/api/notifications) boşalan saat haberlerini alır. Alınan haber gönderilmiş sayılır (tekrar
+-- denenmez); günü geçmiş kayıtlar silinir.
+create function public.claim_waitlist(p_limit int default 50)
+returns table (
+  id            uuid,
+  day           date,
+  email         text,
+  customer_name text,
+  business_name text,
+  business_slug text,
+  tokens        text[]
+)
+language plpgsql volatile security definer set search_path = ''
+as $$
+#variable_conflict use_column
+begin
+  delete from public.waitlist w
+  using public.businesses b
+  where b.id = w.business_id and w.day < (now() at time zone b.timezone)::date;
+
+  return query
+  with picked as (
+    select w.id from public.waitlist w
+    where w.notify_status = 'pending'
+    order by w.created_at
+    limit p_limit
+    for update skip locked
+  ), claimed as (
+    update public.waitlist w
+    set notify_status = 'sent', notified_at = now()
+    from picked
+    where w.id = picked.id
+    returning w.*
+  )
+  select
+    c.id, c.day, u.email::text, p.full_name, b.name, b.slug,
+    coalesce((select array_agg(t.token) from public.push_tokens t where t.user_id = c.customer_id), '{}')
+  from claimed c
+  join public.businesses b on b.id = c.business_id
+  join public.profiles p on p.id = c.customer_id
+  left join auth.users u on u.id = c.customer_id;
+end;
+$$;
+
+revoke execute on function public.claim_waitlist(int) from public, anon, authenticated;
+
+-- Keşfet "Bugün müsait": listedeki işletmelerden (en fazla 60) bugün en kısa hizmetine boş saati olanlar.
+create function public.available_today(p_ids uuid[])
+returns setof uuid
+language sql stable set search_path = ''
+as $$
+  select b.id
+  from public.businesses b
+  cross join lateral (
+    select s.id from public.services s
+    where s.business_id = b.id and s.is_active
+    order by s.duration_minutes, s.sort_order
+    limit 1
+  ) s
+  where b.id = any (p_ids[1:60])
+    and public.is_bookable(b.id)
+    and exists (select 1 from public.get_available_slots(b.id, s.id, (now() at time zone b.timezone)::date));
+$$;
+
+-- Keşfet "Yakınımda": konumu girilmiş yayındaki işletmeler, verilen noktaya uzaklığa göre (en fazla 50 km, 60 işletme).
+-- Konum saklanmaz; yalnızca sıralamada kullanılır.
+create function public.nearby_businesses(
+  p_lat      double precision,
+  p_lng      double precision,
+  p_category text default null,
+  p_query    text default null
+)
+returns table (
+  id           uuid,
+  slug         text,
+  name         text,
+  category     text,
+  city         text,
+  district     text,
+  logo_url     text,
+  cover_url    text,
+  description  text,
+  rating_avg   numeric,
+  rating_count int,
+  distance_km  double precision
+)
+language sql stable set search_path = ''
+as $$
+  select * from (
+    select
+      b.id, b.slug, b.name, b.category, b.city, b.district, b.logo_url, b.cover_url, b.description,
+      b.rating_avg, b.rating_count,
+      2 * 6371 * asin(sqrt(
+        power(sin(radians(b.latitude - p_lat) / 2), 2)
+        + cos(radians(p_lat)) * cos(radians(b.latitude)) * power(sin(radians(b.longitude - p_lng) / 2), 2)
+      )) as distance_km
+    from public.businesses b
+    where b.is_published
+      and b.latitude is not null
+      and (p_category is null or b.category = p_category)
+      and (p_query is null or b.name ilike '%' || p_query || '%')
+  ) x
+  where x.distance_km <= 50
+  order by x.distance_km
+  limit 60;
+$$;
+
+-- Uygulama hatasını kaydeder (girişsiz de çağrılabilir). Uzun metinler kısaltılır; kötüye kullanıma karşı son
+-- 24 saatte en fazla 500 yeni hata türü açılır. 90 günden eski kayıtlar silinir.
+create function public.log_error(
+  p_source      text,
+  p_message     text,
+  p_stack       text default '',
+  p_url         text default '',
+  p_app_version text default '',
+  p_user_agent  text default ''
+)
+returns void
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  v_message text := left(trim(coalesce(p_message, '')), 1000);
+  v_stack   text := left(coalesce(p_stack, ''), 8000);
+  v_fp      text;
+begin
+  if v_message = '' or p_source is null or p_source not in ('web', 'server', 'mobile') then return; end if;
+  v_fp := md5(p_source || '|' || v_message || '|' || split_part(v_stack, E'\n', 2));
+
+  update public.error_logs
+  set count = count + 1,
+      last_seen = now(),
+      last_user_id = coalesce(auth.uid(), last_user_id),
+      url = left(coalesce(p_url, ''), 500),
+      app_version = left(coalesce(p_app_version, ''), 100),
+      user_agent = left(coalesce(p_user_agent, ''), 300),
+      resolved_at = null
+  where fingerprint = v_fp;
+  if found then return; end if;
+
+  if (select count(*) from public.error_logs where first_seen > now() - interval '24 hours') >= 500 then return; end if;
+  delete from public.error_logs where last_seen < now() - interval '90 days';
+  insert into public.error_logs (fingerprint, source, message, stack, url, app_version, user_agent, last_user_id)
+  values (
+    v_fp, p_source, v_message, v_stack, left(coalesce(p_url, ''), 500),
+    left(coalesce(p_app_version, ''), 100), left(coalesce(p_user_agent, ''), 300), auth.uid()
+  )
+  on conflict (fingerprint) do update set count = public.error_logs.count + 1, last_seen = now();
+end;
+$$;
+
 -- ---------------------------------------------------------------------
 -- 4) Satır düzeyi güvenlik (RLS)
 -- ---------------------------------------------------------------------
@@ -1687,6 +2201,49 @@ create policy "engel: işletme okur" on public.blocked_customers
   for select using (public.is_business_owner(business_id));
 create policy "engel: işletme kaldırır" on public.blocked_customers
   for delete using (public.is_business_owner(business_id));
+
+alter table public.staff_hours    enable row level security;
+alter table public.customer_notes enable row level security;
+
+create policy "personel saati: herkes okur" on public.staff_hours
+  for select using (
+    exists (
+      select 1 from public.staff s
+      where s.id = staff_id and (public.is_bookable(s.business_id) or public.is_business_owner(s.business_id))
+    )
+  );
+create policy "personel saati: sahibi yönetir" on public.staff_hours
+  for all using (
+    exists (select 1 from public.staff s where s.id = staff_id and public.is_business_owner(s.business_id))
+  )
+  with check (
+    exists (select 1 from public.staff s where s.id = staff_id and public.is_business_owner(s.business_id))
+  );
+
+-- Müşteri notu müşteri defterinin parçasıdır: yalnızca işletme, paketinde defter varsa görür.
+create policy "müşteri notu: sahibi yönetir" on public.customer_notes
+  for all using (public.is_business_owner(business_id) and public.plan_has_feature(business_id, 'customers'))
+  with check (public.is_business_owner(business_id) and public.plan_has_feature(business_id, 'customers'));
+
+alter table public.favorites enable row level security;
+
+create policy "favori: kendi listesini yönetir" on public.favorites
+  for all using (customer_id = auth.uid()) with check (customer_id = auth.uid());
+
+alter table public.session_packages enable row level security;
+
+-- Seans paketi müşteri defterinin parçasıdır.
+create policy "seans paketi: sahibi yönetir" on public.session_packages
+  for all using (public.is_business_owner(business_id) and public.plan_has_feature(business_id, 'customers'))
+  with check (public.is_business_owner(business_id) and public.plan_has_feature(business_id, 'customers'));
+
+alter table public.waitlist enable row level security;
+
+-- Müşteri listeye join_waitlist ile yazılır; kendi kayıtlarını görür ve siler.
+create policy "bekleme: kendininkini okur" on public.waitlist
+  for select using (customer_id = auth.uid());
+create policy "bekleme: kendininkini siler" on public.waitlist
+  for delete using (customer_id = auth.uid());
 
 -- profiles
 create policy "profil: kendini okur" on public.profiles
@@ -1782,6 +2339,13 @@ create policy "admin: bildirimleri okur" on public.notifications for select usin
 create policy "admin: paket ekler" on public.plans for insert with check (public.is_admin());
 create policy "admin: paket günceller" on public.plans
   for update using (public.is_admin()) with check (public.is_admin());
+
+-- Hata kayıtları: log_error yazar; yönetici okur, çözüldü işaretler ve siler.
+alter table public.error_logs enable row level security;
+create policy "hata: yönetici okur" on public.error_logs for select using (public.is_admin());
+create policy "hata: yönetici günceller" on public.error_logs
+  for update using (public.is_admin()) with check (public.is_admin());
+create policy "hata: yönetici siler" on public.error_logs for delete using (public.is_admin());
 
 -- ---------------------------------------------------------------------
 -- 5) Canlı güncelleme (panelde yeni randevular ve bildirimler anında görünür)
