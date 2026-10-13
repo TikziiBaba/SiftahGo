@@ -5,7 +5,7 @@ import { useBusiness } from "@/components/panel-context";
 import { PlanGate } from "@/components/plan-gate";
 import { createClient } from "@/lib/supabase/client";
 import { addDays, dayBounds, dayOf, formatDate, formatPrice, todayStr } from "@/lib/format";
-import type { AppointmentStatus } from "@/lib/types";
+import type { AppointmentStatus, ReportSummary } from "@/lib/types";
 
 type Row = { starts_at: string; status: AppointmentStatus; price: number; service_name: string; staff: { name: string } | null };
 
@@ -42,22 +42,26 @@ export default function ReportsPage() {
 function Reports() {
   const { business } = useBusiness();
   const [period, setPeriod] = useState<string>("30");
-  const [result, setResult] = useState<{ period: string; rows: Row[] } | null>(null);
+  const [result, setResult] = useState<{ period: string; rows: Row[]; summary: ReportSummary | null } | null>(null);
   const { from, to } = range(period);
   const rows = result?.period === period ? result.rows : null;
+  const summary = result?.period === period ? result.summary : null;
 
   useEffect(() => {
     let active = true;
-    createClient()
-      .from("appointments")
-      .select("starts_at, status, price, service_name, staff(name)")
-      .eq("business_id", business.id)
-      .gte("starts_at", dayBounds(from).from)
-      .lt("starts_at", dayBounds(to).to)
-      .limit(5000)
-      .then(({ data }) => {
-        if (active) setResult({ period, rows: (data ?? []) as unknown as Row[] });
-      });
+    const supabase = createClient();
+    Promise.all([
+      supabase
+        .from("appointments")
+        .select("starts_at, status, price, service_name, staff(name)")
+        .eq("business_id", business.id)
+        .gte("starts_at", dayBounds(from).from)
+        .lt("starts_at", dayBounds(to).to)
+        .limit(5000),
+      supabase.rpc("get_report_summary", { p_business_id: business.id, p_from: from, p_to: to }),
+    ]).then(([{ data }, { data: summary }]) => {
+      if (active) setResult({ period, rows: (data ?? []) as unknown as Row[], summary: (summary ?? null) as ReportSummary | null });
+    });
     return () => {
       active = false;
     };
@@ -122,11 +126,25 @@ function Reports() {
         <div className="card mt-6 h-72 animate-pulse bg-surface-2" />
       ) : (
         <>
-          <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3">
             <Tile label="Ciro" value={formatPrice(stats.revenue)} />
             <Tile label="Randevu" value={String(stats.count)} />
             <Tile label="Ortalama sepet" value={formatPrice(stats.average)} />
             <Tile label="Gelmeme oranı" value={`%${stats.noShowRate}`} hint={`${stats.cancelled} iptal`} />
+            {summary && (
+              <>
+                <Tile
+                  label="Doluluk"
+                  value={`%${summary.capacity_minutes ? Math.round((summary.booked_minutes / summary.capacity_minutes) * 100) : 0}`}
+                  hint="Personel saatlerinin dolu kısmı"
+                />
+                <Tile
+                  label="Geri dönen müşteri"
+                  value={`%${summary.customers ? Math.round((summary.returning / summary.customers) * 100) : 0}`}
+                  hint={`${summary.customers} müşteriden ${summary.returning} kişi`}
+                />
+              </>
+            )}
           </div>
 
           <section className="card mt-4 p-5">

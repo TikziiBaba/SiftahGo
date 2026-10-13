@@ -3,20 +3,30 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { CalendarClock, CalendarX2, Loader2, LogOut, RotateCcw, Star, Store } from "lucide-react";
+import { CalendarClock, CalendarX2, Heart, Loader2, LogOut, RotateCcw, Star, Store } from "lucide-react";
 import { RescheduleDialog } from "@/components/reschedule-dialog";
 import { SiteHeader } from "@/components/site-header";
 import { createClient } from "@/lib/supabase/client";
 import { STATUS } from "@/lib/constants";
 import { errorMessage, formatDate, formatPrice, formatTime } from "@/lib/format";
-import type { Appointment, Profile } from "@/lib/types";
+import type { Appointment, Business, Profile } from "@/lib/types";
 
 type Row = Appointment & { businesses: { name: string; slug: string; phone: string } | null };
+type Favorite = Pick<Business, "slug" | "name" | "district" | "city">;
+
+/** "Tekrar al": işletme sayfası önceki hizmet ve personel seçili açılır. */
+function rebookHref(slug: string, row: Row) {
+  const q = new URLSearchParams();
+  if (row.service_id) q.set("hizmet", row.service_id);
+  if (row.staff_id) q.set("personel", row.staff_id);
+  return `/${slug}${q.size ? `?${q}` : ""}#randevu`;
+}
 
 export default function AccountPage() {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [lists, setLists] = useState<{ upcoming: Row[]; past: Row[] } | null>(null);
+  const [favorites, setFavorites] = useState<Favorite[]>([]);
   // Değerlendirilebilecek randevular: tamamlanan veya saati geçmiş onaylı, henüz değerlendirilmemiş.
   const [reviewable, setReviewable] = useState<Set<string>>(new Set());
   const [error, setError] = useState("");
@@ -27,7 +37,7 @@ export default function AccountPage() {
     const supabase = createClient();
     const { data: auth } = await supabase.auth.getUser();
     if (!auth.user) return router.replace("/giris?next=/hesabim");
-    const [p, a, r] = await Promise.all([
+    const [p, a, r, f] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", auth.user.id).maybeSingle(),
       supabase
         .from("appointments")
@@ -36,8 +46,15 @@ export default function AccountPage() {
         .order("starts_at", { ascending: false })
         .limit(100),
       supabase.from("reviews").select("appointment_id").eq("customer_id", auth.user.id),
+      supabase
+        .from("favorites")
+        .select("businesses(slug, name, district, city)")
+        .eq("customer_id", auth.user.id)
+        .order("created_at", { ascending: false }),
     ]);
     setProfile(p.data as Profile | null);
+    // Yayından kalkan işletme gelmez (businesses boş).
+    setFavorites(((f.data ?? []) as unknown as { businesses: Favorite | null }[]).flatMap((x) => (x.businesses ? [x.businesses] : [])));
     const reviewed = new Set((r.data ?? []).map((x: { appointment_id: string }) => x.appointment_id));
     const rows = (a.data ?? []) as Row[];
     const now = new Date().toISOString();
@@ -114,6 +131,25 @@ export default function AccountPage() {
           </ul>
         )}
 
+        {favorites.length > 0 && (
+          <>
+            <h2 className="mt-10 font-semibold">Favori işletmeler</h2>
+            <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+              {favorites.map((b) => (
+                <li key={b.slug}>
+                  <Link href={`/${b.slug}`} className="card flex items-center gap-3 p-4 transition hover:border-line-strong">
+                    <Heart className="size-4 shrink-0 fill-rose-400 text-rose-400" />
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold">{b.name}</span>
+                      <span className="block truncate text-sm text-ink-3">{[b.district, b.city].filter(Boolean).join(", ")}</span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+
         {past.length > 0 && (
           <>
             <h2 className="mt-10 font-semibold">Geçmiş</h2>
@@ -180,7 +216,7 @@ function AppointmentCard({
           <button onClick={onCancel} className="btn btn-ghost text-rose-400">İptal et</button>
         )}
         {!onCancel && row.businesses && (
-          <Link href={`/${row.businesses.slug}`} className="btn btn-ghost">
+          <Link href={rebookHref(row.businesses.slug, row)} className="btn btn-ghost">
             <RotateCcw className="size-4" /> Tekrar al
           </Link>
         )}

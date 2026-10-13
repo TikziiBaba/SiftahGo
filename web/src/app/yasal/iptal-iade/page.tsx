@@ -27,7 +27,8 @@ export default function RefundPage() {
           <strong> nakit olarak iade edilmez</strong>. Satın almadan önce 7 gün ücretsiz deneme ile tüm Pro özelliklerini deneyebilirsiniz.
         </li>
         <li>
-          Başka pakete geçtiğinizde yeni paket hemen başlar ve 30 gün kalan sürenizin üzerine eklenir; kalan süreniz de yeni paketle devam eder.
+          Başka pakete geçtiğinizde yeni paket hemen başlar ve satın aldığınız süre (30 veya 365 gün) kalan sürenizin üzerine eklenir; kalan
+          süreniz de yeni paketle devam eder.
           Daha küçük pakete geçerseniz paket sınırını aşan personel pasif olur.
         </li>
         <li>{SITE_NAME}’dan kaynaklanan ve 24 saati aşan kesintilerde kesinti süresi paketinize eklenir.</li>

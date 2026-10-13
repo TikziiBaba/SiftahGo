@@ -1,4 +1,5 @@
 import { formatDate, formatPrice, formatTime } from "@/lib/format";
+import type { WaitlistNotice } from "@/lib/push";
 import type { AppointmentStatus } from "@/lib/types";
 
 /** claim_notifications satırı */
@@ -29,6 +30,7 @@ type Content = {
   intro: string;
   rows: [string, string][];
   action?: { label: string; href: string };
+  footer?: string;
 };
 
 function content(n: QueuedNotification, appUrl: string): Content {
@@ -172,7 +174,26 @@ const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 export function buildEmail(n: QueuedNotification, appUrl: string) {
-  const c = content(n, appUrl);
+  return render(n.email, content(n, appUrl));
+}
+
+/** Bekleme listesindeki müşteriye: beklediği günde saat boşaldı. */
+export function buildWaitlistEmail(n: WaitlistNotice & { email: string }, appUrl: string) {
+  const day = formatDate(n.day);
+  return render(n.email, {
+    subject: `Saat boşaldı: ${n.business_name}, ${day}`,
+    title: "Beklediğiniz günde saat boşaldı",
+    intro: `Merhaba ${n.customer_name.split(" ")[0]}, bekleme listesine yazıldığınız gün için bir saat boşaldı. İlk alan kapar, hemen bakın.`,
+    rows: [
+      ["İşletme", n.business_name],
+      ["Gün", day],
+    ],
+    action: { label: "Boş saatleri gör", href: `${appUrl}/${n.business_slug}?gun=${n.day}#randevu` },
+    footer: "Bu e-posta SiftahGo bekleme listesine yazıldığınız için gönderildi.",
+  });
+}
+
+function render(to: string, c: Content) {
   const rows = c.rows
     .map(
       ([k, v]) =>
@@ -192,7 +213,7 @@ export function buildEmail(n: QueuedNotification, appUrl: string) {
 <table style="border-collapse:collapse;font-size:14px">${rows}</table>
 ${button}
 </div>
-<p style="margin:16px 0 0;text-align:center;font-size:12px;color:#9ca3af">Bu e-posta SiftahGo üzerinden alınan randevu için gönderildi.</p>
+<p style="margin:16px 0 0;text-align:center;font-size:12px;color:#9ca3af">${esc(c.footer ?? "Bu e-posta SiftahGo üzerinden alınan randevu için gönderildi.")}</p>
 </div></body></html>`;
   const text = [
     c.title,
@@ -202,5 +223,5 @@ ${button}
     ...c.rows.map(([k, v]) => `${k}: ${v}`),
     ...(c.action ? ["", `${c.action.label}: ${c.action.href}`] : []),
   ].join("\n");
-  return { to: n.email, subject: c.subject, html, text };
+  return { to, subject: c.subject, html, text };
 }

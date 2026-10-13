@@ -167,6 +167,8 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
 
         <div className="mt-5">
           <ShopShortcuts
+            businessId={business.id}
+            slug={business.slug}
             name={business.name}
             phone={business.phone}
             mapsUrl={mapsUrl}

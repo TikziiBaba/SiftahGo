@@ -33,7 +33,7 @@ export function BlockedCustomers({ businessId }: { businessId: string }) {
       <h2 className="text-xl font-bold">Engellenen müşteriler</h2>
       <p className="mt-1 text-sm text-ink-3">
         Engellenen müşteri sayfanızdan online randevu alamaz (hesabı ve telefon numarası). Randevu listesindeki
-        &quot;Engelle&quot; ile eklenir.
+        &quot;Engelle&quot; ile eklenir. Son 6 ayda size 2 kez gelmeyen müşteri de otomatik olarak eklenir.
       </p>
       <div className="card mt-4 p-2">
         {rows === null ? (

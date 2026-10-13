@@ -60,12 +60,15 @@ export const RESERVED_SLUGS = [
 
 // Paket kartlarında gösterilen özellik metinleri (fiyat ve limitler veritabanındaki plans tablosundan gelir).
 export const PLAN_FEATURES: Record<string, string> = {
-  customers: "Müşteri defteri",
-  reports: "Ciro raporları",
+  customers: "Müşteri defteri, notlar ve seans paketleri",
+  reports: "Ciro, doluluk ve geri dönen müşteri raporları",
   announcement: "Sayfada duyuru bandı",
   links: "WhatsApp, Instagram ve web kısayolları",
   theme: "Sayfa rengi seçimi",
 };
+// Davet bağlantısıyla (/kayit?davet=KOD) gelenin kodu; işletme kurulumunda doldurulur.
+export const REFERRAL_KEY = "siftahgo.davet";
+
 export const BASE_FEATURES = [
   "7/24 online randevu sayfası",
   "Çakışmasız takvim, izin ve tatil günleri",

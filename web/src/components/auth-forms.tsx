@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { AlertCircle, Eye, EyeOff, Loader2, Lock, Mail, MailCheck, Phone, Store, User, type LucideIcon } from "lucide-react";
 import { Turnstile, turnstileEnabled } from "@/components/turnstile";
 import { createClient } from "@/lib/supabase/client";
+import { REFERRAL_KEY } from "@/lib/constants";
 import { errorMessage } from "@/lib/format";
 
 function safeNext(next: string | null) {
@@ -192,7 +193,16 @@ export function LoginForm() {
 export function SignupForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const [role, setRole] = useState<"customer" | "business">(params.get("rol") === "isletme" ? "business" : "customer");
+  // Davet bağlantısı (?davet=KOD) esnaftan esnafa gelir: işletme hesabı seçili açılır, kod kurulum için saklanır.
+  const [role, setRole] = useState<"customer" | "business">(params.get("rol") === "isletme" || params.get("davet") ? "business" : "customer");
+
+  useEffect(() => {
+    const code = params.get("davet");
+    if (!code) return;
+    try {
+      localStorage.setItem(REFERRAL_KEY, code.trim().toUpperCase());
+    } catch {}
+  }, [params]);
   const [form, setForm] = useState({ full_name: "", phone: "", email: "", password: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");

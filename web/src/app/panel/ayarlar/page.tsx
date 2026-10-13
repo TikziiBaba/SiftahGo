@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ImagePlus, Loader2, X } from "lucide-react";
 import { BlockedCustomers } from "@/components/blocked-customers";
+import { BusinessLocation } from "@/components/business-location";
 import { PageAppearance } from "@/components/page-appearance";
 import { useBusiness } from "@/components/panel-context";
 import { createClient } from "@/lib/supabase/client";
@@ -226,6 +227,9 @@ export default function SettingsPage() {
           {message && <p className={`text-sm ${message.ok ? "text-emerald-400" : "text-rose-400"}`}>{message.text}</p>}
         </div>
       </form>
+
+      {/* Ek dosya henüz çalıştırılmadıysa (konum sütunları yoksa) gizli kalır. */}
+      {"latitude" in business && <BusinessLocation />}
 
       <BlockedCustomers businessId={business.id} />
     </div>

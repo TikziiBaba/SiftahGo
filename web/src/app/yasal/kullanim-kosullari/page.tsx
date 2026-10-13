@@ -63,7 +63,13 @@ export default function TermsPage() {
       <ul>
         <li>Müşteriler için randevu almak ücretsizdir. İşletme sayfasının yayında kalması için İşletme bir paket kullanır.</li>
         <li>Yeni işletmeler 7 gün boyunca Pro paketi ücretsiz kullanır. Deneme sonunda paket alınmazsa sayfa yayından kalkar; bilgiler silinmez.</li>
-        <li>Paketler aylıktır, her ödeme 30 gün geçerlidir ve kalan süreye eklenir. Otomatik yenileme ve taahhüt yoktur.</li>
+        <li>
+          Paketler aylık (30 gün) veya yıllık (365 gün, 10 ay fiyatına) alınır; her ödeme kalan süreye eklenir. Otomatik yenileme ve taahhüt yoktur.
+        </li>
+        <li>
+          Davet: Bir İşletme, başka bir İşletmenin davet koduyla katılıp ilk ödemesini yaptığında her iki İşletmenin paket süresine 30 gün eklenir.
+          Bu ödül bir kez verilir ve nakde çevrilemez.
+        </li>
         <li>
           Satış ve iade koşulları <Link href="/yasal/mesafeli-satis">Mesafeli satış sözleşmesi</Link> ve <Link href="/yasal/iptal-iade">İptal ve iade</Link> sayfalarındadır.
         </li>

@@ -29,7 +29,8 @@ export default function DistanceSalesPage() {
       <ul>
         <li>
           <strong>Paket:</strong> İşletme sayfasının yayında kalması, online randevu alınması ve paket içeriğindeki özelliklerin (personel sayısı,
-          müşteri defteri, raporlar, sayfa özelleştirme vb.) 30 gün boyunca kullanılması. Paket içerikleri ve fiyatları{" "}
+          müşteri defteri, raporlar, sayfa özelleştirme vb.) seçilen dönem boyunca (aylık pakette 30 gün, yıllık pakette 365 gün)
+          kullanılması. Paket içerikleri ve fiyatları{" "}
           <Link href="/#fiyatlar">Fiyatlar</Link> bölümünde ve panelin Abonelik sayfasında yazılıdır.
         </li>
       </ul>
@@ -44,7 +45,7 @@ export default function DistanceSalesPage() {
       <h3>5. İfa</h3>
       <p>
         Hizmet, ödemenin onaylanmasıyla <strong>anında</strong> başlar: paket hesaba tanımlanır. Fiziksel teslimat yoktur.
-        Paket süresi, varsa kalan sürenin üzerine 30 gün olarak eklenir. Otomatik yenileme yapılmaz.
+        Paket süresi, varsa kalan sürenin üzerine aylık pakette 30 gün, yıllık pakette 365 gün olarak eklenir. Otomatik yenileme yapılmaz.
       </p>
       <h3>6. Cayma hakkı</h3>
       <p>
@@ -78,7 +79,7 @@ export default function DistanceSalesPage() {
       </p>
       <h3>Madde 4 · İfa</h3>
       <p>
-        Satıcı, ödemenin onaylanmasıyla hizmeti derhal sunar. Paket 30 gün süreyle geçerlidir; bu süre içinde Platform’un çalışması için makul özen
+        Satıcı, ödemenin onaylanmasıyla hizmeti derhal sunar. Paket, seçilen döneme göre 30 veya 365 gün süreyle geçerlidir; bu süre içinde Platform’un çalışması için makul özen
         gösterilir. Satıcıdan kaynaklanan ve 24 saati aşan kesintilerde kesinti süresi pakete eklenir.
       </p>
       <h3>Madde 5 · Cayma ve iade</h3>

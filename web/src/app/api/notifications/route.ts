@@ -1,6 +1,6 @@
 import { emailConfigured, sendEmail } from "@/lib/email";
-import { buildEmail, type QueuedNotification } from "@/lib/notification-email";
-import { sendQueuedPushes } from "@/lib/push";
+import { buildEmail, buildWaitlistEmail, type QueuedNotification } from "@/lib/notification-email";
+import { sendQueuedPushes, sendWaitlistPushes, type WaitlistNotice } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // Kuyruktaki randevu bildirimlerini (anlık bildirim ve e-posta) gönderir. Zamanlanmış görev
@@ -26,8 +26,14 @@ export async function GET(request: Request) {
     return { error: message };
   });
 
+  // Bekleme listesi: beklenen günde saat boşaldı. Alınan haber tekrar denenmez.
+  const { data: waitlistData, error: waitlistError } = await supabase.rpc("claim_waitlist");
+  if (waitlistError) console.error("Bekleme listesi haberleri alınamadı", waitlistError.message);
+  const waitlist = (waitlistData ?? []) as WaitlistNotice[];
+  const waitlistPush = await sendWaitlistPushes(supabase, waitlist);
+
   if (!emailConfigured()) {
-    return Response.json({ push, error: "RESEND_API_KEY ve EMAIL_FROM tanımlı değil." }, { status: 503 });
+    return Response.json({ push, waitlistPush, error: "RESEND_API_KEY ve EMAIL_FROM tanımlı değil." }, { status: 503 });
   }
 
   const { data, error } = await supabase.rpc("claim_notifications", { p_limit: 20 });
@@ -53,5 +59,25 @@ export async function GET(request: Request) {
     await supabase.rpc("finish_notification", { p_id: n.id, p_error: sendError });
   }
 
-  return Response.json({ reminders: reminders ?? 0, reviewRequests: reviewRequests ?? 0, sent, failed, push });
+  for (const w of waitlist) {
+    if (!w.email) continue;
+    if (sent + failed > 0) await new Promise((r) => setTimeout(r, 600));
+    try {
+      await sendEmail(`waitlist-${w.id}-${Date.now()}`, buildWaitlistEmail({ ...w, email: w.email }, appUrl));
+      sent++;
+    } catch (e) {
+      console.error("Bekleme listesi e-postası gönderilemedi", w.id, e instanceof Error ? e.message : String(e));
+      failed++;
+    }
+  }
+
+  return Response.json({
+    reminders: reminders ?? 0,
+    reviewRequests: reviewRequests ?? 0,
+    waitlist: waitlist.length,
+    sent,
+    failed,
+    push,
+    waitlistPush,
+  });
 }

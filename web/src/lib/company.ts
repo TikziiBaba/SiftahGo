@@ -9,7 +9,7 @@ export const COMPANY = {
 };
 
 /** Yasal metinlerin son güncellenme tarihi. Metin değişince güncelleyin. */
-export const LEGAL_UPDATED = "12 Ekim 2026";
+export const LEGAL_UPDATED = "13 Ekim 2026";
 
 export const LEGAL_DOCS = [
   { href: "/yasal/gizlilik", label: "Gizlilik politikası" },

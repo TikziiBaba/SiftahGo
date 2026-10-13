@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Ban, CalendarClock, CalendarPlus, ChevronLeft, ChevronRight, Loader2, MessageCircle, Phone, X } from "lucide-react";
+import { AlertTriangle, Ban, CalendarClock, CalendarPlus, ChevronLeft, ChevronRight, Loader2, MessageCircle, Package, Phone, StickyNote, X } from "lucide-react";
 import { useBusiness } from "@/components/panel-context";
 import { RescheduleDialog } from "@/components/reschedule-dialog";
 import { createClient } from "@/lib/supabase/client";
@@ -13,12 +13,13 @@ import {
   formatDate,
   formatPrice,
   formatTime,
+  phoneKey,
   reminderText,
   toIso,
   todayStr,
   whatsappLink,
 } from "@/lib/format";
-import type { Appointment, AppointmentStatus, Service, Staff, StaffService } from "@/lib/types";
+import type { Appointment, AppointmentStatus, Service, SessionPackage, Staff, StaffService } from "@/lib/types";
 
 type Row = Appointment & { staff: { name: string } | null };
 
@@ -27,6 +28,10 @@ export default function AppointmentsPage() {
   const supabase = createClient();
   const [day, setDay] = useState(todayStr);
   const [rows, setRows] = useState<Row[] | null>(null);
+  // Müşteri defterindeki notlar (telefonun son 10 hanesi -> not)
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  // Günün müşterilerinin seans paketleri
+  const [packages, setPackages] = useState<SessionPackage[]>([]);
   const [pending, setPending] = useState<Row[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
@@ -45,7 +50,17 @@ export default function AppointmentsPage() {
       supabase.from("appointments").select("*, staff(name)").eq("business_id", business.id)
         .eq("status", "pending").gte("starts_at", new Date().toISOString()).order("starts_at").limit(20),
     ]);
-    setRows((a.data ?? []) as Row[]);
+    const list = (a.data ?? []) as Row[];
+    const keys = [...new Set(list.map((r) => phoneKey(r.customer_phone)).filter(Boolean))];
+    const [{ data: noteRows }, { data: packageRows }] = keys.length
+      ? await Promise.all([
+          supabase.from("customer_notes").select("phone_key, note").eq("business_id", business.id).in("phone_key", keys),
+          supabase.from("session_packages").select("*").eq("business_id", business.id).in("phone_key", keys).order("created_at"),
+        ])
+      : [{ data: [] }, { data: [] }];
+    setRows(list);
+    setNotes(Object.fromEntries((noteRows ?? []).map((n) => [n.phone_key, n.note])));
+    setPackages((packageRows ?? []) as SessionPackage[]);
     setPending((p.data ?? []) as Row[]);
     setLoadedAt(Date.now());
   }, [supabase, business.id, day]);
@@ -201,6 +216,12 @@ export default function AppointmentsPage() {
                     )}
                   </div>
                   {r.note && <p className="mt-1 text-sm italic text-ink-3">“{r.note}”</p>}
+                  <PackageChip row={r} packages={packages} />
+                  {notes[phoneKey(r.customer_phone)] && (
+                    <p className="mt-1 flex items-start gap-1.5 whitespace-pre-line text-sm text-amber-200/90" title="Müşteri notunuz">
+                      <StickyNote className="mt-0.5 size-3.5 shrink-0" /> {notes[phoneKey(r.customer_phone)]}
+                    </p>
+                  )}
                 </div>
                 <select
                   value={r.status}
@@ -255,6 +276,22 @@ function FlaggedChip({ row }: { row: Row }) {
     >
       <AlertTriangle className="size-3.5" /> Sık iptal · {row.prior_cancels} iptal, {row.prior_no_shows} gelmedi
     </span>
+  );
+}
+
+/** Randevunun düştüğü veya düşeceği seans paketi: "Lazer paketi · 7/10 seans kaldı" */
+function PackageChip({ row, packages }: { row: Row; packages: SessionPackage[] }) {
+  const pkg =
+    packages.find((p) => p.id === row.package_id) ??
+    (row.status === "cancelled"
+      ? undefined
+      : packages.find((p) => p.phone_key === phoneKey(row.customer_phone) && p.service_id === row.service_id && p.used < p.total));
+  if (!pkg) return null;
+  return (
+    <p className="mt-1 flex items-center gap-1.5 text-sm text-brand-300">
+      <Package className="size-3.5 shrink-0" />
+      {pkg.name} · {pkg.total - pkg.used}/{pkg.total} seans kaldı{row.package_id === pkg.id ? " · bu randevu düşüldü" : ""}
+    </p>
   );
 }
 

@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Suspense } from "react";
-import { MapPin, Search, Star, Store } from "lucide-react";
-import { GlowCard } from "@/components/glow-card";
+import { Search, Store } from "lucide-react";
+import { BusinessCard } from "@/components/business-card";
+import { NearbyResults } from "@/components/nearby-results";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
 import { createClient } from "@/lib/supabase/server";
-import { CATEGORIES, CITIES, categoryLabel } from "@/lib/constants";
+import { CATEGORIES, CITIES } from "@/lib/constants";
 import type { Business } from "@/lib/types";
 
 export const metadata: Metadata = {
@@ -36,23 +36,31 @@ async function Results({ searchParams }: { searchParams: PageProps<"/kesfet">["s
   const q = one(sp.q);
   const category = one(sp.kategori);
   const city = one(sp.sehir);
+  const today = one(sp.bugun) === "1";
 
   const supabase = await createClient();
   let query = supabase
     .from("businesses")
     .select("id, slug, name, category, city, district, logo_url, cover_url, description, rating_avg, rating_count")
     .eq("is_published", true)
+    .order("rating_score", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(60);
   if (q) query = query.ilike("name", `%${q.replace(/[%_\\]/g, "")}%`);
   if (category) query = query.eq("category", category);
   if (city) query = query.eq("city", city);
   const { data } = await query;
-  const businesses = (data ?? []) as Business[];
+  let businesses = (data ?? []) as Business[];
+  // "Bugün müsait": bugün boş saati olanlar
+  if (today && businesses.length) {
+    const { data: open } = await supabase.rpc("available_today", { p_ids: businesses.map((b) => b.id) });
+    const ids = new Set((open ?? []) as string[]);
+    businesses = businesses.filter((b) => ids.has(b.id));
+  }
 
   return (
     <>
-      <form className="card mt-6 grid gap-3 p-4 md:grid-cols-[1fr_200px_200px_auto]">
+      <form className="card mt-6 grid gap-3 p-4 md:grid-cols-[1fr_180px_180px_auto_auto]">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" />
           <input name="q" defaultValue={q} placeholder="İşletme adı ara" aria-label="İşletme adı" className="input pl-9" />
@@ -69,57 +77,30 @@ async function Results({ searchParams }: { searchParams: PageProps<"/kesfet">["s
             <option key={c} value={c}>{c}</option>
           ))}
         </select>
+        <label className="flex items-center gap-2 px-1 text-sm">
+          <input type="checkbox" name="bugun" value="1" defaultChecked={today} className="size-4 accent-brand-400" />
+          Bugün müsait
+        </label>
         <button className="btn btn-primary">Ara</button>
       </form>
 
-      {businesses.length === 0 ? (
-        <div className="card mt-6 grid place-items-center p-12 text-center">
-          <Store className="size-10 text-ink-3" />
-          <p className="mt-3 font-medium">Aramanıza uygun işletme bulunamadı</p>
-          <p className="mt-1 text-sm text-ink-3">Filtreleri değiştirmeyi deneyin.</p>
-        </div>
-      ) : (
-        <ul className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {businesses.map((b) => (
-            <li key={b.id}>
-              <GlowCard className="card h-full">
-                <Link href={`/${b.slug}`} className="block h-full overflow-hidden rounded-[inherit]">
-                  <div className="h-32 bg-gradient-to-br from-brand-900/60 to-surface-2">
-                    {b.cover_url && <img src={b.cover_url} alt="" className="size-full object-cover" />}
-                  </div>
-                  <div className="flex gap-3 p-4">
-                    <div className="-mt-10 size-14 shrink-0 overflow-hidden rounded-xl border-4 border-bg bg-brand-700 shadow">
-                      {b.logo_url ? (
-                        <img src={b.logo_url} alt="" className="size-full object-cover" />
-                      ) : (
-                        <span className="grid size-full place-items-center text-lg font-bold text-white">
-                          {b.name.charAt(0)}
-                        </span>
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="truncate font-semibold">{b.name}</p>
-                      <p className="flex items-center gap-1.5 text-sm text-ink-3">
-                        {categoryLabel(b.category)}
-                        {b.rating_count > 0 && (
-                          <span className="flex items-center gap-0.5 font-medium text-ink-2">
-                            · <Star className="size-3.5 fill-amber-400 text-amber-400" /> {Number(b.rating_avg).toFixed(1)}
-                          </span>
-                        )}
-                      </p>
-                      {b.city && (
-                        <p className="mt-1 flex items-center gap-1 text-xs text-ink-3">
-                          <MapPin className="size-3.5" /> {[b.district, b.city].filter(Boolean).join(", ")}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </Link>
-              </GlowCard>
-            </li>
-          ))}
-        </ul>
-      )}
+      <NearbyResults category={category} query={q} today={today}>
+        {businesses.length === 0 ? (
+          <div className="card mt-6 grid place-items-center p-12 text-center">
+            <Store className="size-10 text-ink-3" />
+            <p className="mt-3 font-medium">Aramanıza uygun işletme bulunamadı</p>
+            <p className="mt-1 text-sm text-ink-3">Filtreleri değiştirmeyi deneyin.</p>
+          </div>
+        ) : (
+          <ul className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {businesses.map((b) => (
+              <li key={b.id}>
+                <BusinessCard b={b} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </NearbyResults>
     </>
   );
 }

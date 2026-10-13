@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, CheckCircle2, Loader2, ShieldCheck, X } from "lucide-react";
 import { useBusiness } from "@/components/panel-context";
+import { ReferralCard } from "@/components/referral-card";
 import { createClient } from "@/lib/supabase/client";
 import { BASE_FEATURES, isSubscribed, isTrial, PLAN_FEATURES } from "@/lib/constants";
 import { formatDate, formatPrice } from "@/lib/format";
@@ -16,6 +17,10 @@ export default function SubscriptionPage() {
   const [plans, setPlans] = useState<Plan[] | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [busyPlan, setBusyPlan] = useState<string | null>(null);
+  // Ödeme dönemi: 1 ay veya 12 ay (10 ay fiyatına). Uygulama yıllığı ?donem=yillik ile açar.
+  const [months, setMonths] = useState<1 | 12>(() =>
+    typeof window !== "undefined" && new URLSearchParams(location.search).get("donem") === "yillik" ? 12 : 1,
+  );
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [accepted, setAccepted] = useState(false);
@@ -87,7 +92,7 @@ export default function SubscriptionPage() {
     const res = await fetch("/api/paytr/token", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ planId: plan.id }),
+      body: JSON.stringify({ planId: plan.id, months }),
     });
     const json = await res.json();
     setBusyPlan(null);
@@ -98,7 +103,9 @@ export default function SubscriptionPage() {
   return (
     <div className="mx-auto max-w-5xl">
       <h1 className="text-2xl font-semibold tracking-tight">Abonelik</h1>
-      <p className="mt-1 text-sm text-ink-3">Paketler aylıktır. Taahhüt yok; her ödeme 30 gün geçerlidir ve kalan sürenize eklenir.</p>
+      <p className="mt-1 text-sm text-ink-3">
+        Aylık (30 gün) ya da yıllık (365 gün, 2 ay bedava) ödeyin. Taahhüt ve otomatik yenileme yok; her ödeme kalan sürenize eklenir.
+      </p>
 
       {waiting && (
         <div className="mt-6 flex items-center gap-3 rounded-2xl bg-brand-400/10 p-4 text-sm text-brand-200 ring-1 ring-brand-400/20">
@@ -175,7 +182,22 @@ export default function SubscriptionPage() {
         </span>
       </label>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-3">
+      <div className="mt-6 inline-flex rounded-full bg-surface-2 p-1 ring-1 ring-line" role="radiogroup" aria-label="Ödeme dönemi">
+        {([1, 12] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            role="radio"
+            aria-checked={months === m}
+            onClick={() => setMonths(m)}
+            className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${months === m ? "bg-brand-400 text-brand-950" : "text-ink-2 hover:text-ink"}`}
+          >
+            {m === 1 ? "Aylık" : "Yıllık · 2 ay bedava"}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-4 grid gap-4 md:grid-cols-3">
         {plans === null &&
           Array.from({ length: 3 }, (_, i) => <div key={i} className="h-96 animate-pulse rounded-[2rem] bg-surface-2" />)}
         {plans?.map((plan) => {
@@ -190,9 +212,14 @@ export default function SubscriptionPage() {
                   {popular && <span className="eyebrow py-0.5 text-brand-200">En çok tercih edilen</span>}
                 </div>
                 <p className="relative mt-4">
-                  <span className="text-4xl font-semibold tracking-tight">{formatPrice(plan.price)}</span>
-                  <span className="text-ink-3"> / ay</span>
+                  <span className="text-4xl font-semibold tracking-tight">{formatPrice(months === 12 ? plan.price * 10 : plan.price)}</span>
+                  <span className="text-ink-3"> / {months === 12 ? "yıl" : "ay"}</span>
                 </p>
+                {months === 12 && (
+                  <p className="relative mt-1 text-sm text-brand-300">
+                    Aylık {formatPrice((plan.price * 10) / 12)} · {formatPrice(plan.price * 2)} kazanç
+                  </p>
+                )}
                 <ul className="relative mt-6 flex-1 space-y-2.5 text-sm">
                   <Feature>{plan.staff_limit ? `${plan.staff_limit} personel` : "Sınırsız personel"}</Feature>
                   {BASE_FEATURES.map((f) => (
@@ -210,7 +237,7 @@ export default function SubscriptionPage() {
                   className={`btn relative mt-8 w-full py-3 ${popular ? "btn-primary" : "btn-secondary"}`}
                 >
                   {busyPlan === plan.id && <Loader2 className="size-4 animate-spin" />}
-                  {isCurrent ? "30 gün uzat" : subscribed && !trial ? "Bu pakete geç" : "Seç ve öde"}
+                  {isCurrent ? (months === 12 ? "1 yıl uzat" : "30 gün uzat") : subscribed && !trial ? "Bu pakete geç" : "Seç ve öde"}
                 </button>
               </div>
             </div>
@@ -222,6 +249,9 @@ export default function SubscriptionPage() {
         Küçük pakete geçerseniz fazla personel pasif olur.
       </p>
 
+      {/* Ek dosya henüz çalıştırılmadıysa (davet sütunları yoksa) gizli kalır. */}
+      {"referral_code" in business && <ReferralCard hasPaid={payments.some((p) => p.status === "paid")} />}
+
       {payments.length > 0 && (
         <section className="mt-10">
           <h2 className="font-semibold">Ödeme geçmişi</h2>
@@ -229,7 +259,10 @@ export default function SubscriptionPage() {
             {payments.map((p) => (
               <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
                 <span className="text-ink-2">{formatDate(p.paid_at ?? p.created_at, { weekday: undefined, year: "numeric" })}</span>
-                <span>{plans?.find((x) => x.id === p.plan_id)?.name ?? p.plan_id}</span>
+                <span>
+                  {plans?.find((x) => x.id === p.plan_id)?.name ?? p.plan_id}
+                  {p.months === 12 ? " · yıllık" : ""}
+                </span>
                 <span className="tabular-nums">{formatPrice(p.amount)}</span>
                 <span
                   className={`chip ring-1 ${

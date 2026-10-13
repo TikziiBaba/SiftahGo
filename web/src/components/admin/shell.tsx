@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  Bug,
   CalendarDays,
   CreditCard,
   LayoutDashboard,
@@ -25,6 +26,7 @@ const NAV = [
   { href: "/admin/odemeler", label: "Ödemeler", icon: CreditCard },
   { href: "/admin/randevular", label: "Randevular", icon: CalendarDays },
   { href: "/admin/paketler", label: "Paketler", icon: Package },
+  { href: "/admin/hatalar", label: "Hatalar", icon: Bug },
 ];
 
 const isActive = (pathname: string, href: string) =>

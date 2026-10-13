@@ -89,6 +89,12 @@ export function intlPhone(phone: string) {
   return `90${digits}`;
 }
 
+/** Telefonun son 10 hanesi ("0555..." = "+90555..."); müşteri notu bunu anahtar olarak kullanır. Eksikse boş. */
+export function phoneKey(phone: string) {
+  const digits = phone.replace(/\D/g, "").slice(-10);
+  return digits.length === 10 ? digits : "";
+}
+
 export function whatsappLink(phone: string, text: string) {
   return `https://wa.me/${intlPhone(phone)}?text=${encodeURIComponent(text)}`;
 }

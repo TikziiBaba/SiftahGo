@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { CalendarPlus, CheckCircle2, ChevronLeft, Loader2 } from "lucide-react";
+import { BellRing, CalendarPlus, CheckCircle2, ChevronLeft, Loader2 } from "lucide-react";
 import { bookableDays, DayStrip, SlotGrid } from "@/components/slot-picker";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -20,11 +21,23 @@ type Props = { business: Business; services: Service[]; staff: Staff[]; staffSer
 
 export function BookingWidget({ business, services, staff: allStaff, staffServices, hours }: Props) {
   const supabase = createClient();
-  const [serviceId, setServiceId] = useState<string | null>(null);
-  const [staffId, setStaffId] = useState("");
+  const params = useSearchParams();
+  // "Tekrar al" (?hizmet=..&personel=..): önceki randevunun hizmeti ve personeli seçili gelir; artık yoksa seçilmez.
+  const [serviceId, setServiceId] = useState<string | null>(() => {
+    const id = params.get("hizmet");
+    return services.some((s) => s.id === id) ? id : null;
+  });
+  const [staffId, setStaffId] = useState(() => {
+    const id = params.get("personel") ?? "";
+    const offers = (p: Staff) =>
+      !staffServices.some((l) => l.staff_id === p.id) || staffServices.some((l) => l.staff_id === p.id && l.service_id === params.get("hizmet"));
+    return allStaff.some((p) => p.id === id && offers(p)) ? id : "";
+  });
   const days = useMemo(() => bookableDays(business.booking_days, hours), [business.booking_days, hours]);
-  // Bugün kapalıysa ilk açık gün seçili gelir.
-  const [day, setDay] = useState(() => days.find((d) => d.open)?.day ?? todayStr());
+  // ?gun= (bekleme listesi haberi) açık bir günse o gün, değilse ilk açık gün seçili gelir.
+  const [day, setDay] = useState(
+    () => days.find((d) => d.open && d.day === params.get("gun"))?.day ?? days.find((d) => d.open)?.day ?? todayStr(),
+  );
   const [slotResult, setSlotResult] = useState<{ key: string; times: string[] } | null>(null);
   const [time, setTime] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", phone: "", note: "" });
@@ -35,6 +48,10 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
   // Alınan randevunun durumu; sık iptal eden müşteride işletme ayarından bağımsız "pending" olur.
   const [booked, setBooked] = useState<"pending" | "confirmed" | null>(null);
   const [reload, setReload] = useState(0);
+  // Bekleme listesine yazıldığı günler (giriş yapmışsa)
+  const [waitDays, setWaitDays] = useState<string[]>([]);
+  const [waitBusy, setWaitBusy] = useState(false);
+  const [waitError, setWaitError] = useState("");
 
   const service = services.find((s) => s.id === serviceId);
   // Kaydı olmayan personel tüm hizmetleri verir.
@@ -49,10 +66,12 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) return setLoggedIn(false);
       setLoggedIn(true);
+      const { data: waits } = await supabase.from("waitlist").select("day").eq("business_id", business.id);
+      setWaitDays((waits ?? []).map((w: { day: string }) => w.day));
       const { data: p } = await supabase.from("profiles").select("full_name, phone").eq("id", data.user.id).maybeSingle();
       if (p) setForm((f) => ({ ...f, name: f.name || p.full_name, phone: f.phone || p.phone || "" }));
     });
-  }, [supabase]);
+  }, [supabase, business.id]);
 
   useEffect(() => {
     if (!serviceId) return;
@@ -74,6 +93,24 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
       active = false;
     };
   }, [supabase, business.id, serviceId, staffId, day, reload]);
+
+  async function joinWaitlist() {
+    setWaitBusy(true);
+    setWaitError("");
+    const { error } = await supabase.rpc("join_waitlist", { p_business_id: business.id, p_day: day });
+    setWaitBusy(false);
+    if (error) return setWaitError(errorMessage(error));
+    setWaitDays((d) => [...d, day]);
+  }
+
+  async function leaveWaitlist() {
+    setWaitBusy(true);
+    setWaitError("");
+    const { error } = await supabase.from("waitlist").delete().eq("business_id", business.id).eq("day", day);
+    setWaitBusy(false);
+    if (error) return setWaitError(errorMessage(error));
+    setWaitDays((d) => d.filter((x) => x !== day));
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -219,6 +256,35 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
           <div className="mt-3">
             <SlotGrid times={times} value={time} onChange={setTime} />
           </div>
+
+          {times?.length === 0 && (
+            <div className="mt-3 rounded-xl border border-line p-4 text-sm">
+              {waitDays.includes(day) ? (
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="flex items-center gap-2 text-brand-300">
+                    <BellRing className="size-4" /> Bu günde saat boşalırsa size haber vereceğiz.
+                  </p>
+                  <button type="button" disabled={waitBusy} onClick={leaveWaitlist} className="btn btn-ghost py-1.5">
+                    Vazgeç
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-ink-2">Bir randevu iptal edilirse haber verelim mi? İlk alan kapar.</p>
+                  {loggedIn === false ? (
+                    <Link href={`/giris?next=/${business.slug}`} className="btn btn-secondary py-1.5">
+                      <BellRing className="size-4" /> Giriş yapıp haber al
+                    </Link>
+                  ) : (
+                    <button type="button" disabled={waitBusy || loggedIn === null} onClick={joinWaitlist} className="btn btn-secondary py-1.5">
+                      {waitBusy ? <Loader2 className="size-4 animate-spin" /> : <BellRing className="size-4" />} Boşalırsa haber ver
+                    </button>
+                  )}
+                </div>
+              )}
+              {waitError && <p className="mt-2 text-rose-400">{waitError}</p>}
+            </div>
+          )}
         </Step>
       )}
 

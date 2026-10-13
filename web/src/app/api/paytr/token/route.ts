@@ -11,9 +11,10 @@ export async function POST(request: Request) {
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) return NextResponse.json({ error: "Giriş yapmalısınız." }, { status: 401 });
 
-  const { planId } = (await request.json()) as { planId?: string };
+  // months: 1 (aylık, 30 gün) veya 12 (yıllık, 365 gün; 10 ay fiyatına). Tutarı veritabanı hesaplar.
+  const { planId, months = 1 } = (await request.json()) as { planId?: string; months?: number };
   const [{ data: pay, error }, { data: business }, { data: profile }] = await Promise.all([
-    supabase.rpc("create_payment", { p_plan_id: planId }).single<{ merchant_oid: string; amount: number; plan_name: string }>(),
+    supabase.rpc("create_payment", { p_plan_id: planId, p_months: months }).single<{ merchant_oid: string; amount: number; plan_name: string }>(),
     supabase.from("businesses").select("name, phone, address, district, city").eq("owner_id", auth.user.id).maybeSingle(),
     supabase.from("profiles").select("full_name, phone").eq("id", auth.user.id).maybeSingle(),
   ]);
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
   const result = await getPaytrToken({
     merchantOid: pay.merchant_oid,
     amount: Number(pay.amount),
-    productName: `SiftahGo ${pay.plan_name} paketi (30 gün)`,
+    productName: `SiftahGo ${pay.plan_name} paketi (${months === 12 ? "12 ay" : "30 gün"})`,
     email: auth.user.email ?? "",
     userIp: ip,
     userName: profile?.full_name || business.name,

@@ -5,12 +5,20 @@ import { Loader2 } from "lucide-react";
 import { Logo } from "@/components/site-header";
 import { SetupDoneContext } from "@/components/panel-context";
 import { createClient } from "@/lib/supabase/client";
-import { CATEGORIES, CITIES, RESERVED_SLUGS, SITE_DOMAIN } from "@/lib/constants";
+import { CATEGORIES, CITIES, REFERRAL_KEY, RESERVED_SLUGS, SITE_DOMAIN } from "@/lib/constants";
 import { errorMessage, slugInput, slugify } from "@/lib/format";
 
 export default function SetupPage() {
   const done = useContext(SetupDoneContext);
   const [form, setForm] = useState({ name: "", slug: "", category: "berber", city: "", phone: "" });
+  // Davet bağlantısıyla kayıt olunduysa kod hazır gelir.
+  const [referral, setReferral] = useState(() => {
+    try {
+      return localStorage.getItem(REFERRAL_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  });
   const [slugTouched, setSlugTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -39,6 +47,11 @@ export default function SetupPage() {
       setBusy(false);
       return setError(errorMessage(error));
     }
+    // Kod geçersizse kurulum yine biter; kod sonra Abonelik sayfasından girilebilir.
+    if (referral.trim()) await supabase.rpc("apply_referral", { p_code: referral });
+    try {
+      localStorage.removeItem(REFERRAL_KEY);
+    } catch {}
     await done();
   }
 
@@ -89,6 +102,18 @@ export default function SetupPage() {
           <div>
             <label className="label" htmlFor="phone">İşletme telefonu</label>
             <input id="phone" type="tel" className="input" placeholder="0212 xxx xx xx" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+          </div>
+          <div>
+            <label className="label" htmlFor="referral">Davet kodu (isteğe bağlı)</label>
+            <input
+              id="referral"
+              className="input uppercase tracking-widest"
+              maxLength={8}
+              placeholder="Sizi davet eden işletmenin kodu"
+              value={referral}
+              onChange={(e) => setReferral(e.target.value)}
+            />
+            <p className="mt-1 text-xs text-ink-3">İlk ödemenizde hem size hem davet edene 1 ay hediye.</p>
           </div>
           {error && <p className="text-sm text-rose-400">{error}</p>}
           <button disabled={busy} className="btn btn-primary w-full py-3">

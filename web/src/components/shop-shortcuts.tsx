@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { CalendarCheck, Check, Globe, MessageCircle, Navigation, Phone, Share2, type LucideIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { CalendarCheck, Check, Globe, Heart, MessageCircle, Navigation, Phone, Share2, type LucideIcon } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 import { whatsappLink } from "@/lib/format";
 
 /** Lucide'ın eski Instagram çizimi (ISC lisansı); marka ikonları kütüphaneden kaldırıldı. */
@@ -19,6 +21,8 @@ type Shortcut = { href: string; label: string; icon: LucideIcon | typeof Instagr
 
 /** Dükkân sayfasının kısayol düğmeleri. WhatsApp, Instagram ve web sitesi paket özelliğine bağlıdır (boşsa gelmez). */
 export function ShopShortcuts({
+  businessId,
+  slug,
   name,
   phone,
   mapsUrl,
@@ -26,6 +30,8 @@ export function ShopShortcuts({
   instagram,
   website,
 }: {
+  businessId: string;
+  slug: string;
   name: string;
   phone: string;
   mapsUrl: string | null;
@@ -33,7 +39,31 @@ export function ShopShortcuts({
   instagram: string;
   website: string;
 }) {
+  const router = useRouter();
   const [copied, setCopied] = useState(false);
+  // Giriş yapmış müşterinin favorisi mi; giriş yoksa false (dokununca girişe gider).
+  const [favorite, setFavorite] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) return;
+      const { data: row } = await supabase.from("favorites").select("business_id").eq("business_id", businessId).maybeSingle();
+      setFavorite(!!row);
+    });
+  }, [businessId]);
+
+  async function toggleFavorite() {
+    const supabase = createClient();
+    const { data } = await supabase.auth.getUser();
+    if (!data.user) return router.push(`/giris?next=/${slug}`);
+    const next = !favorite;
+    setFavorite(next);
+    const { error } = next
+      ? await supabase.from("favorites").insert({ customer_id: data.user.id, business_id: businessId })
+      : await supabase.from("favorites").delete().eq("business_id", businessId);
+    if (error) setFavorite(!next);
+  }
 
   async function share() {
     const url = window.location.href;
@@ -71,6 +101,10 @@ export function ShopShortcuts({
           <s.icon className="size-4 text-brand-300" /> {s.label}
         </a>
       ))}
+      <button type="button" onClick={toggleFavorite} aria-pressed={favorite} className="btn btn-secondary shrink-0 py-2">
+        <Heart className={`size-4 ${favorite ? "fill-rose-400 text-rose-400" : "text-brand-300"}`} />
+        {favorite ? "Favorilerde" : "Favorilere ekle"}
+      </button>
       <button type="button" onClick={share} className="btn btn-secondary shrink-0 py-2">
         {copied ? <Check className="size-4 text-brand-300" /> : <Share2 className="size-4 text-brand-300" />}
         {copied ? "Bağlantı kopyalandı" : "Paylaş"}

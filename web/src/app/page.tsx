@@ -859,7 +859,7 @@ async function Pricing() {
             <span className="text-gradient">sürpriz yok</span>
           </>
         }
-        text="İlk 7 gün ücretsiz, sonra aylık ödeme; taahhüt yok. Müşterileriniz için randevu her zaman ücretsiz."
+        text="İlk 7 gün ücretsiz, sonra aylık ödeme ya da yıllık ödemede 2 ay bedava; taahhüt yok. Müşterileriniz için randevu her zaman ücretsiz."
       />
       <div className="mt-16 grid gap-4 md:grid-cols-3">
         {plans.map((plan, i) => {
@@ -1112,7 +1112,7 @@ function Faq() {
     ],
     [
       "Ücret ne kadar, taahhüt var mı?",
-      "İlk 7 gün ücretsizdir; deneme boyunca Pro paketin tüm özelliklerini kullanırsınız. Paketler aylıktır ve taahhüt yoktur. Her ödeme 30 gün geçerlidir; istediğiniz zaman paket değiştirebilir veya bırakabilirsiniz. Ödeme PayTR güvencesiyle kartla alınır.",
+      "İlk 7 gün ücretsizdir; deneme boyunca Pro paketin tüm özelliklerini kullanırsınız. Paketler aylık (30 gün) veya yıllık (365 gün, 10 ay fiyatına) alınır; taahhüt ve otomatik yenileme yoktur. İstediğiniz zaman paket değiştirebilir veya bırakabilirsiniz. Ödeme PayTR güvencesiyle kartla alınır.",
     ],
     [
       "Müşterilerim ücret ödüyor mu?",
