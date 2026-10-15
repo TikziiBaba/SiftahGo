@@ -195,7 +195,7 @@ function Subscription({ business }: { business: Business }) {
       <View style={[styles.rowCenter, { paddingHorizontal: 4 }]}>
         <Ionicons name="shield-checkmark-outline" size={16} color={colors.brand300} />
         <Text variant="caption" tone="muted" style={{ flex: 1 }}>
-          Aylık (30 gün) ya da yıllık (365 gün, 2 ay bedava). Taahhüt ve otomatik yenileme yok; her ödeme kalan sürenize eklenir.
+          Aylık (30 gün) ya da yıllık (365 gün, 2 ay bedava). Taahhüt ve otomatik yenileme yok; her ödeme kalan sürenize eklenir. Paket değiştirirseniz kalan süreniz yeni paketin fiyatına göre çevrilir.
         </Text>
       </View>
 
