@@ -123,7 +123,7 @@ create table public.businesses (
                      -- Web sitesindeki sayfa adlarıyla çakışmasın.
                      check (slug not in (
                        'panel', 'kesfet', 'giris', 'kayit', 'hesabim', 'api', 'auth', 'admin',
-                       'sifremi-unuttum', 'sifre-yenile', 'yasal', 'iletisim'
+                       'sifremi-unuttum', 'sifre-yenile', 'yasal', 'iletisim', 'esnaf'
                      )),
   name               text not null check (length(trim(name)) > 0 and length(name) <= 100),
   category           text not null default 'diger' check (length(category) <= 40),

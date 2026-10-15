@@ -10,16 +10,19 @@ type Nearby = BusinessCardData & { distance_km: number };
 /**
  * Keşfet "Yakınımda": tarayıcının konumuyla 50 km içindeki işletmeleri uzaklığa göre gösterir (konum
  * sunucuda saklanmaz, adres çubuğuna yazılmaz). Kapalıyken sunucunun listesi (children) görünür.
+ * `actions`: düğmenin yanında gösterilen ek bağlantılar (ana sayfa).
  */
 export function NearbyResults({
   category,
   query,
   today,
+  actions,
   children,
 }: {
   category: string;
   query: string;
   today: boolean;
+  actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const [list, setList] = useState<Nearby[] | null>(null);
@@ -69,6 +72,7 @@ export function NearbyResults({
             <X className="size-4" /> Yakınımda · tüm sonuçlara dön
           </button>
         )}
+        {actions}
         {error && <p className="text-sm text-rose-400">{error}</p>}
       </div>
       {list === null ? (

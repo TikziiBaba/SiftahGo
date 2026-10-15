@@ -89,7 +89,8 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
 
   async function logout() {
     await createClient().auth.signOut();
-    router.replace("/");
+    // İşletme sahibi çıkınca esnaf ana sayfasına döner.
+    router.replace("/esnaf");
   }
 
   return (

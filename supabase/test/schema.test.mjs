@@ -71,6 +71,7 @@ await db.query(`update businesses set plan_id = null, subscription_ends_at = nul
 
 await expectError(() => as(C, `insert into businesses (owner_id, slug, name) values ($1, 'panel', 'X')`, [C]), /check constraint/, 'ayrılmış adres (panel) reddedildi');
 await expectError(() => as(C, `insert into businesses (owner_id, slug, name) values ($1, 'yasal', 'X')`, [C]), /check constraint/, 'ayrılmış adres (yasal) reddedildi');
+await expectError(() => as(C, `insert into businesses (owner_id, slug, name) values ($1, 'esnaf', 'X')`, [C]), /check constraint/, 'ayrılmış adres (esnaf) reddedildi');
 await expectError(() => as(C, `insert into businesses (owner_id, slug, name) values ($1, 'Kötü Adres', 'X')`, [C]), /check constraint/, 'geçersiz adres reddedildi');
 const svc30 = (await as(A, `insert into services (business_id, name, duration_minutes, price) values ($1, 'Saç Kesimi', 30, 300) returning id`, [biz])).rows[0].id;
 const svc60 = (await as(A, `insert into services (business_id, name, duration_minutes, price) values ($1, 'Saç + Sakal', 60, 450) returning id`, [biz])).rows[0].id;

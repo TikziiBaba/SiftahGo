@@ -31,7 +31,7 @@ export default function DistanceSalesPage() {
           <strong>Paket:</strong> İşletme sayfasının yayında kalması, online randevu alınması ve paket içeriğindeki özelliklerin (personel sayısı,
           müşteri defteri, raporlar, sayfa özelleştirme vb.) seçilen dönem boyunca (aylık pakette 30 gün, yıllık pakette 365 gün)
           kullanılması. Paket içerikleri ve fiyatları{" "}
-          <Link href="/#fiyatlar">Fiyatlar</Link> bölümünde ve panelin Abonelik sayfasında yazılıdır.
+          <Link href="/esnaf#fiyatlar">Fiyatlar</Link> bölümünde ve panelin Abonelik sayfasında yazılıdır.
         </li>
       </ul>
       <h3>4. Fiyat ve ödeme</h3>

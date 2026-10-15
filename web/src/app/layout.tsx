@@ -7,9 +7,10 @@ const geist = Geist({ variable: "--font-geist-sans", subsets: ["latin", "latin-e
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: { default: `${SITE_NAME} — Esnaf için online randevu`, template: `%s | ${SITE_NAME}` },
+  // Varsayılan başlık ve açıklama müşteri ana sayfası içindir; esnaf sayfası (/esnaf) kendininkini verir.
+  title: { default: `${SITE_NAME} — Berber, kuaför ve esnaftan online randevu`, template: `%s | ${SITE_NAME}` },
   description:
-    "Berber, kuaför, güzellik salonu, oto yıkama, halı saha ve tüm esnaf için online randevu, takvim ve müşteri yönetimi.",
+    "Berber, kuaför, güzellik salonu, oto yıkama, halı saha ve daha fazlasında boş saatleri görün, ücretsiz online randevu alın.",
   applicationName: SITE_NAME,
   openGraph: { type: "website", siteName: SITE_NAME, locale: "tr_TR" },
   appleWebApp: { capable: true, title: SITE_NAME, statusBarStyle: "black-translucent" },

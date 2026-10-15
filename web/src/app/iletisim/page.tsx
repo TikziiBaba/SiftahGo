@@ -17,7 +17,7 @@ export default function ContactPage() {
       </p>
       <p>
         Müşteriler için randevu almak ücretsizdir. İşletmeler 7 gün ücretsiz denedikten sonra aylık paketlerden birini seçer; fiyatlar{" "}
-        <Link href="/#fiyatlar">Fiyatlar</Link> bölümünde yazılıdır.
+        <Link href="/esnaf#fiyatlar">Fiyatlar</Link> bölümünde yazılıdır.
       </p>
 
       <h2>İletişim bilgileri</h2>

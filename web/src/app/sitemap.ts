@@ -10,9 +10,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   });
   const { data } = await supabase.from("businesses").select("slug").eq("is_published", true);
 
-  const pages = ["", "/kesfet", "/iletisim", "/yasal/gizlilik", "/yasal/kullanim-kosullari", "/yasal/guvenlik","/yasal/mesafeli-satis", "/yasal/iptal-iade"];
+  const pages = ["", "/esnaf", "/kesfet", "/iletisim", "/yasal/gizlilik", "/yasal/kullanim-kosullari", "/yasal/guvenlik","/yasal/mesafeli-satis", "/yasal/iptal-iade"];
   return [
-    ...pages.map((path) => ({ url: `${SITE_URL}${path}`, priority: path === "" ? 1 : 0.5 })),
+    // Müşteri (/) ve esnaf (/esnaf) ana sayfaları öne çıkar.
+    ...pages.map((path) => ({ url: `${SITE_URL}${path}`, priority: path === "" || path === "/esnaf" ? 1 : 0.5 })),
     ...(data ?? []).map((b) => ({ url: `${SITE_URL}/${b.slug}`, priority: 0.8 })),
   ];
 }
