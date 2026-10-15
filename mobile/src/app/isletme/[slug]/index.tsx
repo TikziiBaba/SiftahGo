@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Cover } from '@/components/brand';
 import { Logo } from '@/components/business-logo';
 import { CalendarSheet, DayStrip } from '@/components/pickers';
-import { Avatar, Badge, Button, Card, Chip, Empty, IconButton, Loading, SectionTitle, Skeleton, styles, Text } from '@/components/ui';
+import { Avatar, Badge, Button, Card, Chip, Empty, IconButton, Loading, PressableScale, SectionTitle, Skeleton, styles, Text } from '@/components/ui';
 import { AccentProvider, useAccent } from '@/lib/accent';
 import { useAuth } from '@/lib/auth';
 import { categoryIcon, categoryLabel, isSubscribed, WEB_URL, WEEKDAYS, type IconName } from '@/lib/constants';
@@ -529,21 +529,22 @@ export default function BusinessScreen() {
 function Shortcut({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
   const accent = useAccent();
   return (
-    <Pressable
+    <PressableScale
       onPress={() => {
         haptic.press();
         onPress();
       }}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={({ pressed }) => [s.shortcut, pressed && { opacity: 0.7, transform: [{ scale: 0.95 }] }]}>
+      scale={0.9}
+      style={s.shortcut}>
       <View style={[s.shortcutIcon, { backgroundColor: alpha(accent.base, 0.12), borderColor: alpha(accent.base, 0.25) }]}>
         <Ionicons name={icon} size={22} color={accent.soft} />
       </View>
       <Text variant="caption" tone="secondary" numberOfLines={1}>
         {label}
       </Text>
-    </Pressable>
+    </PressableScale>
   );
 }
 

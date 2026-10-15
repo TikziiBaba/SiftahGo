@@ -80,7 +80,7 @@ function Reviews({ business }: { business: Business }) {
         ListHeaderComponent={
           <View style={{ gap: 14 }}>
             <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
-              <Text style={{ fontSize: 40, lineHeight: 46 }} variant="display">
+              <Text variant="display">
                 {business.rating_count > 0 ? Number(business.rating_avg).toFixed(1) : '—'}
               </Text>
               <View style={{ flex: 1, gap: 4 }}>

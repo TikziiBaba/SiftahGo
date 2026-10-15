@@ -3,12 +3,13 @@ import * as Location from 'expo-location';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Glow, Wordmark } from '@/components/brand';
 import { Logo } from '@/components/business-logo';
 import { OptionSheet } from '@/components/pickers';
-import { Avatar, Badge, Button, Card, Chip, Empty, Field, Skeleton, styles, Text } from '@/components/ui';
+import { Avatar, Badge, Button, Card, Chip, Empty, Field, PressableScale, Skeleton, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { CATEGORIES, categoryLabel, CITIES } from '@/lib/constants';
 import { supabase } from '@/lib/supabase';
@@ -168,17 +169,18 @@ export default function DiscoverScreen() {
                 </Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingHorizontal: 16 }} style={{ marginHorizontal: -16 }}>
                   {shownFavorites.map((b) => (
-                    <Pressable
+                    <PressableScale
                       key={b.id}
                       onPress={() => router.push({ pathname: '/isletme/[slug]', params: { slug: b.slug } })}
                       accessibilityRole="button"
                       accessibilityLabel={b.name}
-                      style={({ pressed }) => [s.favorite, pressed && { opacity: 0.7 }]}>
+                      scale={0.92}
+                      style={s.favorite}>
                       <Logo business={b} size={52} />
                       <Text variant="caption" tone="secondary" numberOfLines={1}>
                         {b.name}
                       </Text>
-                    </Pressable>
+                    </PressableScale>
                   ))}
                 </ScrollView>
               </View>
@@ -194,16 +196,17 @@ export default function DiscoverScreen() {
                 returnKeyType="search"
                 autoCorrect={false}
               />
-              <Pressable
+              <PressableScale
                 onPress={() => setCityOpen(true)}
                 accessibilityRole="button"
                 accessibilityLabel={`Şehir: ${city || 'Tüm şehirler'}`}
-                style={({ pressed }) => [s.city, city && s.cityOn, pressed && { opacity: 0.75 }]}>
+                scale={0.95}
+                style={[s.city, city && s.cityOn]}>
                 <Ionicons name="location-outline" size={18} color={city ? colors.brand300 : colors.ink2} />
                 <Text variant="label" tone={city ? 'brand' : 'secondary'} numberOfLines={1} style={{ maxWidth: 96 }}>
                   {city || 'Şehir'}
                 </Text>
-              </Pressable>
+              </PressableScale>
             </View>
 
             <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -262,7 +265,12 @@ export default function DiscoverScreen() {
             </Empty>
           )
         }
-        renderItem={({ item }) => <BusinessCard item={item} />}
+        renderItem={({ item, index }) => (
+          // Kartlar sırayla belirir; ilk sekizden sonrası beklemez.
+          <Animated.View entering={FadeInDown.delay(Math.min(index, 8) * 40).duration(320)}>
+            <BusinessCard item={item} />
+          </Animated.View>
+        )}
       />
       <OptionSheet
         visible={cityOpen}
@@ -292,7 +300,7 @@ function BusinessCard({ item }: { item: Item }) {
       style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14 }}>
       <Logo business={item} size={56} />
       <View style={{ flex: 1, gap: 3 }}>
-        <Text variant="bodyStrong" style={{ fontSize: 16 }} numberOfLines={1}>
+        <Text variant="heading" numberOfLines={1}>
           {item.name}
         </Text>
         <Text variant="caption" tone="muted" numberOfLines={1}>

@@ -10,7 +10,9 @@ export function Logo({ business, size }: { business: Pick<Business, 'name' | 'lo
   const accent = useAccent();
   const box = { width: size, height: size, borderRadius: size * 0.28 };
   if (business.logo_url) {
-    return <Image source={business.logo_url} style={[box, { backgroundColor: colors.surface2 }]} contentFit="cover" transition={150} />;
+    // Logo her yerde işletme adının yanında durur; ekran okuyucu için süs. Web'de alt="" olur
+    // (expo-image asıl görselde alt yerine yalnızca accessibilityLabel okuyor).
+    return <Image source={business.logo_url} accessibilityLabel="" style={[box, { backgroundColor: colors.surface2 }]} contentFit="cover" transition={150} />;
   }
   return (
     <View style={[box, { backgroundColor: accent.deep, borderWidth: 1, borderColor: alpha(accent.base, 0.25), alignItems: 'center', justifyContent: 'center' }]}>

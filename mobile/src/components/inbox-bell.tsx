@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { IconButton, Text } from '@/components/ui';
 import { useInbox } from '@/lib/inbox';
-import { colors, fonts } from '@/lib/theme';
+import { colors, type } from '@/lib/theme';
 
 /** Başlıktaki bildirim düğmesi; okunmamış sayısını gösterir. */
 export function InboxBell() {
@@ -39,5 +39,5 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  count: { fontFamily: fonts.bold, fontSize: 10, lineHeight: 12, color: colors.brandInk },
+  count: { ...type.badge, color: colors.brandInk },
 });

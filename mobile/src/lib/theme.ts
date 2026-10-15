@@ -79,6 +79,11 @@ export const type = {
   label: { fontFamily: fonts.medium, fontSize: 13, lineHeight: 18 },
   caption: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 16 },
   overline: { fontFamily: fonts.semibold, fontSize: 11, lineHeight: 14, letterSpacing: 1.6, textTransform: 'uppercase' as const },
+  // Alt sekme etiketi ve sayaç rozeti
+  tab: { fontFamily: fonts.medium, fontSize: 11, lineHeight: 14 },
+  badge: { fontFamily: fonts.bold, fontSize: 10, lineHeight: 12 },
+  // Yazı alanı: 16'nın altı telefonda küçük kalır, iOS tarayıcısı da odaklanınca yakınlaştırır.
+  input: { fontFamily: fonts.regular, fontSize: 16 },
 };
 
 export const shadows = {

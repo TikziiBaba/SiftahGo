@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Children, useEffect, useState } from 'react';
+import { Children, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -8,12 +8,13 @@ import {
   Switch,
   TextInput,
   View,
+  type PressableProps,
   type StyleProp,
   type TextInputProps,
   type TextProps,
   type ViewStyle,
 } from 'react-native';
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAccent } from '@/lib/accent';
@@ -38,6 +39,44 @@ const TONES: Record<Tone, string> = {
 
 export function Text({ variant = 'body', tone = 'default', style, ...props }: TextProps & { variant?: keyof typeof type; tone?: Tone }) {
   return <RNText maxFontSizeMultiplier={1.4} {...props} style={[type[variant], { color: TONES[tone] }, style]} />;
+}
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+// Basınca hızlı ve sönümlü iner, bırakınca hafifçe taşarak yerine oturur.
+const PRESS_IN = { damping: 30, stiffness: 700 };
+const RELEASE = { damping: 13, stiffness: 320, mass: 0.7 };
+
+/** Basınca yayla küçülen dokunulabilir alan. Stil fonksiyon değil, düz stil olmalı. */
+export function PressableScale({
+  scale = 0.97,
+  style,
+  onPressIn,
+  onPressOut,
+  ...props
+}: Omit<PressableProps, 'style'> & { scale?: number; style?: StyleProp<ViewStyle> }) {
+  const pressed = useSharedValue(0);
+  // Dışarıdan gelen soluklık (pasif düğme, kapalı gün) basma soluklaşmasıyla çarpılır; yoksa ezilirdi.
+  const flat = StyleSheet.flatten(style)?.opacity;
+  const baseOpacity = typeof flat === 'number' ? flat : 1;
+  const animated = useAnimatedStyle(() => {
+    const p = pressed.get();
+    return { opacity: baseOpacity * (1 - 0.14 * Math.max(0, p)), transform: [{ scale: 1 - (1 - scale) * p }] };
+  });
+  return (
+    <AnimatedPressable
+      {...props}
+      onPressIn={(e) => {
+        pressed.set(withSpring(1, PRESS_IN));
+        onPressIn?.(e);
+      }}
+      onPressOut={(e) => {
+        pressed.set(withSpring(0, RELEASE));
+        onPressOut?.(e);
+      }}
+      style={[style, animated]}
+    />
+  );
 }
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'dangerGhost';
@@ -76,7 +115,7 @@ export function Button({
       : BUTTONS[variant];
   const inactive = disabled || loading;
   return (
-    <Pressable
+    <PressableScale
       onPress={() => {
         haptic.press();
         onPress();
@@ -84,12 +123,11 @@ export function Button({
       disabled={inactive}
       accessibilityRole="button"
       accessibilityState={{ disabled: !!inactive, busy: !!loading }}
-      style={({ pressed }) => [
+      style={[
         s.button,
         { height: size === 'lg' ? 54 : size === 'sm' ? 38 : 48, paddingHorizontal: size === 'sm' ? 12 : 20 },
         v.box,
         disabled && { opacity: 0.4, boxShadow: undefined },
-        pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
         style,
       ]}>
       {loading ? (
@@ -102,7 +140,7 @@ export function Button({
           </Text>
         </>
       )}
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -122,7 +160,7 @@ export function IconButton({
   style?: StyleProp<ViewStyle>;
 }) {
   return (
-    <Pressable
+    <PressableScale
       onPress={() => {
         haptic.press();
         onPress();
@@ -130,14 +168,10 @@ export function IconButton({
       accessibilityRole="button"
       accessibilityLabel={label}
       hitSlop={6}
-      style={({ pressed }) => [
-        s.iconButton,
-        { width: size, height: size, borderRadius: size / 2 },
-        pressed && { opacity: 0.7, transform: [{ scale: 0.95 }] },
-        style,
-      ]}>
+      scale={0.9}
+      style={[s.iconButton, { width: size, height: size, borderRadius: size / 2 }, style]}>
       <Ionicons name={icon} size={Math.round(size * 0.48)} color={color} />
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -211,13 +245,9 @@ export function Card({
 }) {
   if (!onPress) return <View style={[s.card, style]}>{children}</View>;
   return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      style={({ pressed }) => [s.card, style, pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] }]}>
+    <PressableScale onPress={onPress} accessibilityRole="button" accessibilityLabel={accessibilityLabel} scale={0.98} style={[s.card, style]}>
       {children}
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -242,7 +272,7 @@ export function Chip({
   const accent = useAccent();
   const fg = selected ? (solid ? accent.ink : accent.light) : colors.ink2;
   return (
-    <Pressable
+    <PressableScale
       onPress={() => {
         haptic.select();
         onPress();
@@ -250,21 +280,21 @@ export function Chip({
       disabled={disabled}
       accessibilityRole="button"
       accessibilityState={{ selected: !!selected, disabled: !!disabled }}
-      style={({ pressed }) => [
+      scale={0.94}
+      style={[
         s.chip,
         selected &&
           (solid
             ? { backgroundColor: accent.base, borderColor: accent.base }
             : { backgroundColor: alpha(accent.base, 0.12), borderColor: alpha(accent.base, 0.4) }),
         disabled && { opacity: 0.3 },
-        pressed && { opacity: 0.75 },
         style,
       ]}>
       {icon && <Ionicons name={icon} size={15} color={fg} />}
       <Text variant="label" style={{ color: fg }} numberOfLines={1}>
         {label}
       </Text>
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -562,8 +592,22 @@ export function Segmented<T extends string>({
   value: T;
   onChange: (value: T) => void;
 }) {
+  // Seçili sekmenin zemini tek parça; sekme değişince yayla yanına kayar.
+  const [width, setWidth] = useState(0);
+  const index = Math.max(0, options.findIndex((o) => o.value === value));
+  const segment = width ? (width - SEGMENTED_INSET * 2) / options.length : 0;
+  const x = useSharedValue(0);
+  const placed = useRef(false);
+  useEffect(() => {
+    if (!segment) return;
+    // İlk ölçümde kaydırmadan yerine koy.
+    x.set(placed.current ? withSpring(index * segment, SLIDE) : index * segment);
+    placed.current = true;
+  }, [x, index, segment]);
+  const indicator = useAnimatedStyle(() => ({ transform: [{ translateX: x.get() }] }));
   return (
-    <View style={s.segmented} accessibilityRole="tablist">
+    <View style={s.segmented} accessibilityRole="tablist" onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+      {segment > 0 && <Animated.View style={[s.segmentOn, { width: segment }, indicator]} />}
       {options.map((o) => {
         const on = o.value === value;
         return (
@@ -576,7 +620,7 @@ export function Segmented<T extends string>({
             }}
             accessibilityRole="tab"
             accessibilityState={{ selected: on }}
-            style={[s.segment, on && s.segmentOn]}>
+            style={s.segment}>
             <Text variant="label" tone={on ? 'default' : 'muted'}>
               {o.label}
             </Text>
@@ -593,6 +637,8 @@ export function Segmented<T extends string>({
     </View>
   );
 }
+
+const SLIDE = { damping: 20, stiffness: 260, mass: 0.8 };
 
 /** Sekme ekranlarının büyük başlığı (üst güvenli alan dahil) */
 export function ScreenHeader({ title, subtitle, eyebrow, right }: { title: string; subtitle?: string; eyebrow?: string; right?: React.ReactNode }) {
@@ -620,6 +666,9 @@ export const styles = StyleSheet.create({
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
 });
 
+// Segmented kutusunun dış kenarından sekmelere uzaklık (1 kenar çizgisi + 4 iç boşluk)
+const SEGMENTED_INSET = 5;
+
 const s = StyleSheet.create({
   screenHeader: { flexDirection: 'row', alignItems: 'flex-end', gap: 12, paddingBottom: 4 },
   button: { borderRadius: radius.pill, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
@@ -641,7 +690,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 14,
   },
   fieldFocused: { borderColor: colors.brandRing, backgroundColor: colors.surface3 },
-  input: { flex: 1, fontFamily: fonts.regular, fontSize: 16, color: colors.ink, paddingVertical: 13, outlineWidth: 0 },
+  input: { flex: 1, ...type.input, color: colors.ink, paddingVertical: 13, outlineWidth: 0 },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -703,12 +752,21 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: colors.surface2,
     borderRadius: radius.pill,
-    padding: 4,
+    padding: SEGMENTED_INSET - 1,
     borderWidth: 1,
     borderColor: colors.line,
   },
   segment: { flex: 1, height: 36, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 },
-  segmentOn: { backgroundColor: colors.surface3, borderWidth: 1, borderColor: colors.lineStrong },
+  segmentOn: {
+    position: 'absolute',
+    top: SEGMENTED_INSET - 1,
+    bottom: SEGMENTED_INSET - 1,
+    left: SEGMENTED_INSET - 1,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface3,
+    borderWidth: 1,
+    borderColor: colors.lineStrong,
+  },
   segmentCount: {
     minWidth: 20,
     height: 20,

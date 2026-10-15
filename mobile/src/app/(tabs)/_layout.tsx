@@ -1,16 +1,21 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs } from 'expo-router/js-tabs';
-import type { ColorValue } from 'react-native';
+import { StyleSheet, View, type ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/lib/auth';
 import type { IconName } from '@/lib/constants';
 import { useInbox } from '@/lib/inbox';
-import { colors, fonts } from '@/lib/theme';
+import { colors, radius, type } from '@/lib/theme';
 
 function icon(name: string) {
   return function TabBarIcon({ color, size, focused }: { color: ColorValue; size: number; focused: boolean }) {
-    return <Ionicons name={(focused ? name : `${name}-outline`) as IconName} size={size} color={color} />;
+    // Seçili sekmede ikonun arkasında hap zemin. Kütüphane iki hali üst üste çizip geçişte soldurur.
+    return (
+      <View style={[s.pill, focused && { backgroundColor: colors.brandTint }]}>
+        <Ionicons name={(focused ? name : `${name}-outline`) as IconName} size={size - 2} color={color} />
+      </View>
+    );
   };
 }
 
@@ -30,9 +35,9 @@ export default function TabLayout() {
         tabBarInactiveTintColor: colors.ink3,
         // Geist etiketleri varsayılan 49 piksellik çubukta kesiliyor (alt boşluğu kütüphane ekler).
         tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.line, height: 62 + insets.bottom },
-        tabBarLabelStyle: { fontFamily: fonts.medium, fontSize: 11, lineHeight: 14 },
+        tabBarLabelStyle: type.tab,
         tabBarHideOnKeyboard: true,
-        tabBarBadgeStyle: { backgroundColor: colors.gold, color: colors.brandInk, fontFamily: fonts.bold, fontSize: 10 },
+        tabBarBadgeStyle: { ...type.badge, backgroundColor: colors.gold, color: colors.brandInk },
         sceneStyle: { backgroundColor: colors.bg },
       }}>
       {/* Müşteri */}
@@ -50,3 +55,7 @@ export default function TabLayout() {
     </Tabs>
   );
 }
+
+const s = StyleSheet.create({
+  pill: { width: 56, height: 30, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+});

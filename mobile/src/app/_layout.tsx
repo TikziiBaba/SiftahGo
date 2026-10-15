@@ -9,7 +9,7 @@ import { AuthProvider, useAuth } from '@/lib/auth';
 import { installErrorHandler } from '@/lib/error-log';
 import { InboxProvider } from '@/lib/inbox';
 import { useNotificationTaps, usePushRegistration } from '@/lib/notifications';
-import { colors, fonts } from '@/lib/theme';
+import { colors, fonts, type } from '@/lib/theme';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -75,7 +75,7 @@ function RootStack({ fontsReady }: { fontsReady: boolean }) {
       screenOptions={{
         headerStyle: { backgroundColor: colors.bg },
         headerTintColor: colors.ink,
-        headerTitleStyle: { fontFamily: fonts.semibold, fontSize: 17 },
+        headerTitleStyle: { fontFamily: type.heading.fontFamily, fontSize: type.heading.fontSize },
         headerShadowVisible: false,
         headerBackButtonDisplayMode: 'minimal',
         contentStyle: { backgroundColor: colors.bg },

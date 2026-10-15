@@ -217,7 +217,7 @@ function Agenda({ business }: { business: Business }) {
                     <Text variant="caption" style={{ color: on ? colors.brandInk : colors.ink3 }}>
                       {sd.weekday}
                     </Text>
-                    <Text style={{ fontFamily: fonts.bold, fontSize: 17, color: on ? colors.brandInk : d === today ? colors.brand300 : colors.ink }}>
+                    <Text variant="heading" style={{ fontFamily: fonts.bold, color: on ? colors.brandInk : d === today ? colors.brand300 : colors.ink }}>
                       {sd.date}
                     </Text>
                     <View style={[s.dot, { opacity: counts[d] ? 1 : 0, backgroundColor: on ? colors.brandInk : colors.brand }]} />

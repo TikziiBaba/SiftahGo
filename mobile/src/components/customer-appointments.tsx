@@ -12,7 +12,7 @@ import { useToast } from '@/components/toast';
 import { Button, Card, Empty, ScreenHeader, Segmented, Skeleton, StatusBadge, styles, Text } from '@/components/ui';
 import { errorMessage, formatDate, formatPrice, formatTime, mapsLink, relativeDay, dayOf, shortDay } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
-import { colors, fonts, radius } from '@/lib/theme';
+import { colors, radius } from '@/lib/theme';
 import type { Appointment } from '@/lib/types';
 
 type Row = Appointment & {
@@ -209,13 +209,13 @@ function AppointmentCard({
           <Text variant="caption" style={{ color: upcoming ? colors.brand200 : colors.ink3 }}>
             {d.month}
           </Text>
-          <Text style={{ fontFamily: fonts.bold, fontSize: 24, lineHeight: 28, color: upcoming ? colors.ink : colors.ink2 }}>{d.date}</Text>
+          <Text variant="title" style={{ color: upcoming ? colors.ink : colors.ink2 }}>{d.date}</Text>
           <Text variant="caption" style={{ color: upcoming ? colors.brand200 : colors.ink3 }}>
             {d.weekday}
           </Text>
         </View>
         <View style={{ flex: 1, gap: 4 }}>
-          <Text variant="bodyStrong" style={{ fontSize: 16 }} numberOfLines={1}>
+          <Text variant="heading" numberOfLines={1}>
             {b?.name ?? 'İşletme'}
           </Text>
           <Text tone="secondary" numberOfLines={1}>

@@ -3,12 +3,12 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { Sheet } from '@/components/sheet';
-import { Chip, Field, Text } from '@/components/ui';
+import { Chip, Field, PressableScale, Text } from '@/components/ui';
 import type { IconName } from '@/lib/constants';
 import { addDays, isoWeekday, MONTHS, shortDay, todayStr } from '@/lib/format';
 import { useAccent } from '@/lib/accent';
 import { haptic } from '@/lib/haptics';
-import { alpha, colors, fonts, radius } from '@/lib/theme';
+import { alpha, colors, fonts, radius, type } from '@/lib/theme';
 
 /** Arama kutulu tek seçimlik liste (şehir, kategori) */
 export function OptionSheet<T extends string>({
@@ -217,8 +217,8 @@ export function CalendarSheet({
               <View style={[s.day, d === today && s.today, selected && s.daySelected]}>
                 <Text
                   style={{
+                    ...type.body,
                     fontFamily: selected || d === today ? fonts.semibold : fonts.regular,
-                    fontSize: 15,
                     color: selected ? colors.brandInk : colors.ink,
                     // Seçilemeyen gün (geçmiş ya da kapalı) soluk görünür.
                     opacity: disabled && !selected ? 0.3 : 1,
@@ -293,7 +293,7 @@ export function DayStrip({
         const d = shortDay(day);
         const selected = day === value;
         return (
-          <Pressable
+          <PressableScale
             key={day}
             disabled={disabled}
             onPress={() => {
@@ -303,24 +303,25 @@ export function DayStrip({
             accessibilityRole="button"
             accessibilityLabel={`${d.date} ${d.month} ${d.weekday}${disabled ? ', kapalı' : ''}`}
             accessibilityState={{ selected, disabled: !!disabled }}
-            style={({ pressed }) => [s.stripDay, selected && selectedStyle, disabled && { opacity: 0.3 }, pressed && { opacity: 0.75 }]}>
+            scale={0.93}
+            style={[s.stripDay, selected && selectedStyle, disabled && { opacity: 0.3 }]}>
             <Text variant="caption" style={{ color: selected ? accent.ink : colors.ink3 }}>
               {d.weekday}
             </Text>
-            <Text style={{ fontFamily: fonts.bold, fontSize: 20, lineHeight: 24, color: selected ? accent.ink : colors.ink }}>{d.date}</Text>
+            <Text variant="title" style={{ color: selected ? accent.ink : colors.ink }}>{d.date}</Text>
             <Text variant="caption" style={{ color: selected ? accent.ink : colors.ink3 }}>
               {d.month}
             </Text>
-          </Pressable>
+          </PressableScale>
         );
       })}
       {onMore && (
-        <Pressable onPress={onMore} accessibilityRole="button" accessibilityLabel="Takvimden seç" style={({ pressed }) => [s.stripDay, pressed && { opacity: 0.75 }]}>
+        <PressableScale onPress={onMore} accessibilityRole="button" accessibilityLabel="Takvimden seç" scale={0.93} style={s.stripDay}>
           <Ionicons name="calendar-outline" size={22} color={colors.brand300} />
           <Text variant="caption" tone="brand">
             Takvim
           </Text>
-        </Pressable>
+        </PressableScale>
       )}
     </ScrollView>
   );

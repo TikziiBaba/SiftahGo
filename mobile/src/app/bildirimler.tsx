@@ -3,9 +3,9 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { FlatList, Linking, Pressable, StyleSheet, View } from 'react-native';
+import { FlatList, Linking, StyleSheet, View } from 'react-native';
 
-import { Banner, Empty, Skeleton, styles, Text } from '@/components/ui';
+import { Banner, Empty, PressableScale, Skeleton, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import type { IconName } from '@/lib/constants';
 import { dayOf, formatTime, relativeDay, shortDay, todayStr } from '@/lib/format';
@@ -101,14 +101,15 @@ function Row({ item }: { item: InboxItem }) {
   const k = KIND[item.kind];
   const unread = !item.read_at;
   return (
-    <Pressable
+    <PressableScale
       onPress={() => {
         haptic.press();
         openNotificationTarget({ kind: item.kind, recipient: item.recipient, appointmentId: item.appointment_id, startsAt: item.appointments?.starts_at });
       }}
       accessibilityRole="button"
       accessibilityLabel={`${unread ? 'Okunmamış. ' : ''}${item.title}. ${item.body}`}
-      style={({ pressed }) => [s.row, unread && s.unread, pressed && { opacity: 0.75, transform: [{ scale: 0.99 }] }]}>
+      scale={0.98}
+      style={[s.row, unread && s.unread]}>
       <View style={[s.icon, { backgroundColor: k.bg }]}>
         <Ionicons name={k.icon} size={20} color={k.fg} />
       </View>
@@ -126,7 +127,7 @@ function Row({ item }: { item: InboxItem }) {
         </Text>
       </View>
       {unread && <View style={s.dot} />}
-    </Pressable>
+    </PressableScale>
   );
 }
 
