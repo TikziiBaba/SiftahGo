@@ -104,7 +104,7 @@ export default function SubscriptionPage() {
     <div className="mx-auto max-w-5xl">
       <h1 className="text-2xl font-semibold tracking-tight">Abonelik</h1>
       <p className="mt-1 text-sm text-ink-3">
-        Aylık (30 gün) ya da yıllık (365 gün, 2 ay bedava) ödeyin. Taahhüt ve otomatik yenileme yok; her ödeme kalan sürenize eklenir.
+        Aylık (30 gün) ya da yıllık (365 gün, 2 ay bedava) ödeyin. Taahhüt ve otomatik yenileme yok; her ödeme kalan sürenize eklenir. Paket değiştirirseniz kalan süreniz yeni paketin fiyatına göre çevrilir.
       </p>
 
       {waiting && (

@@ -43,7 +43,8 @@ export async function getPaytrToken(input: TokenInput): Promise<{ token: string 
     payment_amount: paymentAmount,
     paytr_token: hmac(hashStr + MERCHANT_SALT),
     user_basket: basket,
-    debug_on: "1",
+    // Hata ayrıntısı yalnızca test modunda ödeme ekranında gösterilir.
+    debug_on: TEST_MODE,
     no_installment: noInstallment,
     max_installment: maxInstallment,
     user_name: input.userName.slice(0, 60),
@@ -65,6 +66,8 @@ export async function getPaytrToken(input: TokenInput): Promise<{ token: string 
 
 /** PayTR bildirimindeki imzayı doğrular. */
 export function verifyPaytrCallback(p: { merchant_oid: string; status: string; total_amount: string; hash: string }) {
+  // Anahtar tanımlı değilse imza boş anahtarla herkesçe üretilebilir: sahte "ödendi" bildirimi kabul edilmez.
+  if (!paytrConfigured()) return false;
   const expected = Buffer.from(hmac(p.merchant_oid + MERCHANT_SALT + p.status + p.total_amount));
   const given = Buffer.from(p.hash ?? "");
   return expected.length === given.length && timingSafeEqual(expected, given);

@@ -1,10 +1,11 @@
-import { verifyPaytrCallback } from "@/lib/paytr";
+import { paytrConfigured, verifyPaytrCallback } from "@/lib/paytr";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // PayTR "Bildirim URL": ödeme sonucu buraya gelir. PayTR panelinde
 // https://ALAN-ADINIZ/api/paytr/callback olarak tanımlanmalı.
 // Yanıt yalnızca düz metin "OK" olmalı; yoksa PayTR tekrar dener.
 export async function POST(request: Request) {
+  if (!paytrConfigured()) return new Response("PAYTR not configured", { status: 503 });
   const form = await request.formData();
   const p = {
     merchant_oid: String(form.get("merchant_oid") ?? ""),

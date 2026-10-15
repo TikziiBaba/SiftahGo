@@ -25,7 +25,7 @@ export async function POST(request: Request) {
   const result = await getPaytrToken({
     merchantOid: pay.merchant_oid,
     amount: Number(pay.amount),
-    productName: `SiftahGo ${pay.plan_name} paketi (${months === 12 ? "12 ay" : "30 gün"})`,
+    productName: `SiftahGo ${pay.plan_name} paketi (${Number(months) === 12 ? "12 ay" : "30 gün"})`,
     email: auth.user.email ?? "",
     userIp: ip,
     userName: profile?.full_name || business.name,

@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { emailConfigured, sendEmail } from "@/lib/email";
 import { buildEmail, buildWaitlistEmail, type QueuedNotification } from "@/lib/notification-email";
 import { sendQueuedPushes, sendWaitlistPushes, type WaitlistNotice } from "@/lib/push";
@@ -7,7 +8,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 // (Supabase pg_cron) dakikada bir "Authorization: Bearer CRON_SECRET" başlığıyla çağırır.
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
-  if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
+  // Sabit sürede karşılaştırılır: yanıt süresinden anahtar tahmin edilemesin.
+  const given = Buffer.from(request.headers.get("authorization") ?? "");
+  const expected = Buffer.from(`Bearer ${secret}`);
+  if (!secret || given.length !== expected.length || !timingSafeEqual(given, expected)) {
     return new Response("Unauthorized", { status: 401 });
   }
 
