@@ -20,3 +20,18 @@
   3. robots.txt (+1.0, beş sayfada SEO 100)
 - Bileşenler: web Lighthouse 100, mobil Lighthouse 100, kontrast 100, mobil kod 87.8, web kod 77.5.
 - Kalan ölçülebilir iş: mobilde tema dışı 11 yazı boyutu, web'de 18 keyfi yazı boyutu (`text-[10px]` vb.).
+
+## Oturum 2026-10-15 (kullanıcı: "tasarımda iyileştirmeler yap"; sıradaki işler + web Keşfet + ana sayfalar + mobil müşteri)
+
+Tur tur geri alma yerine tek oturumda yapıldı; tip denetimi + lint her adımda, puan sonda ölçüldü.
+
+| Tur | Tür | Fikir | Puan | Sonuç |
+|---|---|---|---|---|
+| 8 | puan | Kalan yazı boyutları temaya: web `text-2xs/3xs/watermark`, mobil `type.tab/badge/input`; tarih ve işletme adı mevcut adımlara (title, heading) | - | tutuldu |
+| 9 | görsel | Mobil: yaylı basma (`PressableScale`: düğme, ikon, kart, çip, gün şeridi, kısayol, favori, bildirim) | - | tutuldu |
+| 10 | görsel | Mobil: Segmented'da kayan seçili zemin; alt sekmede seçili ikonun arkasında hap | - | tutuldu |
+| 11 | görsel | Mobil: alt sayfa tutamaç/başlıktan sürüklenir, 120 px ya da hızlı savuruşta kapanır; Keşfet kartları sırayla belirir | - | tutuldu |
+| 12 | görsel | Web Keşfet: bezel arama, ikonlu kategori çipleri, tek dokunuşla "Bugün müsait", sonuç özeti, filtre temizleme; kart: kapak yoksa kategori ikonu, "Yeni" rozeti. Ana sayfa hero haplarına ikon | - | tutuldu |
+| 13 | puan | Mobil logo görseli `accessibilityLabel=""` (web'de alt=""; expo-image alt'ı asıl görsele geçirmiyor) | 100.0 | tutuldu |
+
+Bileşenler: web LH 100, mobil LH 100, kontrast 100, mobil kod 100, web kod 100.
