@@ -1,10 +1,7 @@
 import { Suspense } from "react";
-import Link from "next/link";
-import { ArrowLeft, Check } from "lucide-react";
+import { AuthHomeLink, AuthPitch, HomeLink } from "@/components/auth-pitch";
 import { Logo } from "@/components/site-header";
 import { Shop } from "@/components/three/shop";
-
-const PERKS = ["7 gün ücretsiz", "1 dakikada kurulum", "Taahhüt yok"];
 
 export function AuthShell({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
@@ -20,19 +17,10 @@ export function AuthShell({ title, subtitle, children }: { title: string; subtit
           <div className="absolute left-12 top-10">
             <Logo />
           </div>
-          <div className="absolute inset-x-0 bottom-0 p-12">
-            <p className="max-w-sm text-3xl font-semibold leading-tight tracking-[-0.03em]">
-              Randevular düzende, <span className="text-gradient">siftah sabahtan.</span>
-            </p>
-            <p className="mt-3 max-w-sm text-ink-3">Müşteriniz bağlantıdan saatini seçer, siz işinize bakarsınız.</p>
-            <ul className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm text-ink-3">
-              {PERKS.map((t) => (
-                <li key={t} className="flex items-center gap-2">
-                  <Check className="size-4 text-brand-300" /> {t}
-                </li>
-              ))}
-            </ul>
-          </div>
+          {/* Metin adresteki ?rol / ?davet / ?next'e göre seçilir; adres istek anında belli olur. */}
+          <Suspense>
+            <AuthPitch />
+          </Suspense>
         </div>
       </aside>
 
@@ -41,9 +29,9 @@ export function AuthShell({ title, subtitle, children }: { title: string; subtit
           <span className="lg:hidden">
             <Logo />
           </span>
-          <Link href="/" className="btn btn-ghost -mr-3 px-3 py-2">
-            <ArrowLeft className="size-4" /> Ana sayfa
-          </Link>
+          <Suspense fallback={<HomeLink href="/" />}>
+            <AuthHomeLink />
+          </Suspense>
         </div>
 
         {/* Dar ekranda küçük dükkân */}

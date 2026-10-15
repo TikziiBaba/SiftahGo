@@ -595,7 +595,7 @@ function Audiences() {
       title: "Sıra beklemek yok, aramak yok",
       items: [
         "Boş saatleri anında görün",
-        "Misafir olarak veya hesapla randevu alın",
+        "Ücretsiz hesapla saniyeler içinde randevu alın",
         "Takviminize ekleyin",
         "Hizmet sonrası puan verin",
       ],
