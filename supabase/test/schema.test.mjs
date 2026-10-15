@@ -275,9 +275,22 @@ await as(C, `select mark_inbox_read()`);
 ok((await inbox(C)).every((r) => r.read_at), 'hepsi okundu yapıldı');
 ok((await inbox(A)).every((r) => r.read_at), 'işletme kendi bildirimlerini okundu yaptı');
 
-// işletmenin girişli müşteriye eklediği randevu; hatırlatması da uygulama içi bildirim olarak gider
-const remindC = (await as(A, `insert into appointments (business_id, customer_id, service_name, customer_name, customer_phone, starts_at, ends_at, status, created_at)
+// işletme elle eklediği randevuyu müşteri hesabına veya e-postaya bağlayamaz (başkasına bildirim/e-posta gidemez)
+const forged = (await as(A, `insert into appointments (business_id, customer_id, customer_email, service_name, customer_name, customer_phone, starts_at, ends_at, status)
+  values ($1, $2, 'kurban@ornek.com', 'Saç Kesimi', 'Cem Yılmaz', '05559990000', now() + interval '30 hours', now() + interval '30 hours 30 minutes', 'confirmed')
+  returning id, customer_id, customer_email`, [biz, C])).rows[0];
+ok(forged.customer_id === null && forged.customer_email === null, 'elle eklenen randevu müşteri hesabına ve e-postaya bağlanamadı');
+ok(!(await inbox(C)).some((r) => r.kind === 'booked'), 'elle eklenen randevu müşteriye bildirim göndermedi');
+await as(A, `update appointments set customer_id = $2, customer_email = 'kurban@ornek.com' where id = $1`, [forged.id, C]);
+const forgedAfter = (await db.query(`select customer_id, customer_email from appointments where id = $1`, [forged.id])).rows[0];
+ok(forgedAfter.customer_id === null && forgedAfter.customer_email === null, 'randevunun hesabı ve e-postası sonradan değiştirilemez');
+await db.query(`delete from appointments where id = $1`, [forged.id]);
+
+// müşteri hesabına bağlı randevu (işletme adına çalışan fonksiyonun yazdığı gibi); hatırlatması da uygulama içi bildirim olarak gider
+await db.exec(`select set_config('request.jwt.claim.sub', '${A}', false)`);
+const remindC = (await db.query(`insert into appointments (business_id, customer_id, service_name, customer_name, customer_phone, starts_at, ends_at, status, created_at)
   values ($1, $2, 'Saç Kesimi', 'Cem Yılmaz', '05559990000', now() + interval '20 hours', now() + interval '20 hours 30 minutes', 'confirmed', now() - interval '2 days') returning id`, [biz, C])).rows[0].id;
+await db.exec(`select set_config('request.jwt.claim.sub', '', false)`);
 ok((await inbox(C)).some((r) => r.kind === 'booked' && r.title === 'Randevunuz onaylandı'), 'işletmenin eklediği randevu müşteriye bildirildi');
 ok((await asService(`select queue_due_reminders() c`)).rows[0].c === 1, 'e-postasız girişli müşteriye hatırlatma kuyruğa girdi');
 ok((await inbox(C)).some((r) => r.kind === 'reminder' && r.title === 'Randevunuz yaklaşıyor'), 'hatırlatma bildirimi müşteride');
@@ -391,7 +404,7 @@ ok((await row(flGuest.id)).cancelled_by === 'business', 'işletmenin iptali "bus
 await as(A, `update appointments set customer_flagged = false, prior_cancels = 0, cancelled_by = 'customer' where id = $1`, [fl.id]);
 const kept = await row(fl.id);
 ok(kept.customer_flagged && kept.prior_cancels === 3 && kept.cancelled_by === null, 'işaret ve geçmiş sayıları elle değiştirilemez');
-await expectError(() => as(A, `select * from customer_history($1, '05551112233')`, [C]), /permission denied/, 'başkasının geçmişi sorgulanamaz');
+await expectError(() => as(A, `select * from customer_history($1, '05551112233', $2)`, [C, biz]), /permission denied/, 'başkasının geçmişi sorgulanamaz');
 const flMail = (await db.query(`select * from claim_notifications(100)`)).rows.find((n) => n.recipient === 'business' && n.kind === 'booked' && n.customer_name === 'Cem Yılmaz' && n.customer_flagged);
 ok(flMail && flMail.prior_cancels === 3, 'işletme e-postası uyarı bilgisiyle kuyruktan alındı');
 
@@ -638,11 +651,14 @@ ok((await slots(svc30, monday)).length === 18, 'personel izinli olunca kapasite 
 await as(A, `insert into time_off (business_id, starts_at, ends_at) values ($1, $2, $3)`, [biz, `${monday}T00:00:00Z`, `${monday}T21:00:00Z`]);
 ok((await slots(svc30, monday)).length === 0, 'işletme kapalı gün');
 
-// paket düşürme: Başlangıç (1 personel) -> fazla personel pasif olur
+// paket düşürme: Başlangıç (1 personel) -> fazla personel pasif olur. Kalan Esnaf süresi fiyata göre çevrilir.
+const leftBefore = ((await db.query(`select subscription_ends_at from businesses where id = $1`, [biz])).rows[0].subscription_ends_at - Date.now()) / 864e5;
 const pay2 = (await as(A, `select * from create_payment('baslangic')`)).rows[0];
 await db.query(`select activate_subscription($1, 349)`, [pay2.merchant_oid]);
 const sub2 = (await db.query(`select plan_id, subscription_ends_at from businesses where id = $1`, [biz])).rows[0];
-ok(sub2.plan_id === 'baslangic' && (sub2.subscription_ends_at - Date.now()) / 864e5 > 59.9, 'yeni ödeme kalan süreye eklendi (60 gün)');
+const leftAfter = (sub2.subscription_ends_at - Date.now()) / 864e5;
+ok(sub2.plan_id === 'baslangic' && Math.abs(leftAfter - (leftBefore * 649 / 349 + 30)) < 0.01,
+  `paket değişince kalan süre yeni fiyata çevrildi, 30 gün eklendi: ${leftBefore.toFixed(2)} Esnaf günü -> ${leftAfter.toFixed(2)} gün`);
 ok((await db.query(`select count(*)::int c from staff where business_id = $1 and is_active`, [biz])).rows[0].c === 1, 'küçük pakete geçince fazla personel pasif oldu');
 await expectError(() => as(A, `select * from get_customers($1)`, [biz]), /paketinizde yok/, 'Başlangıç paketinde müşteri defteri yok');
 ok((await as(A, `select * from customer_notes`)).rows.length === 0, 'Başlangıç paketinde müşteri notları görünmez');
@@ -773,6 +789,50 @@ await as(null, `select log_error('web', 'TypeError: x is undefined', $1)`, [stac
 ok((await as(ADM, `select resolved_at from error_logs where source = 'web'`)).rows[0].resolved_at === null, 'çözülen hata tekrar edince yeniden açıldı');
 await as(null, `select log_error('server', $1)`, ['x'.repeat(5000)]);
 ok((await as(ADM, `select length(message) n from error_logs where source = 'server'`)).rows[0].n === 1000, 'uzun mesaj kısaltıldı');
+
+// güvenlik: başka işletmenin personeli/hizmeti, işletmeler arası müşteri lekeleme, saat dilimi, uzunluk ve adres
+// sınırları, ödeme denemesi sınırı. Rakip işletme sonunda silinir.
+const X = '00000000-0000-0000-0000-0000000000e1';
+await db.exec(`insert into auth.users values ('${X}', 'x@x.com', '{"full_name":"Rakip"}')`);
+const bizX = (await as(X, `insert into businesses (owner_id, slug, name) values ($1, 'rakip-berber', 'Rakip Berber') returning id`, [X])).rows[0].id;
+const staffX = (await db.query(`select id from staff where business_id = $1`, [bizX])).rows[0].id;
+const xAppt = (sid, svc) => as(X, `insert into appointments (business_id, staff_id, service_id, service_name, customer_name, customer_phone, starts_at, ends_at, status)
+  values ($1, $2, $3, 'x', 'x', '05550000000', now() + interval '2 days', now() + interval '2 days 30 minutes', 'confirmed')`, [bizX, sid, svc]);
+await expectError(() => xAppt(staff[0].id, null), /Personel bulunamadı/, 'başka işletmenin personeline randevu yazılamaz (saatleri doldurulamaz)');
+await expectError(() => xAppt(staffX, svc30), /Hizmet bulunamadı/, 'başka işletmenin hizmetiyle randevu yazılamaz');
+const ownAppt = (await as(A, `insert into appointments (business_id, service_name, customer_name, customer_phone, starts_at, ends_at, status)
+  values ($1, 'x', 'x', '05550000000', now() + interval '3 days', now() + interval '3 days 30 minutes', 'confirmed') returning id`, [biz])).rows[0].id;
+await expectError(() => as(A, `update appointments set staff_id = $2 where id = $1`, [ownAppt, staffX]), /Personel bulunamadı/, 'randevu sonradan başka işletmenin personeline taşınamaz');
+await db.query(`delete from appointments where id = $1`, [ownAppt]);
+
+const victimPhone = '0533 444 55 66';
+for (const h of [48, 72]) {
+  const id = (await as(X, `insert into appointments (business_id, staff_id, service_name, customer_name, customer_phone, starts_at, ends_at, status)
+    values ($1, $2, 'x', 'Kurban', $3, now() + make_interval(hours => $4), now() + make_interval(hours => $4 + 1), 'confirmed') returning id`, [bizX, staffX, victimPhone, h])).rows[0].id;
+  await as(X, `update appointments set status = 'no_show' where id = $1`, [id]);
+}
+const noShows = async (b) => (await db.query(`select no_shows from customer_history(null, $1, $2)`, [victimPhone, b])).rows[0].no_shows;
+ok(await noShows(bizX) === 2 && await noShows(biz) === 0, 'elle eklenen gelmeme yalnızca o işletmede sayılır (müşteri başka işletmelerde lekelenemez)');
+
+await expectError(() => as(A, `update businesses set timezone = 'Mars/Olympus' where id = $1`, [biz]), /time zone/, 'geçersiz saat dilimi reddedildi');
+for (const [sql, label] of [
+  [`name = repeat('a', 101)`, '100 karakterden uzun işletme adı'],
+  [`description = repeat('a', 2001)`, '2000 karakterden uzun açıklama'],
+  [`logo_url = 'javascript:alert(1)'`, 'https olmayan logo adresi'],
+  [`cover_url = 'http://ornek.com/kapak.jpg'`, 'http kapak adresi'],
+  [`gallery = array_fill('https://cdn.ornek.com/a.jpg'::text, array[13])`, '12 görselden büyük galeri'],
+  [`gallery = array['https://cdn.ornek.com/a.jpg', 'data:image/svg+xml,<svg onload=alert(1)>']`, 'https olmayan galeri görseli'],
+]) await expectError(() => as(A, `update businesses set ${sql} where id = $1`, [biz]), /check constraint/, `${label} reddedildi`);
+await as(A, `update businesses set logo_url = 'https://cdn.ornek.com/logo.jpg', gallery = array['https://cdn.ornek.com/1.jpg', 'https://cdn.ornek.com/2.jpg'] where id = $1`, [biz]);
+ok((await db.query(`select cardinality(gallery) n from businesses where id = $1`, [biz])).rows[0].n === 2, 'https görseller kabul edildi');
+await expectError(() => as(C, `update profiles set full_name = repeat('a', 101) where id = $1`, [C]), /check constraint/, 'çok uzun profil adı reddedildi');
+await expectError(() => book(C, svc30, `${monday}T08:00:00Z`, 'a'.repeat(101)), /en fazla 100/, 'çok uzun müşteri adıyla randevu reddedildi');
+await expectError(() => book(C, svc30, `${monday}T08:00:00Z`, 'Cem', '0'.repeat(31)), /telefon/, 'çok uzun telefonla randevu reddedildi');
+
+for (let i = 0; i < 10; i++) await as(X, `select * from create_payment('baslangic')`);
+await expectError(() => as(X, `select * from create_payment('baslangic')`), /Çok fazla ödeme/, 'saatte 10\'dan fazla ödeme denemesi reddedildi');
+await db.query(`delete from businesses where id = $1`, [bizX]);
+await db.query(`delete from auth.users where id = $1`, [X]);
 
 console.log(failures ? `\n${failures} TEST BAŞARISIZ` : '\nTÜM TESTLER GEÇTİ');
 process.exit(failures ? 1 : 0);

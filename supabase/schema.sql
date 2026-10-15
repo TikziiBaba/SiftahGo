@@ -63,7 +63,7 @@ begin
         'reply_review', 'start_phone_verification', 'confirm_phone_verification', 'block_customer',
         'auto_block_no_show', 'get_report_summary', 'join_waitlist', 'waitlist_on_free_slot', 'claim_waitlist',
         'use_package_session', 'available_today', 'nearby_businesses', 'apply_referral', 'my_referrals',
-        'log_error'
+        'log_error', 'protect_appointment_columns'
       )
   loop
     execute 'drop function if exists ' || r.sig || ' cascade';
@@ -83,8 +83,8 @@ create extension if not exists btree_gist with schema extensions;
 -- ---------------------------------------------------------------------
 create table public.profiles (
   id          uuid primary key references auth.users (id) on delete cascade,
-  full_name   text not null default '',
-  phone       text,
+  full_name   text not null default '' check (length(full_name) <= 100),
+  phone       text check (length(phone) <= 30),
   -- Sadece arayüz yönlendirmesi için; yetki vermez.
   role        text not null default 'customer' check (role in ('customer', 'business')),
   created_at  timestamptz not null default now()
@@ -125,16 +125,19 @@ create table public.businesses (
                        'panel', 'kesfet', 'giris', 'kayit', 'hesabim', 'api', 'auth', 'admin',
                        'sifremi-unuttum', 'sifre-yenile', 'yasal', 'iletisim'
                      )),
-  name               text not null check (length(trim(name)) > 0),
-  category           text not null default 'diger',
-  description        text not null default '',
-  phone              text not null default '',
-  city               text not null default '',
-  district           text not null default '',
-  address            text not null default '',
-  logo_url           text,
-  cover_url          text,
-  gallery            text[] not null default '{}',
+  name               text not null check (length(trim(name)) > 0 and length(name) <= 100),
+  category           text not null default 'diger' check (length(category) <= 40),
+  description        text not null default '' check (length(description) <= 2000),
+  phone              text not null default '' check (length(phone) <= 30),
+  city               text not null default '' check (length(city) <= 60),
+  district           text not null default '' check (length(district) <= 60),
+  address            text not null default '' check (length(address) <= 300),
+  -- Görseller yalnızca https adresi olabilir (javascript:/data: gibi adresler sayfaya girmesin).
+  logo_url           text check (logo_url ~ '^https://\S+$' and length(logo_url) <= 500),
+  cover_url          text check (cover_url ~ '^https://\S+$' and length(cover_url) <= 500),
+  gallery            text[] not null default '{}'
+                     check (cardinality(gallery) <= 12
+                            and (cardinality(gallery) = 0 or array_to_string(gallery, E'\n') ~ '^https://\S+(\nhttps://\S+)*$')),
   -- Sayfa özelleştirme. Paketinde ilgili özellik varsa sayfada görünür; paket düşerse silinmez, gizlenir.
   accent             text not null default 'turkuaz'
                      check (accent in ('turkuaz', 'zumrut', 'gok', 'lavanta', 'pembe', 'kehribar', 'mercan')),
@@ -178,8 +181,8 @@ create index businesses_city_category_idx on public.businesses (city, category);
 create table public.services (
   id               uuid primary key default gen_random_uuid(),
   business_id      uuid not null references public.businesses (id) on delete cascade,
-  name             text not null check (length(trim(name)) > 0),
-  description      text not null default '',
+  name             text not null check (length(trim(name)) > 0 and length(name) <= 120),
+  description      text not null default '' check (length(description) <= 1000),
   duration_minutes int not null check (duration_minutes between 5 and 600),
   price            numeric(10, 2) not null default 0 check (price >= 0),
   is_active        boolean not null default true,
@@ -191,9 +194,9 @@ create index services_business_idx on public.services (business_id);
 create table public.staff (
   id          uuid primary key default gen_random_uuid(),
   business_id uuid not null references public.businesses (id) on delete cascade,
-  name        text not null check (length(trim(name)) > 0),
-  title       text not null default '',
-  avatar_url  text,
+  name        text not null check (length(trim(name)) > 0 and length(name) <= 80),
+  title       text not null default '' check (length(title) <= 80),
+  avatar_url  text check (avatar_url ~ '^https://\S+$' and length(avatar_url) <= 500),
   is_active   boolean not null default true,
   sort_order  int not null default 0,
   created_at  timestamptz not null default now()
@@ -225,7 +228,7 @@ create table public.time_off (
   staff_id    uuid references public.staff (id) on delete cascade,
   starts_at   timestamptz not null,
   ends_at     timestamptz not null,
-  reason      text not null default '',
+  reason      text not null default '' check (length(reason) <= 200),
   created_at  timestamptz not null default now(),
   check (ends_at > starts_at)
 );
@@ -237,9 +240,9 @@ create table public.session_packages (
   id            uuid primary key default gen_random_uuid(),
   business_id   uuid not null references public.businesses (id) on delete cascade,
   phone_key     text not null check (phone_key ~ '^[0-9]{10}$'),
-  customer_name text not null default '',
+  customer_name text not null default '' check (length(customer_name) <= 100),
   service_id    uuid references public.services (id) on delete set null,
-  name          text not null check (length(trim(name)) > 0),
+  name          text not null check (length(trim(name)) > 0 and length(name) <= 120),
   total         int not null check (total between 1 and 500),
   used          int not null default 0 check (used >= 0),
   created_at    timestamptz not null default now(),
@@ -253,12 +256,12 @@ create table public.appointments (
   service_id     uuid references public.services (id) on delete set null,
   staff_id       uuid references public.staff (id) on delete set null,
   customer_id    uuid references public.profiles (id) on delete set null,
-  service_name   text not null,
-  customer_name  text not null,
-  customer_phone text not null,
+  service_name   text not null check (length(service_name) <= 200),
+  customer_name  text not null check (length(customer_name) <= 100),
+  customer_phone text not null check (length(customer_phone) <= 30),
   -- Bildirim e-postaları için. Misafir isteğe bağlı yazar; girişli müşteride hesap e-postası.
-  customer_email text check (customer_email ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$'),
-  note           text not null default '',
+  customer_email text check (customer_email ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' and length(customer_email) <= 254),
+  note           text not null default '' check (length(note) <= 1000),
   price          numeric(10, 2) not null default 0,
   starts_at      timestamptz not null,
   ends_at        timestamptz not null,
@@ -498,11 +501,12 @@ returns trigger
 language plpgsql security definer set search_path = ''
 as $$
 begin
+  -- Kayıt formundan gelen bilgi kısaltılır; uzun değer kaydı (auth.users) bozmasın.
   insert into public.profiles (id, full_name, phone, role)
   values (
     new.id,
-    coalesce(new.raw_user_meta_data ->> 'full_name', ''),
-    nullif(new.raw_user_meta_data ->> 'phone', ''),
+    left(coalesce(new.raw_user_meta_data ->> 'full_name', ''), 100),
+    left(nullif(new.raw_user_meta_data ->> 'phone', ''), 30),
     case when new.raw_user_meta_data ->> 'role' = 'business' then 'business' else 'customer' end
   )
   on conflict (id) do nothing;
@@ -518,8 +522,8 @@ create trigger on_auth_user_created
 insert into public.profiles (id, full_name, phone, role)
 select
   u.id,
-  coalesce(u.raw_user_meta_data ->> 'full_name', ''),
-  nullif(u.raw_user_meta_data ->> 'phone', ''),
+  left(coalesce(u.raw_user_meta_data ->> 'full_name', ''), 100),
+  left(nullif(u.raw_user_meta_data ->> 'phone', ''), 30),
   case when u.raw_user_meta_data ->> 'role' = 'business' then 'business' else 'customer' end
 from auth.users u
 on conflict (id) do nothing;
@@ -632,8 +636,10 @@ end;
 $$;
 
 -- Müşterinin son 6 aydaki iptal (kendi iptal ettiği) ve gelmediği randevu sayısı; tüm işletmelerde.
--- Hesapla veya telefon numarasının son 10 hanesiyle eşleşir.
-create function public.customer_history(p_customer uuid, p_phone text, out cancels int, out no_shows int)
+-- Hesapla veya telefon numarasının son 10 hanesiyle eşleşir. İşletmenin elle eklediği randevular (hesapsız) yalnızca
+-- o işletmede sayılır: elle randevuya her telefon yazılabilir; yoksa bir işletme başka birini tüm işletmelerde
+-- "sık gelmeyen müşteri" gösterebilirdi.
+create function public.customer_history(p_customer uuid, p_phone text, p_business uuid, out cancels int, out no_shows int)
 language sql stable security definer set search_path = ''
 as $$
   select
@@ -641,6 +647,7 @@ as $$
     (count(*) filter (where a.status = 'no_show'))::int
   from public.appointments a
   where a.starts_at > now() - interval '180 days'
+    and (a.customer_id is not null or a.business_id = p_business)
     and (
       (p_customer is not null and a.customer_id = p_customer)
       or (length(regexp_replace(coalesce(p_phone, ''), '\D', '', 'g')) >= 10
@@ -659,7 +666,7 @@ declare
 begin
   if tg_op = 'INSERT' then
     select h.cancels, h.no_shows into new.prior_cancels, new.prior_no_shows
-    from public.customer_history(new.customer_id, new.customer_phone) h;
+    from public.customer_history(new.customer_id, new.customer_phone, new.business_id) h;
     -- Son 6 ayda 3 iptal veya 2 gelmeme: işletme uyarılır, müşterinin aldığı randevu onaya düşer.
     new.customer_flagged := new.prior_cancels >= 3 or new.prior_no_shows >= 2;
     if new.customer_flagged and not v_owner and new.status = 'confirmed' then
@@ -684,6 +691,46 @@ $$;
 create trigger appointments_before_write
   before insert or update on public.appointments
   for each row execute function public.appointments_before_write();
+
+-- İşletme sahibi randevuyu doğrudan (RLS ile) yazarken: elle eklenen randevu bir müşteri hesabına veya e-postaya
+-- bağlanamaz (başkasına bildirim, e-posta gönderilemez); hesap, e-posta, işletme ve paket sonradan değiştirilemez;
+-- personel ve hizmet aynı işletmenin olmalı (başka işletmenin saatleri doldurulamaz).
+-- Fonksiyonlardan (book_appointment vb.) gelen yazmalar etkilenmez: onlar fonksiyon sahibi olarak çalışır.
+create function public.protect_appointment_columns()
+returns trigger
+language plpgsql set search_path = ''
+as $$
+begin
+  if current_user in ('anon', 'authenticated') then
+    if tg_op = 'INSERT' then
+      new.customer_id := null;
+      new.customer_email := null;
+      new.package_id := null;
+    else
+      new.business_id := old.business_id;
+      new.customer_id := old.customer_id;
+      new.customer_email := old.customer_email;
+      new.package_id := old.package_id;
+      new.created_at := old.created_at;
+    end if;
+    if new.staff_id is not null and (tg_op = 'INSERT' or new.staff_id is distinct from old.staff_id)
+       and not exists (select 1 from public.staff s where s.id = new.staff_id and s.business_id = new.business_id) then
+      raise exception 'Personel bulunamadı.';
+    end if;
+    if new.service_id is not null and (tg_op = 'INSERT' or new.service_id is distinct from old.service_id)
+       and not exists (select 1 from public.services s where s.id = new.service_id and s.business_id = new.business_id) then
+      raise exception 'Hizmet bulunamadı.';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+-- Tetikleyiciler ada göre sırayla çalışır: bu, appointments_before_write'tan önce çalışmalı (geçmiş sayıları
+-- istemcinin yazdığı hesapla değil, gerçek hesapla hesaplansın).
+create trigger appointments_access_guard
+  before insert or update on public.appointments
+  for each row execute function public.protect_appointment_columns();
 
 -- Tamamlanan randevu, müşterinin o hizmetteki en eski açık paketinden bir seans düşer; tamamlanma geri alınırsa
 -- seans pakete iade edilir.
@@ -753,10 +800,13 @@ begin
   if length(trim(coalesce(p_customer_name, ''))) < 2 then
     raise exception 'Lütfen adınızı girin.';
   end if;
-  if length(regexp_replace(v_phone, '\D', '', 'g')) < 10 then
+  if length(trim(p_customer_name)) > 100 then
+    raise exception 'Adınız en fazla 100 karakter olabilir.';
+  end if;
+  if length(regexp_replace(v_phone, '\D', '', 'g')) < 10 or length(v_phone) > 30 then
     raise exception 'Lütfen geçerli bir telefon numarası girin.';
   end if;
-  if v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then
+  if v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' or length(v_email) > 254 then
     raise exception 'Lütfen geçerli bir e-posta adresi girin.';
   end if;
   if v_email is null then
@@ -1007,12 +1057,16 @@ $$;
 
 -- İşletme sahibi puan, abonelik ve askı alanlarını elle değiştiremez;
 -- bunları sadece refresh_business_rating, apply_subscription ve admin_* fonksiyonları yazar.
+-- Saat dilimi geçerli olmalı: geçersiz değer tüm işletmelerin ortak işlerini (hatırlatma, bekleme listesi) bozar.
 create function public.protect_business_columns()
 returns trigger
 language plpgsql
 as $$
 begin
   if current_user in ('anon', 'authenticated') then
+    if tg_op = 'INSERT' or new.timezone is distinct from old.timezone then
+      perform now() at time zone new.timezone;
+    end if;
     if tg_op = 'INSERT' then
       new.rating_avg := 0;
       new.rating_count := 0;
@@ -1089,6 +1143,11 @@ begin
   select * into v_plan from public.plans where id = p_plan_id;
   if not found then raise exception 'Paket bulunamadı.'; end if;
   if p_months is null or p_months not in (1, 12) then raise exception 'Geçersiz ödeme dönemi.'; end if;
+  -- Her deneme PayTR'de ödeme açar; arka arkaya istekle kayıt şişirilmesin.
+  if (select count(*) from public.payments p
+      where p.business_id = v_business and p.created_at > now() - interval '1 hour') >= 10 then
+    raise exception 'Çok fazla ödeme denemesi. Lütfen biraz sonra tekrar deneyin.';
+  end if;
 
   v_amount := v_plan.price * case when p_months = 12 then 10 else 1 end;
   v_oid := 'SG' || to_char(clock_timestamp(), 'YYMMDDHH24MISS') || substr(md5(gen_random_uuid()::text), 1, 10);
@@ -1128,6 +1187,8 @@ $$;
 
 -- PayTR "başarılı" bildirimi: sadece sunucu (service_role) çağırır.
 -- Aynı bildirim tekrar gelirse bir şey yapmaz. Yıllık ödeme 365, aylık 30 gün ekler.
+-- Ücretli dönemde paket değişirse kalan süre yeni paketin fiyatına çevrilir (Esnaf'ın kalan 30 günü Pro'da ~19 gün):
+-- ucuz paketin yıllığını alıp bir aylık Pro ödemesiyle tüm yıl Pro kullanılamasın. Denemenin kalan günleri aynen eklenir.
 -- Davetle gelen işletmenin ilk ödemesinde kendisine ve davet edene 1 ay (30 gün) hediye eklenir.
 create function public.activate_subscription(p_merchant_oid text, p_total_amount numeric)
 returns void
@@ -1146,9 +1207,17 @@ begin
   end if;
 
   update public.payments set status = 'paid', paid_at = now() where id = pay.id;
+  select * into b from public.businesses where id = pay.business_id for update;
+  if b.plan_id is distinct from pay.plan_id and b.subscription_ends_at > now()
+     and b.subscription_ends_at is distinct from b.trial_ends_at then
+    update public.businesses
+    set subscription_ends_at = now() + (subscription_ends_at - now())
+          * ((select p.price from public.plans p where p.id = b.plan_id)
+             / (select p.price from public.plans p where p.id = pay.plan_id))::float8
+    where id = b.id;
+  end if;
   perform public.apply_subscription(pay.business_id, pay.plan_id, case when pay.months = 12 then 365 else 30 end);
 
-  select * into b from public.businesses where id = pay.business_id for update;
   if b.referred_by is not null and b.referral_rewarded_at is null then
     update public.businesses set referral_rewarded_at = now() where id = b.id;
     select * into ref from public.businesses where id = b.referred_by;
@@ -1631,7 +1700,7 @@ $$;
 revoke execute on function public.queue_due_reminders() from public, anon, authenticated;
 revoke execute on function public.queue_review_requests() from public, anon, authenticated;
 -- Başka birinin geçmişini sorgulamak mümkün olmasın; sadece tetikleyici kullanır.
-revoke execute on function public.customer_history(uuid, text) from public, anon, authenticated;
+revoke execute on function public.customer_history(uuid, text, uuid) from public, anon, authenticated;
 revoke execute on function public.claim_notifications(int) from public, anon, authenticated;
 revoke execute on function public.inbox_insert(uuid, text, text, public.appointments) from public, anon, authenticated;
 revoke execute on function public.claim_push(int) from public, anon, authenticated;
