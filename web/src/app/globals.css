@@ -39,6 +39,11 @@
   /* "Siftah" sıcak vurgu */
   --color-gold: #f5b544;
 
+  /* Tailwind'in xs'inden (12px) küçük yazı adımları ve alt bilgideki dev logo yazısı */
+  --text-2xs: 0.6875rem; /* 11px: grafik ekseni, küçük etiket */
+  --text-3xs: 0.625rem; /* 10px: üst başlık, rozet, alt gezinti */
+  --text-watermark: 11rem;
+
   --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
@@ -111,7 +116,7 @@ svg.lucide {
     @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
   }
   .eyebrow {
-    @apply inline-flex items-center gap-2 rounded-full bg-white/[0.04] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.2em] text-ink-2 ring-1 ring-line;
+    @apply inline-flex items-center gap-2 rounded-full bg-white/[0.04] px-3 py-1 text-3xs font-medium uppercase tracking-[0.2em] text-ink-2 ring-1 ring-line;
   }
   .text-gradient {
     @apply bg-gradient-to-br from-brand-200 via-brand-400 to-gold bg-clip-text text-transparent;

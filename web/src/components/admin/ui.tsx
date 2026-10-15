@@ -145,7 +145,7 @@ export function DailyBars({
           ))}
         </div>
       </div>
-      <div className="mt-1.5 flex justify-between text-[11px] text-ink-3">
+      <div className="mt-1.5 flex justify-between text-2xs text-ink-3">
         <span>{short(days[0].day)}</span>
         <span>{short(days[days.length - 1].day)}</span>
       </div>

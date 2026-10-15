@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
+import Form from "next/form";
+import Link from "next/link";
 import { Suspense } from "react";
-import { Search, Store } from "lucide-react";
+import { CalendarCheck, Check, Search, Store, X } from "lucide-react";
 import { BusinessCard } from "@/components/business-card";
 import { NearbyResults } from "@/components/nearby-results";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
 import { createClient } from "@/lib/supabase/server";
-import { CATEGORIES, CITIES } from "@/lib/constants";
+import { CategoryIcon } from "@/lib/category-icons";
+import { CATEGORIES, categoryLabel, CITIES } from "@/lib/constants";
 import type { Business } from "@/lib/types";
 
 export const metadata: Metadata = {
@@ -17,9 +20,15 @@ export default function DiscoverPage({ searchParams }: PageProps<"/kesfet">) {
   return (
     <>
       <SiteHeader />
-      <main className="mx-auto w-full max-w-6xl px-4 py-10">
-        <h1 className="text-3xl font-bold tracking-tight">İşletme bul, randevunu al</h1>
-        <p className="mt-2 text-ink-2">Kategori ve şehir seçin, size uygun saati hemen ayırtın.</p>
+      <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-10 md:pt-14">
+        <span className="eyebrow">
+          <span className="size-1.5 rounded-full bg-gold shadow-[0_0_8px_rgb(245_181_68)]" />
+          Keşfet
+        </span>
+        <h1 className="mt-5 text-4xl font-semibold tracking-[-0.03em] md:text-5xl">
+          İşletme bul, <span className="text-gradient">randevunu al.</span>
+        </h1>
+        <p className="mt-3 max-w-xl text-ink-2">Kategori ve şehir seçin, size uygun saati hemen ayırtın.</p>
         <Suspense fallback={<ResultsSkeleton />}>
           <Results searchParams={searchParams} />
         </Suspense>
@@ -31,12 +40,30 @@ export default function DiscoverPage({ searchParams }: PageProps<"/kesfet">) {
 
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v)?.trim() ?? "";
 
+type Filters = { q: string; category: string; city: string; today: boolean };
+
+/** Diğer süzgeçleri koruyarak birini değiştiren Keşfet adresi */
+function discoverHref(current: Filters, change: Partial<Filters>) {
+  const f = { ...current, ...change };
+  const p = new URLSearchParams();
+  if (f.q) p.set("q", f.q);
+  if (f.category) p.set("kategori", f.category);
+  if (f.city) p.set("sehir", f.city);
+  if (f.today) p.set("bugun", "1");
+  const s = p.toString();
+  return s ? `/kesfet?${s}` : "/kesfet";
+}
+
+const chip =
+  "inline-flex shrink-0 items-center gap-2 rounded-full px-3.5 py-2 text-sm ring-1 transition-colors duration-300";
+const chipOff = "bg-white/[0.04] text-ink-2 ring-line hover:bg-white/[0.08] hover:text-ink";
+const chipOn = "bg-brand-400/10 text-brand-200 ring-brand-400/40";
+
 async function Results({ searchParams }: { searchParams: PageProps<"/kesfet">["searchParams"] }) {
   const sp = await searchParams;
-  const q = one(sp.q);
-  const category = one(sp.kategori);
-  const city = one(sp.sehir);
-  const today = one(sp.bugun) === "1";
+  const f: Filters = { q: one(sp.q), category: one(sp.kategori), city: one(sp.sehir), today: one(sp.bugun) === "1" };
+  const { q, category, city, today } = f;
+  const filtered = !!(q || category || city || today);
 
   const supabase = await createClient();
   let query = supabase
@@ -57,48 +84,92 @@ async function Results({ searchParams }: { searchParams: PageProps<"/kesfet">["s
     const ids = new Set((open ?? []) as string[]);
     businesses = businesses.filter((b) => ids.has(b.id));
   }
+  const summary = [category && categoryLabel(category), city, today && "bugün müsait"].filter(Boolean).join(" · ");
 
   return (
     <>
-      <form className="card mt-6 grid gap-3 p-4 md:grid-cols-[1fr_180px_180px_auto_auto]">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" />
-          <input name="q" defaultValue={q} placeholder="İşletme adı ara" aria-label="İşletme adı" className="input pl-9" />
+      {/* Arama değişince alanlar yeni değerlerle yeniden kurulur ("Temizle" sonrası eski yazı kalmasın). */}
+      <Form key={`${q}|${city}`} action="/kesfet" className="bezel mt-8">
+        <div className="bezel-core grid grid-cols-[1fr_auto] gap-2 p-2 sm:grid-cols-[1fr_11rem_auto]">
+          <div className="relative col-span-2 sm:col-span-1">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-3" />
+            <input name="q" defaultValue={q} placeholder="İşletme adı ara" aria-label="İşletme adı" className="input py-3 pl-10" />
+          </div>
+          <select name="sehir" defaultValue={city} aria-label="Şehir" className="input py-3">
+            <option value="">Tüm şehirler</option>
+            {CITIES.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+          <button className="btn btn-primary px-6">Ara</button>
         </div>
-        <select name="kategori" defaultValue={category} aria-label="Kategori" className="input">
-          <option value="">Tüm kategoriler</option>
-          {CATEGORIES.map((c) => (
-            <option key={c.id} value={c.id}>{c.label}</option>
-          ))}
-        </select>
-        <select name="sehir" defaultValue={city} aria-label="Şehir" className="input">
-          <option value="">Tüm şehirler</option>
-          {CITIES.map((c) => (
-            <option key={c} value={c}>{c}</option>
-          ))}
-        </select>
-        <label className="flex items-center gap-2 px-1 text-sm">
-          <input type="checkbox" name="bugun" value="1" defaultChecked={today} className="size-4 accent-brand-400" />
-          Bugün müsait
-        </label>
-        <button className="btn btn-primary">Ara</button>
-      </form>
+        {category && <input type="hidden" name="kategori" value={category} />}
+        {today && <input type="hidden" name="bugun" value="1" />}
+      </Form>
 
-      <NearbyResults category={category} query={q} today={today}>
+      {/* Telefonda yana kayar, genişte satıra sığmayan alta geçer. */}
+      <nav aria-label="Kategoriler" className="-mx-4 mt-5 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] md:mx-0 md:flex-wrap md:px-0">
+        {[{ id: "", label: "Tümü" }, ...CATEGORIES].map((c) => {
+          const on = category === c.id;
+          return (
+            <Link
+              key={c.id || "tumu"}
+              href={discoverHref(f, { category: c.id })}
+              scroll={false}
+              aria-current={on ? "page" : undefined}
+              className={`${chip} ${on ? chipOn : chipOff}`}
+            >
+              <CategoryIcon id={c.id} className={`size-4 ${on ? "" : "text-brand-300"}`} /> {c.label}
+            </Link>
+          );
+        })}
+      </nav>
+
+      <NearbyResults
+        category={category}
+        query={q}
+        today={today}
+        actions={
+          <>
+            <Link href={discoverHref(f, { today: !today })} scroll={false} className={`btn ring-1 ${today ? chipOn : chipOff}`}>
+              {today ? <Check className="size-4" /> : <CalendarCheck className="size-4 text-brand-300" />} Bugün müsait
+            </Link>
+            {filtered && (
+              <Link href="/kesfet" scroll={false} className="btn btn-ghost">
+                <X className="size-4" /> Filtreleri temizle
+              </Link>
+            )}
+          </>
+        }
+      >
         {businesses.length === 0 ? (
           <div className="card mt-6 grid place-items-center p-12 text-center">
-            <Store className="size-10 text-ink-3" />
-            <p className="mt-3 font-medium">Aramanıza uygun işletme bulunamadı</p>
-            <p className="mt-1 text-sm text-ink-3">Filtreleri değiştirmeyi deneyin.</p>
+            <span className="grid size-14 place-items-center rounded-2xl bg-brand-400/10 ring-1 ring-brand-400/20">
+              <Store className="size-6 text-brand-300" />
+            </span>
+            <p className="mt-4 font-medium">Aramanıza uygun işletme bulunamadı</p>
+            <p className="mt-1 text-sm text-ink-3">
+              {filtered ? "Filtreleri değiştirmeyi ya da temizlemeyi deneyin." : "Yakında burada yeni işletmeler olacak."}
+            </p>
+            {filtered && (
+              <Link href="/kesfet" scroll={false} className="btn btn-secondary mt-5">
+                Filtreleri temizle
+              </Link>
+            )}
           </div>
         ) : (
-          <ul className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {businesses.map((b) => (
-              <li key={b.id}>
-                <BusinessCard b={b} />
-              </li>
-            ))}
-          </ul>
+          <>
+            <p className="mt-8 text-xs font-medium uppercase tracking-[0.2em] text-ink-3">
+              {businesses.length === 60 ? "60+" : businesses.length} işletme{summary && ` · ${summary}`}
+            </p>
+            <ul className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {businesses.map((b) => (
+                <li key={b.id}>
+                  <BusinessCard b={b} />
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </NearbyResults>
     </>
@@ -107,10 +178,18 @@ async function Results({ searchParams }: { searchParams: PageProps<"/kesfet">["s
 
 function ResultsSkeleton() {
   return (
-    <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {Array.from({ length: 6 }, (_, i) => (
-        <div key={i} className="card h-52 animate-pulse bg-surface-2" />
-      ))}
+    <div aria-hidden>
+      <div className="bezel mt-8 h-[4.25rem] animate-pulse" />
+      <div className="mt-5 flex gap-2 overflow-hidden">
+        {Array.from({ length: 8 }, (_, i) => (
+          <div key={i} className="h-9 w-24 shrink-0 animate-pulse rounded-full bg-surface-2" />
+        ))}
+      </div>
+      <div className="mt-[4.5rem] grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {Array.from({ length: 6 }, (_, i) => (
+          <div key={i} className="card h-56 animate-pulse bg-surface-2" />
+        ))}
+      </div>
     </div>
   );
 }

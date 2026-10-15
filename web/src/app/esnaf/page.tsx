@@ -166,7 +166,7 @@ function HeroVisual() {
           <div className="bezel-core p-5 [transform-style:preserve-3d]">
             <div className="depth-2 flex items-center justify-between">
               <div>
-                <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-ink-3">
+                <p className="text-3xs font-medium uppercase tracking-[0.2em] text-ink-3">
                   Bugün · Perşembe
                 </p>
                 <p className="mt-1 text-xl font-semibold tracking-tight">
@@ -174,7 +174,7 @@ function HeroVisual() {
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-ink-3">
+                <p className="text-3xs font-medium uppercase tracking-[0.2em] text-ink-3">
                   Beklenen
                 </p>
                 <p className="mt-1 text-xl font-semibold tracking-tight text-brand-300">
@@ -251,7 +251,7 @@ function CategoryMarquee() {
   const items = CATEGORIES.filter((c) => c.id !== "diger");
   return (
     <section className="border-y border-line py-8">
-      <p className="text-center text-[10px] font-medium uppercase tracking-[0.25em] text-ink-3">
+      <p className="text-center text-3xs font-medium uppercase tracking-[0.25em] text-ink-3">
         Her sektörden esnaf için
       </p>
       <div className="relative mt-6 overflow-hidden [mask-image:linear-gradient(90deg,transparent,black_12%,black_88%,transparent)]">
@@ -440,7 +440,7 @@ function TimelineMock() {
           </div>
         </div>
       ))}
-      <div className="flex justify-between pl-[3.25rem] text-[10px] text-ink-3">
+      <div className="flex justify-between pl-[3.25rem] text-3xs text-ink-3">
         <span>09:00</span>
         <span>13:00</span>
         <span>19:00</span>
@@ -455,7 +455,7 @@ function WhatsappMock() {
       <div className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-emerald-500/15 px-4 py-3 text-sm text-emerald-100 ring-1 ring-emerald-400/20">
         Merhaba Can, yarın saat 11:00 için randevunuzu hatırlatmak isteriz.
         Görüşmek üzere!
-        <span className="mt-1 block text-right text-[10px] text-emerald-300/70">
+        <span className="mt-1 block text-right text-3xs text-emerald-300/70">
           10:02 ✓✓
         </span>
       </div>

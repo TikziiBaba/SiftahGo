@@ -7,29 +7,15 @@ import { createClient as createSupabase } from "@supabase/supabase-js";
 import {
   ArrowRight,
   BellRing,
-  Camera,
   CalendarCheck,
   CalendarClock,
-  Droplets,
-  Dumbbell,
-  Flower2,
-  Goal,
-  GraduationCap,
-  Hand,
   LayoutGrid,
   LocateFixed,
   MapPin,
-  PawPrint,
-  PenTool,
   Scissors,
   Search,
-  Shirt,
-  Sparkles,
   Star,
-  Stethoscope,
   Store,
-  Wind,
-  Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { BusinessCard, type BusinessCardData } from "@/components/business-card";
@@ -39,6 +25,7 @@ import { NearbyResults } from "@/components/nearby-results";
 import { Reveal } from "@/components/reveal";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
 import { Shop } from "@/components/three/shop";
+import { CATEGORY_ICONS, CategoryIcon } from "@/lib/category-icons";
 import { CATEGORIES, CITIES, SITE_NAME, SITE_URL } from "@/lib/constants";
 
 export const metadata: Metadata = {
@@ -77,26 +64,6 @@ export default function Home() {
     </>
   );
 }
-
-// Kategori ikonları. Liste constants.ts'teki CATEGORIES'ten gelir (mobil ile aynı tutulur).
-const CATEGORY_ICONS: Record<(typeof CATEGORIES)[number]["id"], LucideIcon> = {
-  berber: Scissors,
-  kuafor: Wind,
-  guzellik: Sparkles,
-  tirnak: Hand,
-  spa: Flower2,
-  dovme: PenTool,
-  "oto-yikama": Droplets,
-  "oto-servis": Wrench,
-  "hali-saha": Goal,
-  spor: Dumbbell,
-  veteriner: PawPrint,
-  klinik: Stethoscope,
-  egitim: GraduationCap,
-  fotograf: Camera,
-  terzi: Shirt,
-  diger: LayoutGrid,
-};
 
 const pill =
   "inline-flex items-center gap-2 rounded-full bg-white/[0.04] px-4 py-2 text-sm text-ink-2 ring-1 ring-line transition-colors duration-300 hover:bg-white/[0.08] hover:text-ink";
@@ -157,7 +124,7 @@ function Hero() {
               </Link>
               {popular.map((id) => (
                 <Link key={id} href={`/kesfet?kategori=${id}`} className={pill}>
-                  {CATEGORIES.find((c) => c.id === id)?.label}
+                  <CategoryIcon id={id} className="size-4 text-brand-300" /> {CATEGORIES.find((c) => c.id === id)?.label}
                 </Link>
               ))}
             </div>
@@ -199,7 +166,7 @@ function HeroVisual() {
                 <CalendarCheck className="size-5" style={{ strokeWidth: 2 }} />
               </span>
               <div>
-                <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-ink-3">
+                <p className="text-3xs font-medium uppercase tracking-[0.2em] text-ink-3">
                   Randevun onaylandı
                 </p>
                 <p className="mt-1 text-xl font-semibold tracking-tight">
@@ -427,7 +394,7 @@ function HowToBook() {
         <Reveal delay={120}>
           <GlowCard className="bezel">
             <div className="bezel-core p-5 md:p-7">
-              <p className="mb-4 text-[10px] font-medium uppercase tracking-[0.2em] text-ink-3">
+              <p className="mb-4 text-3xs font-medium uppercase tracking-[0.2em] text-ink-3">
                 Usta Berber · Randevu al
               </p>
               <BookingMock />

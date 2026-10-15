@@ -158,7 +158,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
             <Link
               key={item.href}
               href={item.href}
-              className={`flex min-w-16 flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium ${
+              className={`flex min-w-16 flex-1 flex-col items-center gap-0.5 py-2 text-3xs font-medium ${
                 pathname === item.href ? "text-brand-300" : "text-ink-3"
               }`}
             >

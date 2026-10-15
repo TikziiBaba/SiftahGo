@@ -196,7 +196,7 @@ function DailyChart({ days }: { days: { day: string; revenue: number; count: num
       <div className="relative mt-3 h-44">
         {/* Hafif ızgara: üst değer ve sıfır çizgisi */}
         <div className="pointer-events-none absolute inset-x-0 top-0 border-t border-dashed border-line" />
-        <span className="pointer-events-none absolute -top-2.5 right-0 bg-surface pl-1 text-[11px] text-ink-3">{formatPrice(max)}</span>
+        <span className="pointer-events-none absolute -top-2.5 right-0 bg-surface pl-1 text-2xs text-ink-3">{formatPrice(max)}</span>
         <div className="absolute inset-0 flex items-end gap-[2px] border-b border-line-strong" onMouseLeave={() => setActive(null)}>
           {days.map((d, i) => (
             <button
@@ -216,7 +216,7 @@ function DailyChart({ days }: { days: { day: string; revenue: number; count: num
           ))}
         </div>
       </div>
-      <div className="mt-1.5 flex justify-between text-[11px] text-ink-3">
+      <div className="mt-1.5 flex justify-between text-2xs text-ink-3">
         <span>{short(days[0].day)}</span>
         {days.length > 2 && <span>{short(days[Math.floor(days.length / 2)].day)}</span>}
         <span>{short(days[days.length - 1].day)}</span>

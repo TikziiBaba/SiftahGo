@@ -83,7 +83,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-full flex-1">
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-line bg-surface p-4 md:flex">
         <Logo />
-        <p className="mt-3 inline-flex w-fit items-center gap-1.5 rounded-full bg-gold/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.2em] text-gold ring-1 ring-gold/20">
+        <p className="mt-3 inline-flex w-fit items-center gap-1.5 rounded-full bg-gold/10 px-2.5 py-1 text-3xs font-medium uppercase tracking-[0.2em] text-gold ring-1 ring-gold/20">
           <ShieldCheck className="size-3.5" /> Yönetim
         </p>
         <nav className="mt-6 flex flex-1 flex-col gap-1">
@@ -122,7 +122,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <Link
             key={item.href}
             href={item.href}
-            className={`flex min-w-16 flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium ${
+            className={`flex min-w-16 flex-1 flex-col items-center gap-0.5 py-2 text-3xs font-medium ${
               isActive(pathname, item.href) ? "text-brand-300" : "text-ink-3"
             }`}
           >

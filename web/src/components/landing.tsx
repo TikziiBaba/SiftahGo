@@ -251,7 +251,7 @@ export async function AppDownload() {
                   >
                     <s.icon className="size-6" />
                     <span className="leading-tight">
-                      <span className="block text-[10px] text-ink-3">{s.small}</span>
+                      <span className="block text-3xs text-ink-3">{s.small}</span>
                       <span className="block text-sm font-semibold">{s.big}</span>
                     </span>
                   </a>
@@ -263,7 +263,7 @@ export async function AppDownload() {
                   >
                     <s.icon className="size-6" />
                     <span className="leading-tight">
-                      <span className="block text-[10px] text-ink-3">{s.small}</span>
+                      <span className="block text-3xs text-ink-3">{s.small}</span>
                       <span className="block text-sm font-semibold">Yakında</span>
                     </span>
                   </span>

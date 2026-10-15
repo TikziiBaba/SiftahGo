@@ -168,7 +168,7 @@ export default function AdminDashboard() {
             ].map(([label, value, cls]) => (
               <div key={label as string} className="rounded-xl bg-surface-2 p-3">
                 <p className={`text-xl font-semibold tabular-nums ${cls}`}>{n(value as number)}</p>
-                <p className="text-[11px] text-ink-3">{label}</p>
+                <p className="text-2xs text-ink-3">{label}</p>
               </div>
             ))}
           </div>

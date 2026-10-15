@@ -103,7 +103,7 @@ export default function AdminUsers() {
                     <p className="truncate font-medium">{u.full_name || "İsimsiz"}</p>
                     <p className="flex items-center gap-1.5 truncate text-xs text-ink-3">
                       <a href={`mailto:${u.email}`} className="truncate hover:text-brand-300">{u.email}</a>
-                      {!u.email_confirmed_at && <span className={`chip px-1.5 py-0 text-[10px] ${TONE.amber}`}>doğrulanmadı</span>}
+                      {!u.email_confirmed_at && <span className={`chip px-1.5 py-0 text-3xs ${TONE.amber}`}>doğrulanmadı</span>}
                     </p>
                   </td>
                   <td className="px-4 py-3 text-ink-2">{u.phone || "—"}</td>

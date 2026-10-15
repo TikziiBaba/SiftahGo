@@ -111,7 +111,7 @@ export function InboxBell() {
       >
         <Bell className="size-4.5" />
         {unread > 0 && (
-          <span className="absolute -right-1 -top-1 grid h-4.5 min-w-4.5 place-items-center rounded-full bg-gold px-1 text-[10px] font-bold leading-none text-brand-950 ring-2 ring-bg">
+          <span className="absolute -right-1 -top-1 grid h-4.5 min-w-4.5 place-items-center rounded-full bg-gold px-1 text-3xs font-bold leading-none text-brand-950 ring-2 ring-bg">
             {unread > 9 ? "9+" : unread}
           </span>
         )}

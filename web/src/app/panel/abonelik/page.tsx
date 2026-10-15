@@ -128,7 +128,7 @@ export default function SubscriptionPage() {
       <div className="mt-6">
         <div className="bezel">
           <div className="bezel-core flex h-full flex-col gap-3 p-5 md:p-6">
-            <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-ink-3">Mevcut durum</p>
+            <p className="text-3xs font-medium uppercase tracking-[0.2em] text-ink-3">Mevcut durum</p>
             {trial ? (
               <p className="text-lg font-semibold">
                 Ücretsiz deneme (Pro) ·{" "}

@@ -101,7 +101,7 @@ export function SiteHeader({ section = "musteri", minimal = false }: { section?:
             {!minimal && (
               <Link
                 href={other.href}
-                className={`btn whitespace-nowrap py-2 text-gold hover:bg-gold/10 max-sm:px-2 max-sm:text-[13px] ${account ? "hidden sm:inline-flex" : ""}`}
+                className={`btn whitespace-nowrap py-2 text-gold hover:bg-gold/10 max-sm:px-2 max-sm:text-xs ${account ? "hidden sm:inline-flex" : ""}`}
               >
                 {/* 360 px telefonda logo ve menü düğmesiyle sığsın diye ikon gizlenir. */}
                 <other.icon className="size-4 max-sm:hidden" /> {other.label}
@@ -229,7 +229,7 @@ export function SiteFooter() {
         <FooterCol title="Gizlilik & Güven" links={LEGAL_DOCS.map((d): [string, string] => [d.label, d.href])} />
       </div>
       <div className="relative mx-auto max-w-6xl px-4 pb-8">
-        <p className="select-none bg-gradient-to-b from-white/[0.07] to-transparent bg-clip-text text-[18vw] font-bold leading-none tracking-tighter text-transparent md:text-[11rem]">
+        <p className="select-none bg-gradient-to-b from-white/[0.07] to-transparent bg-clip-text text-[18vw] font-bold leading-none tracking-tighter text-transparent md:text-watermark">
           {SITE_NAME}
         </p>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-4 text-xs text-ink-3">
