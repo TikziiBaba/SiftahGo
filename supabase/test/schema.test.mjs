@@ -180,15 +180,15 @@ ok((await as(A, `select id from notifications`)).rows.length === 0 && (await as(
 const wednesday = new Date(new Date(`${monday}T12:00:00Z`).getTime() + 2 * 864e5).toISOString().slice(0, 10);
 const bookMail = (t, email) =>
   as(G, `select b->>'id' as id from book_appointment($1, $2, null, $3, 'Misafir Kişi', '05551112244', '', $4) b`, [biz, svc30, t, email]);
-await expectError(() => bookMail(`${wednesday}T06:00:00Z`, 'yanlis-eposta'), /e-posta/, 'geçersiz e-posta reddedildi');
 await as(A, `update businesses set auto_confirm = false where id = $1`, [biz]);
-const mailed = (await bookMail(`${wednesday}T06:00:00Z`, ' Misafir@Ornek.com ')).rows[0].id;
-ok((await db.query(`select customer_email from appointments where id = $1`, [mailed])).rows[0].customer_email === 'misafir@ornek.com', 'misafir e-postası küçük harfle kaydedildi');
+const mailed = (await bookMail(`${wednesday}T06:00:00Z`, 'kurban@ornek.com')).rows[0].id;
+ok((await db.query(`select customer_email from appointments where id = $1`, [mailed])).rows[0].customer_email === 'g@x.com',
+  'istemcinin yazdığı e-posta yok sayıldı, hesap adresi kaydedildi (başkasının kutusuna e-posta gönderilemez)');
 await as(A, `update appointments set status = 'confirmed' where id = $1`, [mailed]);
 await as(A, `update appointments set status = 'cancelled' where id = $1`, [mailed]);
 await as(A, `update businesses set auto_confirm = true where id = $1`, [biz]);
 n = await notes(mailed);
-ok(n === 'booked:business:a@x.com booked:customer:misafir@ornek.com cancelled:customer:misafir@ornek.com confirmed:customer:misafir@ornek.com',
+ok(n === 'booked:business:a@x.com booked:customer:g@x.com cancelled:customer:g@x.com confirmed:customer:g@x.com',
   `onay ve işletmenin iptali müşteriye gider: ${n}`);
 
 // hatırlatma: elle (servis olarak) eklenen yakın randevular
@@ -399,7 +399,8 @@ ib = (await inbox(A)).filter((r) => r.title === 'Dikkat: sık iptal eden müşte
 ok(ib.length === 1 && ib[0].body.includes('Son 6 ayda 3 iptal, 0 gelmedi') && ib[0].body.endsWith('Onayınızı bekliyor'),
   `işletmeye uyarılı bildirim: ${ib[0]?.body}`);
 const flGuest = (await book(G, svc30, `${nextMon}T08:00:00Z`, 'Cem Başka', '+90 555 111 22 33')).rows[0];
-ok(flGuest.status === 'pending' && (await row(flGuest.id)).customer_flagged, 'aynı telefonla misafir randevusu da işaretli');
+ok(flGuest.status === 'confirmed' && !(await row(flGuest.id)).customer_flagged,
+  'başka hesabın aynı telefonla randevusu işaretlenmez (telefon doğrulanmıyor: başkasının numarasıyla iptal edip onu lekeleyemez)');
 await as(A, `update appointments set status = 'cancelled' where id = $1`, [flGuest.id]);
 ok((await row(flGuest.id)).cancelled_by === 'business', 'işletmenin iptali "business" olarak kaydedildi');
 await as(A, `update appointments set customer_flagged = false, prior_cancels = 0, cancelled_by = 'customer' where id = $1`, [fl.id]);
@@ -686,6 +687,8 @@ ok((await as(A, `select * from admins`)).rows.length === 0, 'yönetici listesi i
 
 for (const [sql, label] of [
   [`select admin_stats()`, 'istatistik'],
+  [`select admin_dashboard(current_date - 29, current_date)`, 'ayrıntılı istatistik'],
+  [`select * from admin_activity()`, 'etkinlik akışı'],
   [`select * from admin_users()`, 'kullanıcı listesi'],
   [`select admin_grant_subscription('${biz}', 'pro', 365)`, 'paket verme'],
   [`select admin_end_subscription('${biz}')`, 'abonelik bitirme'],
@@ -717,6 +720,20 @@ ok(stats.users === 7 && stats.businesses === 2 && stats.active === 1 && stats.tr
   && Number(stats.mrr) === 999 && Number(stats.revenue_total) === 649 + 349 + 1500
   && stats.daily.length === 30 && stats.by_plan.find((p) => p.id === 'pro').count === 1,
   `istatistikler (deneme ayrı): ${JSON.stringify({ u: stats.users, b: stats.businesses, active: stats.active, trial: stats.trial, never: stats.never_paid, mrr: stats.mrr, rev: stats.revenue_total })}`);
+const today = new Date().toISOString().slice(0, 10);
+const dash = (await as(ADM, `select admin_dashboard(current_date - 29, current_date) d`)).rows[0].d;
+ok(dash.days === 30 && dash.daily.length === 30 && dash.kpi.businesses.cur === 2 && dash.kpi.users.cur === 7
+  && dash.snapshot.active === 1 && Number(dash.kpi.revenue.cur) === 649 + 349 + 1500 && dash.cohorts.length === 6
+  && dash.funnel_business.business === 2 && Object.keys(dash.ratings.dist).length === 5 && Array.isArray(dash.heatmap)
+  && typeof dash.lead_time.more === 'number' && dash.daily.at(-1).day === today,
+  `ayrıntılı istatistik: ${JSON.stringify({ days: dash.days, biz: dash.kpi.businesses, users: dash.kpi.users, rev: dash.kpi.revenue, funnel: dash.funnel_business })}`);
+await expectError(() => as(ADM, `select admin_dashboard(current_date, current_date - 1)`), /Geçersiz tarih/, 'ters tarih aralığı reddedildi');
+await expectError(() => as(ADM, `select admin_dashboard(current_date - 400, current_date)`), /Geçersiz tarih/, '366 günden uzun aralık reddedildi');
+const feed = (await as(ADM, `select * from admin_activity(10)`)).rows;
+ok(feed.length === 10 && feed.every((r, i) => i === 0 || r.occurred_at <= feed[i - 1].occurred_at) && feed.some((r) => r.kind === 'business'),
+  `etkinlik akışı yeniden eskiye: ${feed.map((r) => r.kind).join(',')}`);
+const one = (await as(ADM, `select * from admin_users($1)`, [A])).rows;
+ok(one.length === 1 && one[0].business_name === 'Ahmet Berber', 'tek kullanıcı bilgisi');
 await db.query(`delete from businesses where id = $1`, [bizB]);
 
 await as(ADM, `select admin_set_suspended($1, true)`, [biz]);
@@ -805,6 +822,15 @@ const ownAppt = (await as(A, `insert into appointments (business_id, service_nam
   values ($1, 'x', 'x', '05550000000', now() + interval '3 days', now() + interval '3 days 30 minutes', 'confirmed') returning id`, [biz])).rows[0].id;
 await expectError(() => as(A, `update appointments set staff_id = $2 where id = $1`, [ownAppt, staffX]), /Personel bulunamadı/, 'randevu sonradan başka işletmenin personeline taşınamaz');
 await db.query(`delete from appointments where id = $1`, [ownAppt]);
+await db.query(`update businesses set subscription_ends_at = now() + interval '30 days', plan_id = 'pro' where id = $1`, [biz]);
+const poisonDay = new Date(new Date(`${monday}T12:00:00Z`).getTime() + 14 * 864e5).toISOString().slice(0, 10);
+const free = (await slots(svc30, poisonDay)).map((r) => r.slot_start.toISOString());
+ok(free.length >= 6, `sınama günü boş saatler: ${free.length}`);
+const accountAppt = (await book(C, svc30, free[5])).rows[0].id;
+await as(A, `update appointments set customer_phone = '0533 444 55 66' where id = $1`, [accountAppt]);
+ok((await db.query(`select customer_phone from appointments where id = $1`, [accountAppt])).rows[0].customer_phone === '0555 111 22 33',
+  'hesapla alınan randevunun telefonu işletme tarafından değiştirilemez');
+await db.query(`delete from appointments where id = $1`, [accountAppt]);
 
 const victimPhone = '0533 444 55 66';
 for (const h of [48, 72]) {
@@ -814,6 +840,28 @@ for (const h of [48, 72]) {
 }
 const noShows = async (b) => (await db.query(`select no_shows from customer_history(null, $1, $2)`, [victimPhone, b])).rows[0].no_shows;
 ok(await noShows(bizX) === 2 && await noShows(biz) === 0, 'elle eklenen gelmeme yalnızca o işletmede sayılır (müşteri başka işletmelerde lekelenemez)');
+
+// Saldırgan hesap (X) kurbanın telefonuyla randevu alıp iptal eder: kurbanın kendi hesabı lekelenmez.
+const V = '00000000-0000-0000-0000-0000000000e2';
+await db.exec(`insert into auth.users values ('${V}', 'v@x.com', '{"full_name":"Kurban"}')`);
+for (const t of free.slice(0, 3)) {
+  const id = (await book(X, svc30, t, 'Kurban', victimPhone)).rows[0].id;
+  await as(X, `select cancel_appointment($1)`, [id]);
+}
+const victimBooking = (await book(V, svc30, free[3], 'Kurban', victimPhone)).rows[0];
+const vRow = (await db.query(`select prior_cancels, customer_flagged from appointments where id = $1`, [victimBooking.id])).rows[0];
+ok(victimBooking.status === 'confirmed' && vRow.prior_cancels === 0 && !vRow.customer_flagged,
+  `başkasının telefonuyla yapılan iptaller kurbana yazılmaz: ${JSON.stringify(vRow)}`);
+await db.query(`delete from appointments where id = $1`, [victimBooking.id]);
+
+// hesap silme: müşteri yaklaşan randevusunu iptal eder ve yorumdaki adını kaldırır; işletme sahibi silemez
+const delAppt = (await book(V, svc30, free[4], 'Kurban', victimPhone)).rows[0].id;
+await expectError(() => as(null, `select delete_my_account()`), /Giriş yapmalısınız/, 'girişsiz hesap silinemez');
+await expectError(() => as(A, `select delete_my_account()`), /İşletme hesabı/, 'işletme sahibi hesabını buradan silemez');
+await as(V, `select delete_my_account()`);
+ok((await db.query(`select status from appointments where id = $1`, [delAppt])).rows[0].status === 'cancelled', 'hesap silinirken yaklaşan randevu iptal edildi');
+await db.query(`delete from appointments where id = $1`, [delAppt]);
+await db.query(`delete from auth.users where id = $1`, [V]);
 
 await expectError(() => as(A, `update businesses set timezone = 'Mars/Olympus' where id = $1`, [biz]), /time zone/, 'geçersiz saat dilimi reddedildi');
 for (const [sql, label] of [
