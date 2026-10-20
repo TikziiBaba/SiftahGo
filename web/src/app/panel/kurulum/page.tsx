@@ -61,7 +61,7 @@ export default function SetupPage() {
         <div className="mb-6 flex justify-center"><Logo /></div>
         <form onSubmit={submit} className="card space-y-4 p-6 md:p-8">
           <div>
-            <h1 className="text-xl font-bold">İşletmenizi oluşturalım</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">İşletmenizi oluşturalım</h1>
             <p className="mt-1 text-sm text-ink-3">Bu bilgileri daha sonra Ayarlar’dan değiştirebilirsiniz.</p>
           </div>
           <div>

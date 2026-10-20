@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Search, ShieldCheck } from "lucide-react";
+import { MailWarning, Search, ShieldCheck, Store, UserPlus, Users } from "lucide-react";
+import { BarChart, KpiCard } from "@/components/charts";
 import { CsvButton, dateTime, Empty, PageTitle, shortDate, Skeleton, Tabs, TONE } from "@/components/admin/ui";
 import { createClient } from "@/lib/supabase/client";
-import { errorMessage } from "@/lib/format";
+import { addDays, dayOf, errorMessage, formatDate, todayStr } from "@/lib/format";
 import type { AdminUser } from "@/lib/admin-types";
 
 const FILTERS = [
@@ -47,7 +48,19 @@ export default function AdminUsers() {
       .filter((u) => !term || [u.email, u.full_name, u.phone, u.business_name].some((v) => v?.toLocaleLowerCase("tr-TR").includes(term)));
   }, [users, filter, q]);
 
-  if (error) return <p className="mx-auto max-w-6xl rounded-2xl bg-rose-500/10 p-4 text-sm text-rose-300">{error}</p>;
+  // Son 30 günün günlük kayıtları ve önceki 30 gün.
+  const signups = useMemo(() => {
+    if (!users) return null;
+    const today = todayStr();
+    const days = Array.from({ length: 30 }, (_, i) => addDays(today, i - 29));
+    const byDay = new Map<string, number>();
+    for (const u of users) byDay.set(dayOf(u.created_at), (byDay.get(dayOf(u.created_at)) ?? 0) + 1);
+    const cur = days.reduce((s, d) => s + (byDay.get(d) ?? 0), 0);
+    const prev = Array.from({ length: 30 }, (_, i) => addDays(today, i - 59)).reduce((s, d) => s + (byDay.get(d) ?? 0), 0);
+    return { cur, prev, series: days.map((d) => ({ label: formatDate(d, { weekday: undefined, month: "short" }), value: byDay.get(d) ?? 0 })) };
+  }, [users]);
+
+  if (error) return <p className="mx-auto max-w-6xl rounded-2xl bg-rose-500/10 p-4 text-sm text-bad">{error}</p>;
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -67,6 +80,21 @@ export default function AdminUsers() {
           }))}
         />
       </PageTitle>
+
+      {users && signups && (
+        <div className="mt-6 grid gap-4 lg:grid-cols-[1fr_1.3fr]">
+          <div className="grid grid-cols-2 gap-3">
+            <KpiCard label="Toplam kullanıcı" icon={Users} value={users.length.toLocaleString("tr-TR")} />
+            <KpiCard label="Son 30 gün kayıt" icon={UserPlus} value={signups.cur.toLocaleString("tr-TR")} cur={signups.cur} prev={signups.prev} />
+            <KpiCard label="İşletme sahibi" icon={Store} value={users.filter((u) => u.role === "business").length.toLocaleString("tr-TR")} hint={`${users.filter((u) => u.business_id).length} işletme açtı`} />
+            <KpiCard label="E-postası doğrulanmamış" icon={MailWarning} value={users.filter((u) => !u.email_confirmed_at).length.toLocaleString("tr-TR")} />
+          </div>
+          <div className="card p-5">
+            <h2 className="font-semibold">Günlük kayıt (30 gün)</h2>
+            <BarChart title="Günlük kayıt" data={signups.series} format={(x) => `${Math.round(x)}`} height={120} />
+          </div>
+        </div>
+      )}
 
       <div className="mt-6 flex flex-wrap items-center gap-2">
         <Tabs value={filter} onChange={setFilter} options={FILTERS.map((f) => ({ ...f, count: users?.filter((u) => match(u, f.id)).length }))} />
@@ -98,11 +126,13 @@ export default function AdminUsers() {
             </thead>
             <tbody className="divide-y divide-line">
               {list.map((u) => (
-                <tr key={u.id} className="transition hover:bg-white/[0.02]">
+                <tr key={u.id} className="transition hover:bg-tint/[0.02]">
                   <td className="max-w-[260px] px-4 py-3">
-                    <p className="truncate font-medium">{u.full_name || "İsimsiz"}</p>
+                    <Link href={`/admin/kullanicilar/${u.id}`} className="block truncate font-medium hover:text-accent">
+                      {u.full_name || "İsimsiz"}
+                    </Link>
                     <p className="flex items-center gap-1.5 truncate text-xs text-ink-3">
-                      <a href={`mailto:${u.email}`} className="truncate hover:text-brand-300">{u.email}</a>
+                      <a href={`mailto:${u.email}`} className="truncate hover:text-accent">{u.email}</a>
                       {!u.email_confirmed_at && <span className={`chip px-1.5 py-0 text-3xs ${TONE.amber}`}>doğrulanmadı</span>}
                     </p>
                   </td>
@@ -118,7 +148,7 @@ export default function AdminUsers() {
                   </td>
                   <td className="px-4 py-3">
                     {u.business_id ? (
-                      <Link href={`/admin/isletmeler/${u.business_id}`} className="hover:text-brand-300">
+                      <Link href={`/admin/isletmeler/${u.business_id}`} className="hover:text-accent">
                         {u.business_name}
                       </Link>
                     ) : (

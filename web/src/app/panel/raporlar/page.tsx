@@ -1,13 +1,27 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { CalendarCheck, Gauge, Percent, Repeat, ShoppingBag, Smartphone, UserX, Wallet, XCircle } from "lucide-react";
+import { CsvButton } from "@/components/admin/ui";
+import { AreaChart, BarChart, BarList, Donut, Heatmap, KpiCard, STATUS_COLORS } from "@/components/charts";
 import { useBusiness } from "@/components/panel-context";
 import { PlanGate } from "@/components/plan-gate";
 import { createClient } from "@/lib/supabase/client";
-import { addDays, dayBounds, dayOf, formatDate, formatPrice, todayStr } from "@/lib/format";
+import { STATUS } from "@/lib/constants";
+import { addDays, dayBounds, dayOf, formatDate, formatPrice, formatTime, isoWeekday, phoneKey, todayStr } from "@/lib/format";
 import type { AppointmentStatus, ReportSummary } from "@/lib/types";
 
-type Row = { starts_at: string; status: AppointmentStatus; price: number; service_name: string; staff: { name: string } | null };
+type Row = {
+  starts_at: string;
+  created_at: string;
+  status: AppointmentStatus;
+  price: number;
+  service_name: string;
+  customer_id: string | null;
+  customer_name: string;
+  customer_phone: string;
+  staff: { name: string } | null;
+};
 
 const PERIODS = [
   { id: "7", label: "Son 7 gün" },
@@ -15,6 +29,7 @@ const PERIODS = [
   { id: "month", label: "Bu ay" },
   { id: "last-month", label: "Geçen ay" },
   { id: "90", label: "Son 90 gün" },
+  { id: "365", label: "Son 1 yıl" },
 ] as const;
 
 function range(period: string) {
@@ -28,8 +43,28 @@ function range(period: string) {
   return { from: addDays(today, -(Number(period) - 1)), to: today };
 }
 
+const daysBetween = (a: string, b: string) => Math.round((new Date(`${b}T12:00:00Z`).getTime() - new Date(`${a}T12:00:00Z`).getTime()) / 864e5);
 // İptal ve gelmeyenler ciroya sayılmaz.
 const counts = (r: Row) => r.status !== "cancelled" && r.status !== "no_show";
+const ratio = (a: number, b: number) => (b ? a / b : 0);
+const pctText = (n: number) => `%${Math.round(n * 100)}`;
+
+function summarize(rows: Row[]) {
+  const valid = rows.filter(counts);
+  const completed = rows.filter((r) => r.status === "completed").length;
+  const noShow = rows.filter((r) => r.status === "no_show").length;
+  const cancelled = rows.filter((r) => r.status === "cancelled").length;
+  const revenue = valid.reduce((s, r) => s + Number(r.price), 0);
+  return {
+    revenue,
+    count: valid.length,
+    average: ratio(revenue, valid.length),
+    noShowRate: ratio(noShow, completed + noShow),
+    cancelRate: ratio(cancelled, rows.length),
+    online: ratio(rows.filter((r) => r.customer_id).length, rows.length),
+    cancelled,
+  };
+}
 
 export default function ReportsPage() {
   return (
@@ -42,10 +77,12 @@ export default function ReportsPage() {
 function Reports() {
   const { business } = useBusiness();
   const [period, setPeriod] = useState<string>("30");
-  const [result, setResult] = useState<{ period: string; rows: Row[]; summary: ReportSummary | null } | null>(null);
+  const [result, setResult] = useState<{ period: string; rows: Row[]; prev: Row[]; summary: ReportSummary | null; prevSummary: ReportSummary | null } | null>(null);
   const { from, to } = range(period);
-  const rows = result?.period === period ? result.rows : null;
-  const summary = result?.period === period ? result.summary : null;
+  const length = daysBetween(from, to) + 1;
+  const prevFrom = addDays(from, -length);
+  const prevTo = addDays(from, -1);
+  const data = result?.period === period ? result : null;
 
   useEffect(() => {
     let active = true;
@@ -53,36 +90,44 @@ function Reports() {
     Promise.all([
       supabase
         .from("appointments")
-        .select("starts_at, status, price, service_name, staff(name)")
+        .select("starts_at, created_at, status, price, service_name, customer_id, customer_name, customer_phone, staff(name)")
         .eq("business_id", business.id)
-        .gte("starts_at", dayBounds(from).from)
+        .gte("starts_at", dayBounds(prevFrom).from)
         .lt("starts_at", dayBounds(to).to)
-        .limit(5000),
+        .limit(10000),
       supabase.rpc("get_report_summary", { p_business_id: business.id, p_from: from, p_to: to }),
-    ]).then(([{ data }, { data: summary }]) => {
-      if (active) setResult({ period, rows: (data ?? []) as unknown as Row[], summary: (summary ?? null) as ReportSummary | null });
+      supabase.rpc("get_report_summary", { p_business_id: business.id, p_from: prevFrom, p_to: prevTo }),
+    ]).then(([{ data }, { data: summary }, { data: prevSummary }]) => {
+      if (!active) return;
+      const all = (data ?? []) as unknown as Row[];
+      const cut = dayBounds(from).from;
+      setResult({
+        period,
+        rows: all.filter((r) => r.starts_at >= cut),
+        prev: all.filter((r) => r.starts_at < cut),
+        summary: (summary ?? null) as ReportSummary | null,
+        prevSummary: (prevSummary ?? null) as ReportSummary | null,
+      });
     });
     return () => {
       active = false;
     };
-  }, [business.id, period, from, to]);
+  }, [business.id, period, from, to, prevFrom, prevTo]);
 
-  const stats = useMemo(() => {
-    if (!rows) return null;
-    const valid = rows.filter(counts);
-    const completed = rows.filter((r) => r.status === "completed").length;
-    const noShow = rows.filter((r) => r.status === "no_show").length;
-    const revenue = valid.reduce((s, r) => s + Number(r.price), 0);
-
-    const days: { day: string; revenue: number; count: number }[] = [];
-    for (let d = from; d <= to; d = addDays(d, 1)) days.push({ day: d, revenue: 0, count: 0 });
-    for (const r of valid) {
-      const slot = days.find((x) => x.day === dayOf(r.starts_at));
-      if (slot) {
-        slot.revenue += Number(r.price);
-        slot.count += 1;
-      }
-    }
+  const view = useMemo(() => {
+    if (!data) return null;
+    const cur = summarize(data.rows);
+    const prev = summarize(data.prev);
+    const valid = data.rows.filter(counts);
+    const dayList: string[] = [];
+    for (let d = from; d <= to; d = addDays(d, 1)) dayList.push(d);
+    const sumBy = (rows: Row[], day: string) => rows.filter((r) => counts(r) && dayOf(r.starts_at) === day).reduce((s, r) => s + Number(r.price), 0);
+    const daily = dayList.map((d, i) => ({
+      label: formatDate(d, { weekday: undefined, month: "short" }),
+      value: sumBy(data.rows, d),
+      compare: sumBy(data.prev, addDays(prevFrom, i)),
+    }));
+    const dailyCount = dayList.map((d) => ({ label: formatDate(d, { weekday: undefined, month: "short" }), value: valid.filter((r) => dayOf(r.starts_at) === d).length }));
 
     const group = (key: (r: Row) => string) => {
       const map = new Map<string, { name: string; count: number; revenue: number }>();
@@ -95,181 +140,170 @@ function Reports() {
       }
       return [...map.values()].sort((a, b) => b.revenue - a.revenue || b.count - a.count);
     };
+    const customers = (() => {
+      const map = new Map<string, { name: string; count: number; revenue: number }>();
+      for (const r of valid) {
+        const k = phoneKey(r.customer_phone) || r.customer_name;
+        const g = map.get(k) ?? { name: r.customer_name, count: 0, revenue: 0 };
+        g.count += 1;
+        g.revenue += Number(r.price);
+        map.set(k, g);
+      }
+      return [...map.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 6);
+    })();
 
+    const heat = new Map<string, number>();
+    for (const r of valid) {
+      const d = isoWeekday(dayOf(r.starts_at));
+      const h = Number(formatTime(r.starts_at).slice(0, 2));
+      heat.set(`${d}-${h}`, (heat.get(`${d}-${h}`) ?? 0) + 1);
+    }
+    const lead = { "2 saatten az": 0, "Aynı gün": 0, "1–3 gün": 0, "3–7 gün": 0, "1 haftadan fazla": 0 };
+    for (const r of data.rows.filter((x) => x.customer_id)) {
+      const h = (new Date(r.starts_at).getTime() - new Date(r.created_at).getTime()) / 36e5;
+      lead[h < 2 ? "2 saatten az" : h < 24 ? "Aynı gün" : h < 72 ? "1–3 gün" : h < 168 ? "3–7 gün" : "1 haftadan fazla"] += 1;
+    }
+    const statusItems = (Object.keys(STATUS) as AppointmentStatus[]).map((s) => ({
+      label: STATUS[s].label,
+      value: data.rows.filter((r) => r.status === s).length,
+      color: STATUS_COLORS[s],
+    }));
     return {
-      revenue,
-      count: valid.length,
-      average: valid.length ? revenue / valid.length : 0,
-      cancelled: rows.filter((r) => r.status === "cancelled").length,
-      noShowRate: completed + noShow ? Math.round((noShow / (completed + noShow)) * 100) : 0,
-      days,
+      cur,
+      prev,
+      daily,
+      dailyCount,
       byService: group((r) => r.service_name),
       byStaff: group((r) => r.staff?.name ?? "Atanmamış"),
+      customers,
+      heat: [...heat.entries()].map(([k, c]) => {
+        const [d, h] = k.split("-").map(Number);
+        return { d, h, c };
+      }),
+      lead: Object.entries(lead).map(([name, value]) => ({ name, value })),
+      statusItems,
     };
-  }, [rows, from, to]);
+  }, [data, from, to, prevFrom]);
+
+  const occupancy = (s: ReportSummary | null) => (s?.capacity_minutes ? s.booked_minutes / s.capacity_minutes : 0);
+  const returning = (s: ReportSummary | null) => (s?.customers ? s.returning / s.customers : 0);
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="mx-auto max-w-6xl">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">Raporlar</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Raporlar</h1>
           <p className="text-sm text-ink-3">
-            {formatDate(from, { weekday: undefined })} – {formatDate(to, { weekday: undefined })} · iptal ve gelmeyenler ciroya dahil değil
+            {formatDate(from, { weekday: undefined })} – {formatDate(to, { weekday: undefined })} · önceki {length} günle karşılaştırılır · iptal ve gelmeyenler ciroya dahil değil
           </p>
         </div>
-        <select className="input w-auto" value={period} onChange={(e) => setPeriod(e.target.value)} aria-label="Dönem">
-          {PERIODS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-        </select>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex gap-1 overflow-x-auto rounded-full [scrollbar-width:none] bg-surface p-1 ring-1 ring-line">
+            {PERIODS.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setPeriod(p.id)}
+                className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${period === p.id ? "bg-brand-400/15 text-accent" : "text-ink-3 hover:text-ink"}`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <CsvButton
+            filename={`randevular-${from}-${to}`}
+            rows={(data?.rows ?? []).map((r) => ({
+              tarih: formatDate(r.starts_at, { weekday: undefined, year: "numeric" }),
+              saat: formatTime(r.starts_at),
+              musteri: r.customer_name,
+              telefon: r.customer_phone,
+              hizmet: r.service_name,
+              personel: r.staff?.name ?? "",
+              tutar: Number(r.price),
+              durum: STATUS[r.status].label,
+              kanal: r.customer_id ? "Online" : "Elle",
+            }))}
+          />
+        </div>
       </div>
 
-      {!stats ? (
-        <div className="card mt-6 h-72 animate-pulse bg-surface-2" />
+      {!view ? (
+        <div className="mt-6 grid gap-3 md:grid-cols-4">
+          {Array.from({ length: 8 }, (_, i) => (
+            <div key={i} className="card h-24 animate-pulse" />
+          ))}
+        </div>
       ) : (
         <>
-          <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3">
-            <Tile label="Ciro" value={formatPrice(stats.revenue)} />
-            <Tile label="Randevu" value={String(stats.count)} />
-            <Tile label="Ortalama sepet" value={formatPrice(stats.average)} />
-            <Tile label="Gelmeme oranı" value={`%${stats.noShowRate}`} hint={`${stats.cancelled} iptal`} />
-            {summary && (
-              <>
-                <Tile
-                  label="Doluluk"
-                  value={`%${summary.capacity_minutes ? Math.round((summary.booked_minutes / summary.capacity_minutes) * 100) : 0}`}
-                  hint="Personel saatlerinin dolu kısmı"
-                />
-                <Tile
-                  label="Geri dönen müşteri"
-                  value={`%${summary.customers ? Math.round((summary.returning / summary.customers) * 100) : 0}`}
-                  hint={`${summary.customers} müşteriden ${summary.returning} kişi`}
-                />
-              </>
-            )}
+          <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <KpiCard label="Ciro" icon={Wallet} value={formatPrice(view.cur.revenue)} cur={view.cur.revenue} prev={view.prev.revenue} spark={view.daily.map((d) => d.value)} />
+            <KpiCard label="Randevu" icon={CalendarCheck} value={String(view.cur.count)} cur={view.cur.count} prev={view.prev.count} spark={view.dailyCount.map((d) => d.value)} />
+            <KpiCard label="Ortalama sepet" icon={ShoppingBag} value={formatPrice(view.cur.average)} cur={view.cur.average} prev={view.prev.average} />
+            <KpiCard
+              label="Doluluk"
+              icon={Gauge}
+              value={pctText(occupancy(data!.summary))}
+              cur={occupancy(data!.summary)}
+              prev={occupancy(data!.prevSummary)}
+              hint="Personel saatlerinin dolu kısmı"
+            />
+            <KpiCard
+              label="Geri dönen müşteri"
+              icon={Repeat}
+              value={pctText(returning(data!.summary))}
+              cur={returning(data!.summary)}
+              prev={returning(data!.prevSummary)}
+              hint={`${data!.summary?.customers ?? 0} müşteriden ${data!.summary?.returning ?? 0} kişi`}
+            />
+            <KpiCard label="Gelmeme oranı" icon={UserX} value={pctText(view.cur.noShowRate)} cur={view.cur.noShowRate} prev={view.prev.noShowRate} invert tone={view.cur.noShowRate > 0.1 ? "warn" : undefined} />
+            <KpiCard label="İptal oranı" icon={XCircle} value={pctText(view.cur.cancelRate)} cur={view.cur.cancelRate} prev={view.prev.cancelRate} invert hint={`${view.cur.cancelled} iptal`} />
+            <KpiCard label="Online randevu payı" icon={Smartphone} value={pctText(view.cur.online)} cur={view.cur.online} prev={view.prev.online} hint="Müşterinin kendi aldığı" />
           </div>
 
           <section className="card mt-4 p-5">
             <h2 className="font-semibold">Günlük ciro</h2>
-            <DailyChart days={stats.days} />
+            <AreaChart title="Günlük ciro" data={view.daily} format={formatPrice} compareLabel={`Önceki ${length} gün`} />
+          </section>
+
+          <div className="mt-4 grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+            <section className="card p-5">
+              <h2 className="font-semibold">Günlük randevu sayısı</h2>
+              <BarChart title="Günlük randevu sayısı" data={view.dailyCount} format={(n) => `${Math.round(n)}`} />
+            </section>
+            <section className="card p-5">
+              <h2 className="font-semibold">Randevu durumları</h2>
+              <Donut title="Randevu durumları" items={view.statusItems} center={{ value: String(data!.rows.length), label: "randevu" }} />
+            </section>
+          </div>
+
+          <section className="card mt-4 p-5">
+            <h2 className="font-semibold">En yoğun gün ve saatler</h2>
+            <p className="text-sm text-ink-3">Personel planını ve kampanya saatlerini buna göre ayarlayın.</p>
+            <Heatmap title="Gün ve saate göre randevu yoğunluğu" cells={view.heat} />
           </section>
 
           <div className="mt-4 grid gap-4 md:grid-cols-2">
-            <Breakdown title="Hizmetlere göre" items={stats.byService} />
-            <Breakdown title="Personele göre" items={stats.byStaff} />
+            <section className="card p-5">
+              <h2 className="font-semibold">Hizmetlere göre ciro</h2>
+              <BarList items={view.byService.slice(0, 8).map((g) => ({ name: g.name, value: g.revenue, hint: `${g.count} randevu` }))} format={formatPrice} />
+            </section>
+            <section className="card p-5">
+              <h2 className="font-semibold">Personele göre ciro</h2>
+              <BarList items={view.byStaff.slice(0, 8).map((g) => ({ name: g.name, value: g.revenue, hint: `${g.count} randevu` }))} format={formatPrice} />
+            </section>
+            <section className="card p-5">
+              <h2 className="font-semibold">En değerli müşteriler</h2>
+              <BarList items={view.customers.map((g) => ({ name: g.name, value: g.revenue, hint: `${g.count} kez` }))} format={formatPrice} empty="Bu dönemde müşteri yok." />
+            </section>
+            <section className="card p-5">
+              <h2 className="flex items-center gap-2 font-semibold">
+                <Percent className="size-4 text-accent" /> Ne kadar önceden randevu alınıyor?
+              </h2>
+              <BarList items={view.lead} format={(n) => `${n}`} empty="Bu dönemde online randevu yok." />
+            </section>
           </div>
         </>
       )}
     </div>
-  );
-}
-
-function Tile({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return (
-    <div className="card p-4">
-      <p className="text-xs text-ink-3">{label}</p>
-      <p className="mt-1 text-2xl font-bold tracking-tight">{value}</p>
-      {hint && <p className="text-xs text-ink-3">{hint}</p>}
-    </div>
-  );
-}
-
-function DailyChart({ days }: { days: { day: string; revenue: number; count: number }[] }) {
-  const [active, setActive] = useState<number | null>(null);
-  const max = Math.max(...days.map((d) => d.revenue), 1);
-  const shown = active !== null ? days[active] : null;
-  const short = (day: string) => formatDate(day, { weekday: undefined, month: "short" });
-
-  if (days.every((d) => d.count === 0)) {
-    return <p className="py-10 text-center text-sm text-ink-3">Bu dönemde randevu yok.</p>;
-  }
-
-  return (
-    <div className="mt-3">
-      <p className="h-5 text-sm text-ink-2" aria-live="polite">
-        {shown ? (
-          <>
-            <b className="text-ink">{formatDate(shown.day)}</b> · {formatPrice(shown.revenue)} · {shown.count} randevu
-          </>
-        ) : (
-          <span className="text-ink-3">Ayrıntı için bir güne gelin</span>
-        )}
-      </p>
-      <div className="relative mt-3 h-44">
-        {/* Hafif ızgara: üst değer ve sıfır çizgisi */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 border-t border-dashed border-line" />
-        <span className="pointer-events-none absolute -top-2.5 right-0 bg-surface pl-1 text-2xs text-ink-3">{formatPrice(max)}</span>
-        <div className="absolute inset-0 flex items-end gap-[2px] border-b border-line-strong" onMouseLeave={() => setActive(null)}>
-          {days.map((d, i) => (
-            <button
-              key={d.day}
-              type="button"
-              className="group flex h-full min-w-0 flex-1 items-end outline-none"
-              onMouseEnter={() => setActive(i)}
-              onFocus={() => setActive(i)}
-              onBlur={() => setActive(null)}
-              aria-label={`${formatDate(d.day)}: ${formatPrice(d.revenue)}, ${d.count} randevu`}
-            >
-              <span
-                className={`block w-full rounded-t-[4px] transition-colors ${active === i ? "bg-brand-300" : "bg-brand-500"} group-focus-visible:ring-2 group-focus-visible:ring-brand-500`}
-                style={{ height: `${(d.revenue / max) * 100}%` }}
-              />
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="mt-1.5 flex justify-between text-2xs text-ink-3">
-        <span>{short(days[0].day)}</span>
-        {days.length > 2 && <span>{short(days[Math.floor(days.length / 2)].day)}</span>}
-        <span>{short(days[days.length - 1].day)}</span>
-      </div>
-      <details className="mt-4 text-sm">
-        <summary className="cursor-pointer text-ink-3">Tablo olarak göster</summary>
-        <table className="mt-2 w-full text-left">
-          <thead className="text-xs text-ink-3">
-            <tr>
-              <th className="py-1 font-medium">Gün</th>
-              <th className="py-1 text-right font-medium">Randevu</th>
-              <th className="py-1 text-right font-medium">Ciro</th>
-            </tr>
-          </thead>
-          <tbody>
-            {days.filter((d) => d.count > 0).map((d) => (
-              <tr key={d.day} className="border-t border-line">
-                <td className="py-1.5">{formatDate(d.day)}</td>
-                <td className="py-1.5 text-right tabular-nums">{d.count}</td>
-                <td className="py-1.5 text-right tabular-nums">{formatPrice(d.revenue)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </details>
-    </div>
-  );
-}
-
-function Breakdown({ title, items }: { title: string; items: { name: string; count: number; revenue: number }[] }) {
-  const max = Math.max(...items.map((i) => i.revenue), 1);
-  return (
-    <section className="card p-5">
-      <h2 className="font-semibold">{title}</h2>
-      {items.length === 0 ? (
-        <p className="mt-3 text-sm text-ink-3">Veri yok.</p>
-      ) : (
-        <ul className="mt-3 space-y-3">
-          {items.slice(0, 8).map((i) => (
-            <li key={i.name} title={`${i.name}: ${formatPrice(i.revenue)}, ${i.count} randevu`}>
-              <div className="flex justify-between gap-2 text-sm">
-                <span className="truncate">{i.name}</span>
-                <span className="shrink-0 tabular-nums text-ink-2">
-                  {i.count} · <b className="text-ink">{formatPrice(i.revenue)}</b>
-                </span>
-              </div>
-              <div className="mt-1 h-2 rounded-full bg-surface-2">
-                <div className="h-2 rounded-full bg-brand-500" style={{ width: `${(i.revenue / max) * 100}%` }} />
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
   );
 }

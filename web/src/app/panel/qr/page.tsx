@@ -22,7 +22,7 @@ export default function QrPage() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <h1 className="text-xl font-bold print:hidden">QR kod ve bağlantı</h1>
+      <h1 className="text-2xl font-semibold tracking-tight print:hidden">QR kod ve bağlantı</h1>
       <p className="text-sm text-ink-3 print:hidden">
         QR kodu yazdırıp dükkânınıza asın; bağlantıyı Instagram, WhatsApp ve Google profilinize ekleyin.
       </p>

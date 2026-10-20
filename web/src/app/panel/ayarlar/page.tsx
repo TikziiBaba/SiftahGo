@@ -83,7 +83,7 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-8">
       <section>
-        <h1 className="text-xl font-bold">Görseller</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Görseller</h1>
         <div className="card mt-4 space-y-5 p-5">
           <div className="flex flex-wrap items-center gap-5">
             <div className="size-20 overflow-hidden rounded-2xl bg-brand-700">
@@ -139,7 +139,7 @@ export default function SettingsPage() {
 
       <form onSubmit={save} className="space-y-8">
         <section>
-          <h2 className="text-xl font-bold">İşletme bilgileri</h2>
+          <h2 className="text-2xl font-semibold tracking-tight">İşletme bilgileri</h2>
           <div className="card mt-4 grid gap-4 p-5 sm:grid-cols-2">
             <div>
               <label className="label">İşletme adı</label>
@@ -183,7 +183,7 @@ export default function SettingsPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-bold">Randevu kuralları</h2>
+          <h2 className="text-2xl font-semibold tracking-tight">Randevu kuralları</h2>
           <div className="card mt-4 grid gap-4 p-5 sm:grid-cols-3">
             <div>
               <label className="label">Saat aralığı</label>

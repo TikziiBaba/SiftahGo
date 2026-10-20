@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Download } from "lucide-react";
 import { formatDate } from "@/lib/format";
 
@@ -25,7 +24,7 @@ export const TONE = {
   rose: "bg-rose-400/10 text-rose-300 ring-1 ring-rose-400/20",
   sky: "bg-sky-400/10 text-sky-300 ring-1 ring-sky-400/20",
   brand: "bg-brand-400/10 text-brand-300 ring-1 ring-brand-400/20",
-  muted: "bg-white/5 text-ink-3 ring-1 ring-line",
+  muted: "bg-tint/5 text-ink-3 ring-1 ring-line",
 };
 
 export const PAYMENT_STATUS = {
@@ -65,7 +64,7 @@ export function Tile({ label, value, hint, tone }: { label: string; value: strin
       <p className="text-xs text-ink-3">{label}</p>
       <p
         className={`mt-1 text-2xl font-semibold tracking-tight tabular-nums ${
-          tone === "bad" ? "text-rose-300" : tone === "warn" ? "text-amber-300" : ""
+          tone === "bad" ? "text-bad" : tone === "warn" ? "text-warn" : ""
         }`}
       >
         {value}
@@ -95,88 +94,6 @@ export function Skeleton({ className = "h-64" }: { className?: string }) {
   return <div className={`animate-pulse rounded-2xl bg-surface-2 ${className}`} />;
 }
 
-/** Günlük sütun grafiği; fareyle veya klavyeyle bir güne gelince değeri gösterir. */
-export function DailyBars({
-  days,
-  format,
-  unit,
-}: {
-  days: { day: string; value: number }[];
-  format: (n: number) => string;
-  unit?: string;
-}) {
-  const [active, setActive] = useState<number | null>(null);
-  const max = Math.max(...days.map((d) => d.value), 1);
-  const total = days.reduce((s, d) => s + d.value, 0);
-  const shown = active !== null ? days[active] : null;
-  const short = (day: string) => formatDate(day, { weekday: undefined, month: "short" });
-
-  return (
-    <div className="mt-3">
-      <p className="h-5 text-sm text-ink-2" aria-live="polite">
-        {shown ? (
-          <>
-            <b className="text-ink">{formatDate(shown.day)}</b> · {format(shown.value)} {unit}
-          </>
-        ) : (
-          <span className="text-ink-3">
-            30 günde toplam <b className="text-ink">{format(total)}</b> {unit}
-          </span>
-        )}
-      </p>
-      <div className="relative mt-3 h-32">
-        <div className="pointer-events-none absolute inset-x-0 top-0 border-t border-dashed border-line" />
-        <div className="absolute inset-0 flex items-end gap-[2px] border-b border-line-strong" onMouseLeave={() => setActive(null)}>
-          {days.map((d, i) => (
-            <button
-              key={d.day}
-              type="button"
-              className="group flex h-full min-w-0 flex-1 items-end outline-none"
-              onMouseEnter={() => setActive(i)}
-              onFocus={() => setActive(i)}
-              onBlur={() => setActive(null)}
-              aria-label={`${formatDate(d.day)}: ${format(d.value)} ${unit ?? ""}`}
-            >
-              <span
-                className={`block w-full rounded-t-[3px] transition-colors ${active === i ? "bg-brand-300" : "bg-brand-500"} group-focus-visible:ring-2 group-focus-visible:ring-brand-500`}
-                style={{ height: `${(d.value / max) * 100}%`, minHeight: d.value ? 2 : 0 }}
-              />
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="mt-1.5 flex justify-between text-2xs text-ink-3">
-        <span>{short(days[0].day)}</span>
-        <span>{short(days[days.length - 1].day)}</span>
-      </div>
-    </div>
-  );
-}
-
-/** Yatay oran çubukları (dağılımlar için). */
-export function Breakdown({ items, format = String }: { items: { name: string; value: number; hint?: string }[]; format?: (n: number) => string }) {
-  const max = Math.max(...items.map((i) => i.value), 1);
-  if (items.length === 0) return <Empty>Veri yok.</Empty>;
-  return (
-    <ul className="mt-3 space-y-3">
-      {items.map((i) => (
-        <li key={i.name}>
-          <div className="flex justify-between gap-2 text-sm">
-            <span className="truncate">{i.name}</span>
-            <span className="shrink-0 tabular-nums text-ink-2">
-              {i.hint && <span className="text-ink-3">{i.hint} · </span>}
-              <b className="text-ink">{format(i.value)}</b>
-            </span>
-          </div>
-          <div className="mt-1 h-1.5 rounded-full bg-surface-2">
-            <div className="h-1.5 rounded-full bg-brand-500" style={{ width: `${(i.value / max) * 100}%` }} />
-          </div>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 /** Seçenek düğmeleri (filtre sekmeleri). */
 export function Tabs<T extends string>({
   value,
@@ -188,14 +105,14 @@ export function Tabs<T extends string>({
   options: { id: T; label: string; count?: number }[];
 }) {
   return (
-    <div className="flex gap-1 overflow-x-auto rounded-full bg-surface p-1 ring-1 ring-line">
+    <div className="flex gap-1 overflow-x-auto rounded-full [scrollbar-width:none] bg-surface p-1 ring-1 ring-line">
       {options.map((o) => (
         <button
           key={o.id}
           type="button"
           onClick={() => onChange(o.id)}
           className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${
-            value === o.id ? "bg-brand-400/15 text-brand-200" : "text-ink-3 hover:text-ink"
+            value === o.id ? "bg-brand-400/15 text-accent-strong" : "text-ink-3 hover:text-ink"
           }`}
         >
           {o.label}

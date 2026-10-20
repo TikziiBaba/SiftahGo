@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, MessageSquareText, Star } from "lucide-react";
+import { Loader2, MessageSquareReply, MessageSquareText, Star, ThumbsDown } from "lucide-react";
+import { KpiCard } from "@/components/charts";
 import { useBusiness } from "@/components/panel-context";
 import { createClient } from "@/lib/supabase/client";
 import { errorMessage, formatDate } from "@/lib/format";
@@ -35,15 +36,34 @@ export default function ReviewsPage() {
   const open = all.filter((r) => !r.reply).length;
   const list = onlyOpen ? all.filter((r) => !r.reply) : all;
   const counts = [5, 4, 3, 2, 1].map((n) => ({ n, c: all.filter((r) => r.rating === n).length }));
+  // Son 30 gün ve önceki 30 gün (yükleme anına göre; veri gelince hesaplanır).
+  const [now] = useState(() => Date.now());
+  const inDays = (r: Row, a: number, b: number) => {
+    const age = (now - new Date(r.created_at).getTime()) / 864e5;
+    return age >= a && age < b;
+  };
+  const last30 = all.filter((r) => inDays(r, 0, 30));
+  const prev30 = all.filter((r) => inDays(r, 30, 60));
+  const avg = (list: Row[]) => (list.length ? list.reduce((s, r) => s + r.rating, 0) / list.length : 0);
+  const answered = all.length ? (all.length - open) / all.length : 0;
 
   return (
     <div className="mx-auto max-w-4xl">
-      <h1 className="text-xl font-bold">Yorumlar</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Yorumlar</h1>
       <p className="text-sm text-ink-3">
         Sadece randevusu gerçekleşen müşteriler puan verebilir. Cevabınız işletme sayfanızda yorumun altında herkese görünür.
       </p>
 
-      <div className="card mt-5 grid gap-5 p-5 sm:grid-cols-[auto_1fr] sm:items-center">
+      {rows && all.length > 0 && (
+        <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <KpiCard label="Son 30 gün yorum" icon={MessageSquareText} value={String(last30.length)} cur={last30.length} prev={prev30.length} />
+          <KpiCard label="Son 30 gün ortalama" icon={Star} value={last30.length ? avg(last30).toFixed(1) : "—"} cur={avg(last30)} prev={avg(prev30)} />
+          <KpiCard label="Cevap oranı" icon={MessageSquareReply} value={`%${Math.round(answered * 100)}`} hint={`${open} yorum cevap bekliyor`} tone={open ? "warn" : undefined} />
+          <KpiCard label="Düşük puan (1–2)" icon={ThumbsDown} value={String(all.filter((r) => r.rating <= 2).length)} hint="Bunlara cevap vermek güven verir" />
+        </div>
+      )}
+
+      <div className="card mt-3 grid gap-5 p-5 sm:grid-cols-[auto_1fr] sm:items-center">
         <div className="text-center sm:pr-6">
           <p className="text-4xl font-bold">{business.rating_count > 0 ? Number(business.rating_avg).toFixed(1) : "—"}</p>
           <Stars value={Math.round(Number(business.rating_avg))} className="mt-1 justify-center" />

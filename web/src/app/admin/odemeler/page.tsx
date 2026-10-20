@@ -6,7 +6,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { CsvButton, dateTime, Empty, isAdminPayment, PageTitle, PAYMENT_STATUS, Skeleton, Tabs, Tile } from "@/components/admin/ui";
 import { createClient } from "@/lib/supabase/client";
-import { errorMessage, formatPrice } from "@/lib/format";
+import { dayOf, errorMessage, formatDate, formatPrice } from "@/lib/format";
+import { BarChart } from "@/components/charts";
 import type { Payment, Plan } from "@/lib/types";
 
 type Row = Payment & { business_id: string; businesses: { name: string; slug: string } | null };
@@ -64,10 +65,22 @@ export default function AdminPayments() {
       admin: paid.filter((p) => isAdminPayment(p.merchant_oid)),
       paidCount: paid.length,
       conversion: inScope.length ? Math.round((paid.length / inScope.length) * 100) : 0,
+      // Aylara göre tahsilat (eskiden yeniye, en fazla 12 ay).
+      monthly: (() => {
+        const map = new Map<string, number>();
+        for (const p of paid) {
+          const m = dayOf(p.paid_at ?? p.created_at).slice(0, 7);
+          map.set(m, (map.get(m) ?? 0) + Number(p.amount));
+        }
+        return [...map.entries()]
+          .sort(([a], [b]) => a.localeCompare(b))
+          .slice(-12)
+          .map(([m, v]) => ({ label: formatDate(`${m}-15`, { weekday: undefined, day: undefined, month: "short", year: "2-digit" }), value: v }));
+      })(),
     };
   }, [data, status, source, period, q]);
 
-  if (error) return <p className="mx-auto max-w-6xl rounded-2xl bg-rose-500/10 p-4 text-sm text-rose-300">{error}</p>;
+  if (error) return <p className="mx-auto max-w-6xl rounded-2xl bg-rose-500/10 p-4 text-sm text-bad">{error}</p>;
   const planName = (id: string) => data?.plans.find((p) => p.id === id)?.name ?? id;
 
   return (
@@ -96,6 +109,12 @@ export default function AdminPayments() {
           <Tile label="PayTR" value={formatPrice(view.paytr)} />
           <Tile label="Yönetici tanımlı" value={String(view.admin.length)} hint={`${formatPrice(view.admin.reduce((s, p) => s + Number(p.amount), 0))} elden/havale`} />
           <Tile label="Tamamlanma oranı" value={`%${view.conversion}`} hint="Başlatılan ödemelerden" tone={view.conversion < 50 && view.counts.all > 3 ? "warn" : undefined} />
+        </div>
+      )}
+      {view && view.monthly.length > 0 && (
+        <div className="card mt-4 p-5">
+          <h2 className="font-semibold">Aylık tahsilat</h2>
+          <BarChart title="Aylık tahsilat" data={view.monthly} format={formatPrice} height={140} />
         </div>
       )}
 

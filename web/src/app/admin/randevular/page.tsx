@@ -6,7 +6,8 @@ import { Search } from "lucide-react";
 import { CsvButton, dateTime, Empty, PageTitle, Skeleton, Tabs, Tile } from "@/components/admin/ui";
 import { createClient } from "@/lib/supabase/client";
 import { STATUS } from "@/lib/constants";
-import { addDays, dayBounds, errorMessage, formatPrice, todayStr } from "@/lib/format";
+import { addDays, dayBounds, dayOf, errorMessage, formatDate, formatPrice, todayStr } from "@/lib/format";
+import { BarChart } from "@/components/charts";
 import type { Appointment, AppointmentStatus } from "@/lib/types";
 
 type Row = Appointment & { businesses: { name: string } | null };
@@ -63,10 +64,15 @@ export default function AdminAppointments() {
       businesses: new Set(searched.map((a) => a.business_id)).size,
       gmv: by("completed").reduce((s, a) => s + Number(a.price), 0),
       guests: searched.filter((a) => !a.customer_id).length,
+      daily: (() => {
+        const map = new Map<string, number>();
+        for (const a of searched) if (a.status !== "cancelled") map.set(dayOf(a.starts_at), (map.get(dayOf(a.starts_at)) ?? 0) + 1);
+        return [...map.entries()].sort(([x], [y]) => x.localeCompare(y)).map(([d, v]) => ({ label: formatDate(d, { weekday: undefined, month: "short" }), value: v }));
+      })(),
     };
   }, [rows, status, q]);
 
-  if (error) return <p className="mx-auto max-w-6xl rounded-2xl bg-rose-500/10 p-4 text-sm text-rose-300">{error}</p>;
+  if (error) return <p className="mx-auto max-w-6xl rounded-2xl bg-rose-500/10 p-4 text-sm text-bad">{error}</p>;
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -98,8 +104,14 @@ export default function AdminAppointments() {
           <Tile label="Misafir / elle" value={String(view.guests)} hint="Hesapsız alınan" />
         </div>
       )}
+      {view && view.daily.length > 1 && (
+        <div className="card mt-4 p-5">
+          <h2 className="font-semibold">Günlük randevu (iptaller hariç)</h2>
+          <BarChart title="Günlük randevu" data={view.daily} format={(x) => `${Math.round(x)}`} height={130} />
+        </div>
+      )}
       {rows?.length === LIMIT && (
-        <p className="mt-3 text-xs text-amber-300">İlk {LIMIT} randevu gösteriliyor; daha kısa bir dönem seçin.</p>
+        <p className="mt-3 text-xs text-warn">İlk {LIMIT} randevu gösteriliyor; daha kısa bir dönem seçin.</p>
       )}
 
       <div className="mt-4 flex flex-wrap items-center gap-2">

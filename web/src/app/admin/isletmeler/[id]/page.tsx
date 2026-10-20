@@ -28,9 +28,11 @@ import {
   Tile,
   TONE,
 } from "@/components/admin/ui";
+import { AreaChart, Donut, STATUS_COLORS } from "@/components/charts";
 import { createClient } from "@/lib/supabase/client";
 import { categoryLabel, STATUS } from "@/lib/constants";
-import { errorMessage, formatDuration, formatPrice, intlPhone } from "@/lib/format";
+import { addDays, dayOf, errorMessage, formatDate, formatDuration, formatPrice, intlPhone, isoWeekday, todayStr } from "@/lib/format";
+import type { AppointmentStatus } from "@/lib/types";
 import type { AdminUser } from "@/lib/admin-types";
 import type { Appointment, Business, Payment, Plan, Review, Service, Staff } from "@/lib/types";
 
@@ -55,9 +57,8 @@ export default function AdminBusinessDetail() {
 
   const load = useCallback(async () => {
     const supabase = createClient();
-    const [b, u, p, st, sv, a, pay, r] = await Promise.all([
+    const [b, p, st, sv, a, pay, r] = await Promise.all([
       supabase.from("businesses").select("*").eq("id", id).maybeSingle(),
-      supabase.rpc("admin_users"),
       supabase.from("plans").select("*").order("sort_order"),
       supabase.from("staff").select("*").eq("business_id", id).order("sort_order").order("created_at"),
       supabase.from("services").select("*").eq("business_id", id).order("sort_order").order("created_at"),
@@ -67,6 +68,9 @@ export default function AdminBusinessDetail() {
     ]);
     if (b.error) return setError(errorMessage(b.error));
     if (!b.data) return setData(null);
+    // Sahip tek kullanıcı olarak istenir; yeni imza (p_id) canlıda yoksa tüm liste çekilir.
+    let u = await supabase.rpc("admin_users", { p_id: b.data.owner_id });
+    if (u.error) u = await supabase.rpc("admin_users");
     setData({
       business: b.data as Data["business"],
       owner: ((u.data ?? []) as AdminUser[]).find((x) => x.id === b.data.owner_id) ?? null,
@@ -101,10 +105,25 @@ export default function AdminBusinessDetail() {
       revenue: data.appointments.filter((a) => a.status === "completed").reduce((s, a) => s + Number(a.price), 0),
       customers: phones.size,
       paid: data.payments.filter((p) => p.status === "paid").reduce((s, p) => s + Number(p.amount), 0),
+      // Son 12 hafta (Pazartesi başlangıçlı): randevu sayısı ve tamamlanan ciro.
+      weeks: (() => {
+        const monday = addDays(todayStr(), 1 - isoWeekday(todayStr()));
+        return Array.from({ length: 12 }, (_, i) => {
+          const start = addDays(monday, (i - 11) * 7);
+          const end = addDays(start, 7);
+          const list = data.appointments.filter((a) => dayOf(a.starts_at) >= start && dayOf(a.starts_at) < end && a.status !== "cancelled");
+          return {
+            label: formatDate(start, { weekday: undefined, month: "short" }),
+            count: list.length,
+            revenue: list.filter((a) => a.status === "completed").reduce((s, a) => s + Number(a.price), 0),
+          };
+        });
+      })(),
+      byStatus: (Object.keys(STATUS) as AppointmentStatus[]).map((st) => ({ label: STATUS[st].label, value: by(st), color: STATUS_COLORS[st] })),
     };
   }, [data]);
 
-  if (error) return <p className="mx-auto max-w-6xl rounded-2xl bg-rose-500/10 p-4 text-sm text-rose-300">{error}</p>;
+  if (error) return <p className="mx-auto max-w-6xl rounded-2xl bg-rose-500/10 p-4 text-sm text-bad">{error}</p>;
   if (data === undefined || !stats) return <div className="mx-auto max-w-6xl space-y-4"><Skeleton className="h-32" /><Skeleton className="h-96" /></div>;
   if (data === null) {
     return (
@@ -130,7 +149,7 @@ export default function AdminBusinessDetail() {
           {b.logo_url ? (
             <img src={b.logo_url} alt="" className="size-16 rounded-2xl object-cover ring-1 ring-line" />
           ) : (
-            <span className="grid size-16 place-items-center rounded-2xl bg-brand-400/10 text-2xl font-semibold text-brand-300">
+            <span className="grid size-16 place-items-center rounded-2xl bg-brand-400/10 text-2xl font-semibold text-accent">
               {b.name.slice(0, 1)}
             </span>
           )}
@@ -157,6 +176,15 @@ export default function AdminBusinessDetail() {
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_380px]">
+        <Section title="Haftalık randevu (12 hafta)">
+          <AreaChart title="Haftalık randevu" data={stats.weeks.map((w) => ({ label: w.label, value: w.count }))} format={(x) => `${Math.round(x)}`} height={160} />
+        </Section>
+        <Section title="Randevu durumları">
+          <Donut title="Randevu durumları" items={stats.byStatus} />
+        </Section>
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_380px]">
         <div className="space-y-4">
           <Section title="Abonelik">
             <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
@@ -172,22 +200,28 @@ export default function AdminBusinessDetail() {
           <Section title="Bilgiler">
             <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
               <Info label="Sahip">
-                {owner?.full_name || "—"}
+                {owner ? (
+                  <Link href={`/admin/kullanicilar/${owner.id}`} className="hover:text-accent hover:underline">
+                    {owner.full_name || "İsimsiz"}
+                  </Link>
+                ) : (
+                  "—"
+                )}
                 {owner && <p className="text-xs text-ink-3">Son giriş: {dateTime(owner.last_sign_in_at)}</p>}
               </Info>
               <Info label="İletişim">
                 <div className="flex flex-wrap gap-1.5">
                   {owner?.email && (
-                    <a href={`mailto:${owner.email}`} className="chip gap-1 bg-white/5 ring-1 ring-line hover:text-brand-300">
+                    <a href={`mailto:${owner.email}`} className="chip gap-1 bg-tint/5 ring-1 ring-line hover:text-accent">
                       <Mail className="size-3" /> {owner.email}
                     </a>
                   )}
                   {b.phone && (
                     <>
-                      <a href={`tel:${b.phone}`} className="chip gap-1 bg-white/5 ring-1 ring-line hover:text-brand-300">
+                      <a href={`tel:${b.phone}`} className="chip gap-1 bg-tint/5 ring-1 ring-line hover:text-accent">
                         <Phone className="size-3" /> {b.phone}
                       </a>
-                      <a href={`https://wa.me/${intlPhone(b.phone)}`} target="_blank" rel="noreferrer" className="chip gap-1 bg-white/5 ring-1 ring-line hover:text-brand-300">
+                      <a href={`https://wa.me/${intlPhone(b.phone)}`} target="_blank" rel="noreferrer" className="chip gap-1 bg-tint/5 ring-1 ring-line hover:text-accent">
                         <MessageCircle className="size-3" /> WhatsApp
                       </a>
                     </>
@@ -380,14 +414,14 @@ function Actions({ data, onDone }: { data: Data; onDone: () => Promise<void> }) 
   return (
     <Section title="Yönetici işlemleri" className="ring-1 ring-gold/20">
       {message && (
-        <p className={`mt-3 rounded-xl p-3 text-sm ${message.ok ? "bg-emerald-400/10 text-emerald-200" : "bg-rose-500/10 text-rose-300"}`}>
+        <p className={`mt-3 rounded-xl p-3 text-sm ${message.ok ? "bg-emerald-400/10 text-emerald-200" : "bg-rose-500/10 text-bad"}`}>
           {message.text}
         </p>
       )}
 
       <div className="mt-4 space-y-3">
         <p className="flex items-center gap-2 text-sm font-medium">
-          <CalendarPlus className="size-4 text-brand-300" /> {subscribed ? "Süre uzat / paket değiştir" : "Paket tanımla"}
+          <CalendarPlus className="size-4 text-accent" /> {subscribed ? "Süre uzat / paket değiştir" : "Paket tanımla"}
         </p>
         <select className="input" value={planId} onChange={(e) => setPlanId(e.target.value)} aria-label="Paket">
           {plans.map((p) => (
@@ -434,7 +468,7 @@ function Actions({ data, onDone }: { data: Data; onDone: () => Promise<void> }) 
             {busy === "end" ? <Loader2 className="size-4 animate-spin" /> : <CircleSlash className="size-4 text-amber-300" />} Aboneliği şimdi bitir
           </button>
         )}
-        <button type="button" disabled={!!busy} onClick={suspend} className={`btn w-full justify-start ${b.is_suspended ? "btn-secondary" : "bg-rose-500/10 text-rose-300 ring-1 ring-rose-400/20 hover:bg-rose-500/20"}`}>
+        <button type="button" disabled={!!busy} onClick={suspend} className={`btn w-full justify-start ${b.is_suspended ? "btn-secondary" : "bg-rose-500/10 text-bad ring-1 ring-rose-400/20 hover:bg-rose-500/20"}`}>
           {busy === "suspend" ? (
             <Loader2 className="size-4 animate-spin" />
           ) : b.is_suspended ? (

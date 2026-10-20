@@ -53,7 +53,7 @@ export default function ServicesPage() {
     <div className="mx-auto max-w-3xl">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">Hizmetler</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Hizmetler</h1>
           <p className="text-sm text-ink-3">Müşterilerin randevu alabileceği hizmetler, süreleri ve fiyatları.</p>
         </div>
         <button className="btn btn-primary" onClick={() => setEditing({ id: null, values: EMPTY })}>

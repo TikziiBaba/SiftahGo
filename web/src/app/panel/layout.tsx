@@ -12,11 +12,15 @@ import {
   ExternalLink,
   Loader2,
   LogOut,
+  MoreHorizontal,
   QrCode,
   Scissors,
   Settings,
+  Sparkles,
   Star,
   Users,
+  X,
+  type LucideIcon,
 } from "lucide-react";
 import { InboxBell } from "@/components/inbox-bell";
 import { Logo } from "@/components/site-header";
@@ -25,21 +29,44 @@ import { createClient } from "@/lib/supabase/client";
 import { isSubscribed, isTrial } from "@/lib/constants";
 import type { Business } from "@/lib/types";
 
-const NAV = [
-  { href: "/panel", label: "Randevular", icon: CalendarDays },
-  { href: "/panel/musteriler", label: "Müşteriler", icon: Contact },
-  { href: "/panel/yorumlar", label: "Yorumlar", icon: Star },
-  { href: "/panel/raporlar", label: "Raporlar", icon: BarChart3 },
-  { href: "/panel/hizmetler", label: "Hizmetler", icon: Scissors },
-  { href: "/panel/personel", label: "Personel", icon: Users },
-  { href: "/panel/saatler", label: "Saatler", icon: Clock },
-  { href: "/panel/ayarlar", label: "Ayarlar", icon: Settings },
-  { href: "/panel/qr", label: "QR Kod", icon: QrCode },
-  { href: "/panel/abonelik", label: "Abonelik", icon: CreditCard },
+type Item = { href: string; label: string; icon: LucideIcon; badge?: "pending" | "reviews" };
+
+// Menü işe göre gruplu: günlük işler üstte, ayarlar altta.
+const GROUPS: { title: string; items: Item[] }[] = [
+  {
+    title: "Günlük",
+    items: [
+      { href: "/panel", label: "Bugün", icon: CalendarDays, badge: "pending" },
+      { href: "/panel/musteriler", label: "Müşteriler", icon: Contact },
+      { href: "/panel/yorumlar", label: "Yorumlar", icon: Star, badge: "reviews" },
+    ],
+  },
+  {
+    title: "İşletmem",
+    items: [
+      { href: "/panel/hizmetler", label: "Hizmetler", icon: Scissors },
+      { href: "/panel/personel", label: "Personel", icon: Users },
+      { href: "/panel/saatler", label: "Çalışma saatleri", icon: Clock },
+      { href: "/panel/ayarlar", label: "Ayarlar", icon: Settings },
+    ],
+  },
+  {
+    title: "Büyüme",
+    items: [
+      { href: "/panel/raporlar", label: "Raporlar", icon: BarChart3 },
+      { href: "/panel/qr", label: "QR kod", icon: QrCode },
+    ],
+  },
+  { title: "Hesap", items: [{ href: "/panel/abonelik", label: "Abonelik", icon: CreditCard }] },
 ];
+const ALL = GROUPS.flatMap((g) => g.items);
+// Telefonda alt çubukta duran dört sekme; kalanlar "Daha fazla" sayfasında.
+const PRIMARY = ["/panel", "/panel/musteriler", "/panel/raporlar", "/panel/yorumlar"];
 
 // Aboneliği olmayan işletmenin açabileceği sayfalar.
 const OPEN_WITHOUT_PLAN = ["/panel/abonelik", "/panel/ayarlar"];
+
+const PLAN_NAMES: Record<string, string> = { baslangic: "Başlangıç", esnaf: "Esnaf", pro: "Pro" };
 
 export default function PanelLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -47,6 +74,8 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
   const [business, setBusiness] = useState<Business | null | undefined>(undefined);
   // Abonelik durumu veri yüklenirken hesaplanır (render sırasında saat okunmaz).
   const [sub, setSub] = useState({ subscribed: false, trial: false, daysLeft: 0 });
+  const [badges, setBadges] = useState({ pending: 0, reviews: 0 });
+  const [more, setMore] = useState(false);
 
   const refresh = useCallback(async () => {
     const supabase = createClient();
@@ -66,6 +95,22 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
     // eslint-disable-next-line react-hooks/set-state-in-effect -- işletmeyi ilk açılışta yükle
     refresh();
   }, [refresh]);
+
+  // Menü rozetleri: onay bekleyen yaklaşan randevular ve cevaplanmamış yorumlar. Sayfa değişince tazelenir.
+  const businessId = business?.id;
+  useEffect(() => {
+    if (!businessId) return;
+    const supabase = createClient();
+    Promise.all([
+      supabase
+        .from("appointments")
+        .select("id", { count: "exact", head: true })
+        .eq("business_id", businessId)
+        .eq("status", "pending")
+        .gte("starts_at", new Date().toISOString()),
+      supabase.from("reviews").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("reply", ""),
+    ]).then(([p, r]) => setBadges({ pending: p.count ?? 0, reviews: r.count ?? 0 }));
+  }, [businessId, pathname]);
 
   useEffect(() => {
     if (business === null && pathname !== "/panel/kurulum") router.replace("/panel/kurulum");
@@ -93,32 +138,82 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
     router.replace("/esnaf");
   }
 
+  const badgeOf = (item: Item) => (item.badge ? badges[item.badge] : 0);
+  const current = ALL.find((i) => i.href === pathname);
+  const moreActive = !PRIMARY.includes(pathname);
+  const planName = business.plan_id ? PLAN_NAMES[business.plan_id] ?? business.plan_id : "Paketsiz";
+
   return (
     <BusinessContext.Provider value={{ business, refresh }}>
       <div className="flex min-h-full flex-1">
-        <aside className="sticky top-0 hidden print:hidden h-screen w-60 shrink-0 flex-col border-r border-line bg-surface p-4 md:flex">
-          <Logo />
-          <nav className="mt-8 flex flex-1 flex-col gap-1">
-            {NAV.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
-                  pathname === item.href ? "bg-brand-400/10 text-brand-300" : "text-ink-2 hover:bg-white/5"
-                }`}
-              >
-                <item.icon className="size-4.5" /> {item.label}
-              </Link>
+        <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-line bg-surface/60 p-4 backdrop-blur print:hidden md:flex">
+          <Logo href="/panel" />
+          <Link
+            href={`/${business.slug}`}
+            target="_blank"
+            className="mt-6 flex items-center gap-3 rounded-2xl bg-tint/[0.03] p-2.5 ring-1 ring-line transition hover:ring-line-strong"
+          >
+            <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-br from-brand-300 to-brand-600 text-sm font-bold text-brand-950">
+              {business.logo_url ? <img src={business.logo_url} alt="" className="size-full object-cover" /> : business.name.charAt(0).toLocaleUpperCase("tr")}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-semibold">{business.name}</span>
+              <span className="flex items-center gap-1 text-2xs text-ink-3">
+                <ExternalLink className="size-3" /> Sayfamı gör
+              </span>
+            </span>
+          </Link>
+          <nav className="mt-5 flex flex-1 flex-col gap-4 overflow-y-auto [scrollbar-width:none]">
+            {GROUPS.map((g) => (
+              <div key={g.title}>
+                <p className="px-3 pb-1 text-3xs font-semibold uppercase tracking-[0.18em] text-ink-3">{g.title}</p>
+                <div className="flex flex-col gap-0.5">
+                  {g.items.map((item) => {
+                    const on = pathname === item.href;
+                    const n = badgeOf(item);
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        aria-current={on ? "page" : undefined}
+                        className={`relative flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition ${
+                          on ? "bg-brand-400/10 text-accent" : "text-ink-2 hover:bg-tint/5 hover:text-ink"
+                        }`}
+                      >
+                        {on && <span className="absolute -left-4 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-brand-400" />}
+                        <item.icon className="size-4.5" /> <span className="flex-1">{item.label}</span>
+                        {n > 0 && (
+                          <span className={`min-w-5 rounded-full px-1.5 text-center text-2xs font-semibold tabular-nums ${item.badge === "pending" ? "bg-amber-400 text-amber-950" : "bg-brand-400/20 text-accent"}`}>
+                            {n}
+                          </span>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
             ))}
           </nav>
-          <button onClick={logout} className="btn btn-ghost justify-start">
+          <Link href="/panel/abonelik" className="mt-4 block rounded-2xl bg-gradient-to-br from-brand-400/15 to-gold/10 p-3 ring-1 ring-brand-400/20">
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-accent">
+              <Sparkles className="size-3.5" /> {trial ? "Pro deneme" : `${planName} paketi`}
+            </p>
+            <p className="mt-0.5 text-2xs text-ink-3">{daysLeft > 0 ? `${daysLeft} gün kaldı` : "Süresi doldu"}</p>
+            <div className="mt-2 h-1 rounded-full bg-tint/10">
+              <div className="h-1 rounded-full bg-brand-400" style={{ width: `${Math.min(100, Math.max(4, (daysLeft / (trial ? 7 : 30)) * 100))}%` }} />
+            </div>
+          </Link>
+          <button onClick={logout} className="btn btn-ghost mt-2 justify-start">
             <LogOut className="size-4" /> Çıkış
           </button>
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-20 flex print:hidden h-16 items-center justify-between gap-3 border-b border-line bg-bg/75 px-4 backdrop-blur-xl md:px-8">
-            <p className="truncate font-semibold">{business.name}</p>
+          <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b border-line bg-bg/75 px-4 backdrop-blur-xl print:hidden md:px-8">
+            <div className="min-w-0">
+              <p className="truncate text-2xs font-medium uppercase tracking-[0.18em] text-ink-3 md:hidden">{business.name}</p>
+              <p className="truncate font-semibold">{current?.label ?? "Panel"}</p>
+            </div>
             <div className="flex items-center gap-1">
               <InboxBell />
               <Link href={`/${business.slug}`} target="_blank" className="btn btn-secondary py-2">
@@ -137,7 +232,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
           {trial && pathname !== "/panel/abonelik" && (
             <Link
               href="/panel/abonelik"
-              className="flex items-center justify-center gap-2 border-b border-brand-400/20 bg-brand-400/10 px-4 py-2 text-sm text-brand-200 print:hidden"
+              className="flex items-center justify-center gap-2 border-b border-brand-400/20 bg-brand-400/10 px-4 py-2 text-sm text-accent-strong print:hidden"
             >
               Ücretsiz Pro denemenizin bitmesine {daysLeft} gün kaldı. Sayfanız yayında kalsın diye paket seçin →
             </Link>
@@ -153,19 +248,50 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
           <main className="flex-1 px-4 pb-28 pt-6 md:px-8 md:pb-10">{children}</main>
         </div>
 
-        <nav className="fixed inset-x-0 bottom-0 z-30 flex overflow-x-auto border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] print:hidden md:hidden">
-          {NAV.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex min-w-16 flex-1 flex-col items-center gap-0.5 py-2 text-3xs font-medium ${
-                pathname === item.href ? "text-brand-300" : "text-ink-3"
-              }`}
-            >
-              <item.icon className="size-5" /> {item.label}
-            </Link>
-          ))}
+        {/* Telefon: dört ana sekme + "Daha fazla" */}
+        <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur print:hidden md:hidden">
+          {PRIMARY.map((href) => {
+            const item = ALL.find((i) => i.href === href)!;
+            const on = pathname === href;
+            const n = badgeOf(item);
+            return (
+              <Link key={href} href={href} aria-current={on ? "page" : undefined} className={`relative flex flex-col items-center gap-0.5 py-2 text-3xs font-medium ${on ? "text-accent" : "text-ink-3"}`}>
+                <item.icon className="size-5" />
+                {item.label}
+                {n > 0 && <span className="absolute right-[22%] top-1 min-w-4 rounded-full bg-amber-400 px-1 text-center text-3xs font-bold text-amber-950">{n}</span>}
+              </Link>
+            );
+          })}
+          <button type="button" onClick={() => setMore(true)} className={`flex flex-col items-center gap-0.5 py-2 text-3xs font-medium ${moreActive ? "text-accent" : "text-ink-3"}`}>
+            <MoreHorizontal className="size-5" />
+            Daha fazla
+          </button>
         </nav>
+        {more && (
+          <div className="fixed inset-0 z-40 grid place-items-end bg-black/60 md:hidden" onClick={() => setMore(false)}>
+            <div onClick={(e) => e.stopPropagation()} className="w-full rounded-t-3xl bg-surface p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] ring-1 ring-line">
+              <div className="flex items-center justify-between">
+                <p className="font-semibold">Tüm bölümler</p>
+                <button type="button" onClick={() => setMore(false)} aria-label="Kapat" className="grid size-9 place-items-center rounded-full ring-1 ring-line">
+                  <X className="size-4" />
+                </button>
+              </div>
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                {ALL.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMore(false)}
+                    className={`flex flex-col items-center gap-1.5 rounded-2xl p-3 text-xs font-medium ring-1 ${pathname === item.href ? "bg-brand-400/10 text-accent ring-brand-400/30" : "text-ink-2 ring-line"}`}
+                  >
+                    <item.icon className="size-5" />
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </BusinessContext.Provider>
   );

@@ -74,7 +74,7 @@ export default function HoursPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-8">
       <section>
-        <h1 className="text-xl font-bold">Çalışma saatleri</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Çalışma saatleri</h1>
         <p className="text-sm text-ink-3">Müşteriler sadece açık olduğunuz saatlerde randevu alabilir.</p>
 
         <div className="card mt-4 divide-y divide-line">
@@ -108,7 +108,7 @@ export default function HoursPage() {
       <section>
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-xl font-bold">İzin ve tatiller</h2>
+            <h2 className="text-2xl font-semibold tracking-tight">İzin ve tatiller</h2>
             <p className="text-sm text-ink-3">Bu aralıklarda randevu alınamaz (öğle arası, tatil, izin günü vb.).</p>
           </div>
           <button className="btn btn-secondary" onClick={() => setOffForm({ staff_id: "", start: "", end: "", reason: "" })}>

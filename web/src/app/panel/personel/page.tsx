@@ -112,7 +112,7 @@ export default function StaffPage() {
     <div className="mx-auto max-w-3xl">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">Personel</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Personel</h1>
           <p className="text-sm text-ink-3">
             Her personelin ayrı takvimi olur; aynı saatte her biri ayrı randevu alabilir.
           </p>

@@ -90,7 +90,7 @@ function Customers() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <h1 className="text-xl font-bold">Müşteriler</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Müşteriler</h1>
       <p className="text-sm text-ink-3">
         Randevu alan herkes telefon numarasına göre burada listelenir. Uzun süredir gelmeyenlere WhatsApp’tan ulaşabilirsiniz.
         Notlarınızı yalnızca siz görürsünüz; müşterinin randevusunda da gösterilir. Seans paketinde, paketteki hizmetten
