@@ -1,4 +1,4 @@
-import { paytrConfigured, verifyPaytrCallback } from "@/lib/paytr";
+import { paytrConfigured, paytrTestMode, verifyPaytrCallback } from "@/lib/paytr";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // PayTR "Bildirim URL": ödeme sonucu buraya gelir. PayTR panelinde
@@ -6,7 +6,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 // Yanıt yalnızca düz metin "OK" olmalı; yoksa PayTR tekrar dener.
 export async function POST(request: Request) {
   if (!paytrConfigured()) return new Response("PAYTR not configured", { status: 503 });
-  const form = await request.formData();
+  let form: FormData;
+  try {
+    form = await request.formData();
+  } catch {
+    return new Response("PAYTR notification failed: bad request", { status: 400 });
+  }
   const p = {
     merchant_oid: String(form.get("merchant_oid") ?? ""),
     status: String(form.get("status") ?? ""),
@@ -20,8 +25,11 @@ export async function POST(request: Request) {
   }
 
   const supabase = createAdminClient();
+  // Canlı yapılandırmada test kartıyla yapılan ödeme aboneliği açmaz (PayTR mağazası test modunda kalmışsa).
+  const testPayment = String(form.get("test_mode") ?? "0") === "1" && !paytrTestMode();
+  if (testPayment) console.error("PayTR bildirimi: canlı ortamda test ödemesi reddedildi", p.merchant_oid);
   const { error } =
-    p.status === "success"
+    p.status === "success" && !testPayment
       ? await supabase.rpc("activate_subscription", { p_merchant_oid: p.merchant_oid, p_total_amount: Number(p.total_amount) / 100 })
       : await supabase.rpc("fail_payment", { p_merchant_oid: p.merchant_oid });
 

@@ -1,5 +1,6 @@
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { safeNext as toSafeNext } from "@/lib/safe-next";
 import { createClient } from "@/lib/supabase/server";
 
 // Supabase e-posta şablonlarındaki bağlantılar buraya gelir (supabase/email-templates).
@@ -15,7 +16,7 @@ export async function GET(request: Request) {
   } catch {
     // redirect_to yoksa veya geçersizse varsayılan kalır.
   }
-  const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "/";
+  const safeNext = toSafeNext(next) ?? "/";
 
   if (tokenHash && type) {
     const supabase = await createClient();

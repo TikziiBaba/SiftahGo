@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient as createTokenClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { uploadToR2 } from "@/lib/r2";
+import { isSameOrigin } from "@/lib/same-origin";
 
 const KINDS = ["logo", "cover", "gallery"] as const;
 const TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
@@ -19,6 +20,8 @@ const MAX_BYTES = 4 * 1024 * 1024;
 // Mobil uygulamada çerez yok; oturum "Authorization: Bearer <erişim anahtarı>" ile gelir.
 export async function POST(request: Request) {
   const token = request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
+  // Çerezle gelen istek başka siteden gönderilemez; mobil uygulama çerez değil Bearer kullanır.
+  if (!token && !isSameOrigin(request)) return NextResponse.json({ error: "Geçersiz istek." }, { status: 403 });
   const supabase = token
     ? createTokenClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
         global: { headers: { Authorization: `Bearer ${token}` } },
@@ -32,7 +35,14 @@ export async function POST(request: Request) {
   const { data: business } = await supabase.from("businesses").select("id").eq("owner_id", userId).maybeSingle();
   if (!business) return NextResponse.json({ error: "İşletme bulunamadı." }, { status: 403 });
 
-  const form = await request.formData();
+  const length = Number(request.headers.get("content-length") ?? 0);
+  if (length > MAX_BYTES + 64 * 1024) return NextResponse.json({ error: "Görsel en fazla 4 MB olabilir." }, { status: 413 });
+  let form: FormData;
+  try {
+    form = await request.formData();
+  } catch {
+    return NextResponse.json({ error: "Geçersiz istek." }, { status: 400 });
+  }
   const file = form.get("file");
   const kind = form.get("kind") as (typeof KINDS)[number];
 

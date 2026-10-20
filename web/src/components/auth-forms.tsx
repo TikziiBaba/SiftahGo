@@ -8,10 +8,7 @@ import { Turnstile, turnstileEnabled } from "@/components/turnstile";
 import { createClient } from "@/lib/supabase/client";
 import { REFERRAL_KEY } from "@/lib/constants";
 import { errorMessage } from "@/lib/format";
-
-function safeNext(next: string | null) {
-  return next && next.startsWith("/") && !next.startsWith("//") ? next : null;
-}
+import { safeNext } from "@/lib/safe-next";
 
 type InputProps = React.InputHTMLAttributes<HTMLInputElement> & { id: string };
 
@@ -33,7 +30,7 @@ function Field({ label, icon: Icon, aside, ...input }: InputProps & { label: str
             type="button"
             onClick={() => setShow(!show)}
             aria-label={show ? "Şifreyi gizle" : "Şifreyi göster"}
-            className="absolute right-1.5 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-lg text-ink-3 transition hover:bg-white/[0.05] hover:text-ink"
+            className="absolute right-1.5 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-lg text-ink-3 transition hover:bg-tint/[0.05] hover:text-ink"
           >
             {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
           </button>
@@ -60,7 +57,7 @@ function useCaptcha() {
 
 function FormError({ children }: { children: React.ReactNode }) {
   return (
-    <p role="alert" className="flex items-start gap-2 rounded-xl border border-rose-500/20 bg-rose-500/10 px-3.5 py-2.5 text-sm text-rose-300">
+    <p role="alert" className="flex items-start gap-2 rounded-xl border border-rose-500/20 bg-rose-500/10 px-3.5 py-2.5 text-sm text-bad">
       <AlertCircle className="mt-0.5 size-4 shrink-0" />
       <span>{children}</span>
     </p>
@@ -175,7 +172,7 @@ export function LoginForm() {
         autoComplete="current-password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
-        aside={<Link href="/sifremi-unuttum" className="text-sm text-brand-300 hover:underline">Şifremi unuttum</Link>}
+        aside={<Link href="/sifremi-unuttum" className="text-sm text-accent hover:underline">Şifremi unuttum</Link>}
       />
       {captcha.widget}
       {error && <FormError>{error}</FormError>}
@@ -184,7 +181,7 @@ export function LoginForm() {
       </button>
       <p className="text-center text-sm text-ink-3">
         Hesabın yok mu?{" "}
-        <Link href="/kayit" className="font-medium text-brand-300 hover:underline">Kayıt ol</Link>
+        <Link href="/kayit" className="font-medium text-accent hover:underline">Kayıt ol</Link>
       </p>
     </form>
   );
@@ -237,7 +234,7 @@ export function SignupForm() {
   if (checkEmail) {
     return (
       <div className="text-center">
-        <MailCheck className="mx-auto size-12 text-brand-300" />
+        <MailCheck className="mx-auto size-12 text-accent" />
         <h2 className="mt-3 text-lg font-semibold">E-postanızı kontrol edin</h2>
         <p className="mt-2 text-sm text-ink-2">
           <b>{form.email}</b> adresine bir doğrulama bağlantısı gönderdik. Bağlantıya tıkladıktan sonra hesabınız açılacak.
@@ -262,10 +259,10 @@ export function SignupForm() {
             aria-checked={role === value}
             onClick={() => setRole(value)}
             className={`flex flex-col items-start gap-2.5 rounded-2xl border p-3.5 text-left transition duration-300 ease-spring ${
-              role === value ? "border-brand-400/60 bg-brand-400/10 ring-4 ring-brand-400/10" : "border-line hover:border-line-strong hover:bg-white/[0.02]"
+              role === value ? "border-brand-400/60 bg-brand-400/10 ring-4 ring-brand-400/10" : "border-line hover:border-line-strong hover:bg-tint/[0.02]"
             }`}
           >
-            <span className={`grid size-8 place-items-center rounded-lg ${role === value ? "bg-brand-400 text-brand-950" : "bg-white/[0.05] text-ink-2"}`}>
+            <span className={`grid size-8 place-items-center rounded-lg ${role === value ? "bg-brand-400 text-brand-950" : "bg-tint/[0.05] text-ink-2"}`}>
               <Icon className="size-4" />
             </span>
             <span>
@@ -292,7 +289,7 @@ export function SignupForm() {
       </p>
       <p className="text-center text-sm text-ink-3">
         Zaten hesabın var mı?{" "}
-        <Link href="/giris" className="font-medium text-brand-300 hover:underline">Giriş yap</Link>
+        <Link href="/giris" className="font-medium text-accent hover:underline">Giriş yap</Link>
       </p>
     </form>
   );
@@ -324,7 +321,7 @@ export function ForgotPasswordForm() {
   if (sent) {
     return (
       <div className="text-center">
-        <MailCheck className="mx-auto size-12 text-brand-300" />
+        <MailCheck className="mx-auto size-12 text-accent" />
         <p className="mt-3 text-sm text-ink-2">
           <b>{email}</b> adresine şifre yenileme bağlantısı gönderdik. Bağlantıyı bu cihazda açın.
         </p>
@@ -341,7 +338,7 @@ export function ForgotPasswordForm() {
         {busy && <Loader2 className="size-4 animate-spin" />} Bağlantı Gönder
       </button>
       <p className="text-center text-sm">
-        <Link href="/giris" className="font-medium text-brand-300 hover:underline">Girişe dön</Link>
+        <Link href="/giris" className="font-medium text-accent hover:underline">Girişe dön</Link>
       </p>
     </form>
   );

@@ -8,6 +8,7 @@ const MERCHANT_SALT = process.env.PAYTR_MERCHANT_SALT ?? "";
 const TEST_MODE = process.env.PAYTR_TEST_MODE === "1" ? "1" : "0";
 
 export const paytrConfigured = () => Boolean(MERCHANT_ID && MERCHANT_KEY && MERCHANT_SALT);
+export const paytrTestMode = () => TEST_MODE === "1";
 
 const hmac = (data: string) => createHmac("sha256", MERCHANT_KEY).update(data, "utf8").digest("base64");
 

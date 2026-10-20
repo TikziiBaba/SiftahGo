@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { safeNext as toSafeNext } from "@/lib/safe-next";
 import { createClient } from "@/lib/supabase/server";
 
 // E-posta doğrulama bağlantısı ve Google ile giriş buraya döner; kodu oturuma çevirir.
@@ -7,8 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next");
-  const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : null;
+  const safeNext = toSafeNext(searchParams.get("next"));
 
   if (code) {
     const supabase = await createClient();
