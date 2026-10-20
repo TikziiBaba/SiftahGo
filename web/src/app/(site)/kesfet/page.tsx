@@ -40,7 +40,14 @@ export default function DiscoverPage({ searchParams }: PageProps<"/kesfet">) {
 
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v)?.trim() ?? "";
 
-type Filters = { q: string; category: string; city: string; today: boolean };
+type Sort = "puan" | "yeni" | "yorum";
+type Filters = { q: string; category: string; city: string; today: boolean; sort: Sort };
+
+const SORTS: { id: Sort; label: string }[] = [
+  { id: "puan", label: "En iyi puan" },
+  { id: "yorum", label: "En çok yorum" },
+  { id: "yeni", label: "En yeni" },
+];
 
 /** Diğer süzgeçleri koruyarak birini değiştiren Keşfet adresi */
 function discoverHref(current: Filters, change: Partial<Filters>) {
@@ -50,18 +57,20 @@ function discoverHref(current: Filters, change: Partial<Filters>) {
   if (f.category) p.set("kategori", f.category);
   if (f.city) p.set("sehir", f.city);
   if (f.today) p.set("bugun", "1");
+  if (f.sort !== "puan") p.set("sirala", f.sort);
   const s = p.toString();
   return s ? `/kesfet?${s}` : "/kesfet";
 }
 
 const chip =
   "inline-flex shrink-0 items-center gap-2 rounded-full px-3.5 py-2 text-sm ring-1 transition-colors duration-300";
-const chipOff = "bg-white/[0.04] text-ink-2 ring-line hover:bg-white/[0.08] hover:text-ink";
-const chipOn = "bg-brand-400/10 text-brand-200 ring-brand-400/40";
+const chipOff = "bg-tint/[0.04] text-ink-2 ring-line hover:bg-tint/[0.08] hover:text-ink";
+const chipOn = "bg-brand-400/10 text-accent-strong ring-brand-400/40";
 
 async function Results({ searchParams }: { searchParams: PageProps<"/kesfet">["searchParams"] }) {
   const sp = await searchParams;
-  const f: Filters = { q: one(sp.q), category: one(sp.kategori), city: one(sp.sehir), today: one(sp.bugun) === "1" };
+  const sort = (SORTS.find((s) => s.id === one(sp.sirala))?.id ?? "puan") as Sort;
+  const f: Filters = { q: one(sp.q), category: one(sp.kategori), city: one(sp.sehir), today: one(sp.bugun) === "1", sort };
   const { q, category, city, today } = f;
   const filtered = !!(q || category || city || today);
 
@@ -70,7 +79,7 @@ async function Results({ searchParams }: { searchParams: PageProps<"/kesfet">["s
     .from("businesses")
     .select("id, slug, name, category, city, district, logo_url, cover_url, description, rating_avg, rating_count")
     .eq("is_published", true)
-    .order("rating_score", { ascending: false })
+    .order(sort === "yeni" ? "created_at" : sort === "yorum" ? "rating_count" : "rating_score", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(60);
   if (q) query = query.ilike("name", `%${q.replace(/[%_\\]/g, "")}%`);
@@ -105,6 +114,7 @@ async function Results({ searchParams }: { searchParams: PageProps<"/kesfet">["s
         </div>
         {category && <input type="hidden" name="kategori" value={category} />}
         {today && <input type="hidden" name="bugun" value="1" />}
+        {sort !== "puan" && <input type="hidden" name="sirala" value={sort} />}
       </Form>
 
       {/* Telefonda yana kayar, genişte satıra sığmayan alta geçer. */}
@@ -119,7 +129,7 @@ async function Results({ searchParams }: { searchParams: PageProps<"/kesfet">["s
               aria-current={on ? "page" : undefined}
               className={`${chip} ${on ? chipOn : chipOff}`}
             >
-              <CategoryIcon id={c.id} className={`size-4 ${on ? "" : "text-brand-300"}`} /> {c.label}
+              <CategoryIcon id={c.id} className={`size-4 ${on ? "" : "text-accent"}`} /> {c.label}
             </Link>
           );
         })}
@@ -132,7 +142,7 @@ async function Results({ searchParams }: { searchParams: PageProps<"/kesfet">["s
         actions={
           <>
             <Link href={discoverHref(f, { today: !today })} scroll={false} className={`btn ring-1 ${today ? chipOn : chipOff}`}>
-              {today ? <Check className="size-4" /> : <CalendarCheck className="size-4 text-brand-300" />} Bugün müsait
+              {today ? <Check className="size-4" /> : <CalendarCheck className="size-4 text-accent" />} Bugün müsait
             </Link>
             {filtered && (
               <Link href="/kesfet" scroll={false} className="btn btn-ghost">
@@ -145,7 +155,7 @@ async function Results({ searchParams }: { searchParams: PageProps<"/kesfet">["s
         {businesses.length === 0 ? (
           <div className="card mt-6 grid place-items-center p-12 text-center">
             <span className="grid size-14 place-items-center rounded-2xl bg-brand-400/10 ring-1 ring-brand-400/20">
-              <Store className="size-6 text-brand-300" />
+              <Store className="size-6 text-accent" />
             </span>
             <p className="mt-4 font-medium">Aramanıza uygun işletme bulunamadı</p>
             <p className="mt-1 text-sm text-ink-3">
@@ -159,9 +169,25 @@ async function Results({ searchParams }: { searchParams: PageProps<"/kesfet">["s
           </div>
         ) : (
           <>
-            <p className="mt-8 text-xs font-medium uppercase tracking-[0.2em] text-ink-3">
-              {businesses.length === 60 ? "60+" : businesses.length} işletme{summary && ` · ${summary}`}
-            </p>
+            <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-ink-2">
+                <strong className="font-semibold text-ink">{businesses.length === 60 ? "60+" : businesses.length} işletme</strong>
+                {summary && <span className="text-ink-3"> · {summary}</span>}
+              </p>
+              <nav aria-label="Sıralama" className="flex gap-1 rounded-full bg-surface p-1 text-sm ring-1 ring-line">
+                {SORTS.map((o) => (
+                  <Link
+                    key={o.id}
+                    href={discoverHref(f, { sort: o.id })}
+                    scroll={false}
+                    aria-current={sort === o.id ? "page" : undefined}
+                    className={`rounded-full px-3 py-1.5 transition-colors duration-300 ${sort === o.id ? "bg-brand-400/12 font-medium text-accent" : "text-ink-3 hover:text-ink"}`}
+                  >
+                    {o.label}
+                  </Link>
+                ))}
+              </nav>
+            </div>
             <ul className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {businesses.map((b) => (
                 <li key={b.id}>

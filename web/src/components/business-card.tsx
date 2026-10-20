@@ -22,7 +22,7 @@ export function BusinessCard({ b, distanceKm }: { b: BusinessCardData; distanceK
   return (
     <GlowCard className="card group h-full">
       <Link href={`/${b.slug}`} className="block h-full overflow-hidden rounded-[inherit]">
-        <div className="relative h-32 overflow-hidden bg-gradient-to-br from-brand-900/60 to-surface-2">
+        <div className="relative h-32 overflow-hidden bg-gradient-to-br from-brand-400/25 via-brand-300/10 to-surface-2">
           {b.cover_url ? (
             <img src={b.cover_url} alt="" className="size-full object-cover transition-transform duration-700 ease-spring group-hover:scale-[1.04]" />
           ) : (
@@ -30,7 +30,7 @@ export function BusinessCard({ b, distanceKm }: { b: BusinessCardData; distanceK
             <CategoryIcon
               id={b.category}
               aria-hidden
-              className="absolute -bottom-5 right-5 size-28 text-brand-300/10 transition-transform duration-700 ease-spring group-hover:-rotate-6 group-hover:scale-105"
+              className="absolute -bottom-5 right-5 size-28 text-accent/10 transition-transform duration-700 ease-spring group-hover:-rotate-6 group-hover:scale-105"
             />
           )}
         </div>
@@ -43,7 +43,7 @@ export function BusinessCard({ b, distanceKm }: { b: BusinessCardData; distanceK
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate font-semibold transition-colors duration-300 group-hover:text-brand-200">{b.name}</p>
+            <p className="truncate font-semibold transition-colors duration-300 group-hover:text-accent-strong">{b.name}</p>
             <p className="truncate text-sm text-ink-3">{categoryLabel(b.category)}</p>
             <div className="mt-2 flex items-center gap-3 text-xs text-ink-3">
               {b.rating_count > 0 ? (
@@ -52,7 +52,7 @@ export function BusinessCard({ b, distanceKm }: { b: BusinessCardData; distanceK
                   <span className="font-normal text-ink-3">({b.rating_count})</span>
                 </span>
               ) : (
-                <span className="chip shrink-0 bg-brand-400/10 px-2 text-brand-200">Yeni</span>
+                <span className="chip shrink-0 bg-brand-400/10 px-2 text-accent-strong">Yeni</span>
               )}
               {place && (
                 <span className="flex min-w-0 items-center gap-1">

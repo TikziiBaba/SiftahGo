@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { LegalPage } from "@/components/legal-page";
 import { COMPANY } from "@/lib/company";
 import { SITE_DOMAIN, SITE_NAME } from "@/lib/constants";
@@ -24,7 +25,7 @@ export default function PrivacyPage() {
       <h2>2. İşlenen veriler</h2>
       <h3>Randevu alan müşteriler</h3>
       <ul>
-        <li><strong>Kimlik ve iletişim:</strong> ad soyad, telefon, e-posta (isteğe bağlı).</li>
+        <li><strong>Kimlik ve iletişim:</strong> ad soyad, telefon ve hesabınızın e-posta adresi (randevu bildirimleri yalnızca bu adrese gider).</li>
         <li><strong>Randevu bilgileri:</strong> işletme, hizmet, personel, tarih ve saat, randevu notu, randevunun durumu (onay, iptal, gelmeme) ve iptal edenin kim olduğu.</li>
         <li><strong>Değerlendirmeler:</strong> puanınız, yorumunuz ve randevuda yazdığınız ad.</li>
         <li><strong>Favoriler ve bekleme listesi:</strong> favorilere eklediğiniz işletmeler; bekleme listesine yazıldığınız işletme ve gün.</li>
@@ -66,7 +67,8 @@ export default function PrivacyPage() {
         </li>
         <li>
           <strong>İptal ve gelmeme geçmişi:</strong> İşletmelerin boş kalan randevular nedeniyle zarar görmemesi için, son 6 ayda {SITE_NAME} genelinde
-          (hesabınız veya telefon numaranız üzerinden) yaptığınız iptal ve gelmeme sayıları randevu aldığınız işletmeye gösterilir. 3 veya daha
+          hesabınızla yaptığınız iptal ve gelmeme sayıları randevu aldığınız işletmeye gösterilir. Telefon numarası doğrulanmadığı için başka
+          hesaplardaki randevular telefonla size yazılmaz; telefon numaranız yalnızca o işletmenin kendi elle eklediği kayıtlarla eşleştirilir. 3 veya daha
           fazla iptal ya da 2 veya daha fazla gelmeme varsa işletme uyarılır ve randevunuz işletmenin onayına düşer. Hangi işletmede iptal ettiğiniz
           gösterilmez, yalnızca sayılar gösterilir. Aynı işletmeye son 6 ayda 2 kez gelmeyen müşteri o işletmeden online randevu alamaz; işletme
           bu engeli kaldırabilir. <em>Hukuki sebep: veri sorumlusunun ve işletmelerin meşru menfaati (m. 5/2-f).</em>
@@ -104,7 +106,11 @@ export default function PrivacyPage() {
 
       <h2>6. Saklama süresi</h2>
       <ul>
-        <li>Hesap bilgileri hesabınız açık olduğu sürece saklanır; hesap silinince silinir veya anonim hale getirilir.</li>
+        <li>
+          Hesap bilgileri hesabınız açık olduğu sürece saklanır. Müşteri hesabınızı <Link href="/hesabim?sekme=profil">Hesabım › Profil</Link>
+          {" "}sayfasından kendiniz silebilirsiniz: hesap bilgileriniz, favorileriniz ve bildirim kayıtlarınız silinir, yaklaşan randevularınız iptal
+          edilir, yorumlarınızdaki adınız kaldırılır.
+        </li>
         <li>Randevu kayıtları, işletmenin randevu defteri olarak işletme hesabı açık kaldığı sürece saklanır.</li>
         <li>Ödeme ve muhasebe kayıtları ilgili mevzuatın öngördüğü süre boyunca saklanır.</li>
         <li>Bildirim adresleri, oturum kapatıldığında veya uygulama kaldırıldığında silinir.</li>
@@ -119,13 +125,15 @@ export default function PrivacyPage() {
       </p>
       <p>
         Başvurunuzu, hesabınızda kayıtlı e-posta adresinden <a href={`mailto:${COMPANY.email}`}>{COMPANY.email}</a> adresine veya yazılı olarak
-        {" "}{COMPANY.address} adresine iletebilirsiniz. Başvurular en geç 30 gün içinde ücretsiz yanıtlanır.
+        {" "}{COMPANY.address} adresine iletebilirsiniz. Başvurular en geç 30 gün içinde ücretsiz yanıtlanır. Başvuru yolları ve hazır şablon için{" "}
+        <Link href="/yasal/kvkk-basvuru">KVKK başvuru formuna</Link> bakın.
       </p>
 
       <h2>8. Çerezler</h2>
       <p>
-        Platform yalnızca oturumunuzu açık tutmak ve tercihlerinizi hatırlamak için zorunlu çerezler ve tarayıcı depolaması kullanır. Reklam veya
-        izleme çerezi kullanılmaz.
+        Platform, oturumunuzu açık tutmak ve güvenlik için zorunlu çerezler kullanır. Onay verirseniz son baktığınız işletmeler cihazınızda
+        tutulur (işlevsel depolama). Reklam, izleme veya analitik çerezi kullanılmaz. Ayrıntılar ve tercihlerinizi değiştirmek için{" "}
+        <Link href="/yasal/cerez-politikasi">Çerez politikasına</Link> bakın.
       </p>
 
       <h2>9. Güvenlik</h2>

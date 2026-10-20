@@ -39,6 +39,17 @@
   /* "Siftah" sıcak vurgu */
   --color-gold: #f5b544;
 
+  /* Temaya göre değişen anlamsal renkler (açık temada aşağıda koyulaşır).
+     tint: zemine göre kaplama rengi (koyuda beyaz, açıkta mürekkep); bg-tint/[0.04] gibi kullanılır.
+     accent: marka renkli yazı; ok/warn/bad/info: durum yazıları. */
+  --color-tint: #ffffff;
+  --color-accent: var(--color-brand-300);
+  --color-accent-strong: var(--color-brand-200);
+  --color-ok: #6ee7b7;
+  --color-warn: #fcd34d;
+  --color-bad: #fda4af;
+  --color-info: #7dd3fc;
+
   /* Tailwind'in xs'inden (12px) küçük yazı adımları ve alt bilgideki dev logo yazısı */
   --text-2xs: 0.6875rem; /* 11px: grafik ekseni, küçük etiket */
   --text-3xs: 0.625rem; /* 10px: üst başlık, rozet, alt gezinti */
@@ -49,6 +60,31 @@
 
 :root {
   color-scheme: dark;
+}
+
+/* Açık tema: müşteri sayfaları ((site) düzeni). Göz yormayan açık gri zemin, beyaz kartlar, koyu mürekkep.
+   html:has(...) sayesinde body'ye eklenen pencereler ve çerez bandı da açık olur; :has desteklemeyen
+   tarayıcıda yalnızca sarmalayıcının içi açık olur. */
+html:has(.theme-light),
+.theme-light {
+  color-scheme: light;
+  --color-bg: #f4f6f6;
+  --color-surface: #ffffff;
+  --color-surface-2: #f1f4f4;
+  --color-surface-3: #e6ebea;
+  --color-line: rgb(15 26 25 / 0.08);
+  --color-line-strong: rgb(15 26 25 / 0.14);
+  --color-ink: #0f1a19;
+  --color-ink-2: #44514e;
+  --color-ink-3: #63706c;
+  --color-tint: #0f1a19;
+  --color-gold: #b06f0c;
+  --color-accent: var(--color-brand-700);
+  --color-accent-strong: var(--color-brand-800);
+  --color-ok: #047857;
+  --color-warn: #b45309;
+  --color-bad: #be123c;
+  --color-info: #0369a1;
 }
 
 html {
@@ -64,6 +100,36 @@ body {
 
 ::selection {
   background: rgb(45 212 191 / 0.3);
+}
+
+/* Açık temada kartlar çizgi yerine yumuşak gölgeyle ayrılır; gradyan yazı koyu tonlardan başlar. */
+html:has(.theme-light) .card,
+.theme-light .card {
+  box-shadow:
+    0 1px 2px rgb(15 26 25 / 0.04),
+    0 10px 30px -18px rgb(15 26 25 / 0.18);
+}
+html:has(.theme-light) .bezel-core,
+.theme-light .bezel-core {
+  box-shadow: 0 1px 2px rgb(15 26 25 / 0.05);
+}
+html:has(.theme-light) .text-gradient,
+.theme-light .text-gradient {
+  background-image: linear-gradient(to bottom right, var(--color-brand-700), var(--color-brand-500), var(--color-gold));
+}
+html:has(.theme-light) .text-extrude,
+.theme-light .text-extrude {
+  color: var(--color-brand-500);
+  text-shadow:
+    0 1px 0 #2dd4bf,
+    0 2px 0 #14b8a6,
+    0 3px 0 #0d9488,
+    0 4px 0 #0f766e,
+    0 10px 18px rgb(15 26 25 / 0.18);
+}
+/* Açık temada hero altındaki ızgara akmaz: göz yormasın. */
+.theme-light .animate-grid-flow {
+  animation: none;
 }
 
 /* İnce çizgili ikonlar */
@@ -83,10 +149,10 @@ svg.lucide {
       0 8px 30px -8px color-mix(in oklab, var(--color-brand-400) 50%, transparent);
   }
   .btn-secondary {
-    @apply bg-white/[0.04] text-ink ring-1 ring-line-strong hover:bg-white/[0.08];
+    @apply bg-tint/[0.04] text-ink ring-1 ring-line-strong hover:bg-tint/[0.08];
   }
   .btn-ghost {
-    @apply text-ink-2 hover:bg-white/[0.05] hover:text-ink;
+    @apply text-ink-2 hover:bg-tint/[0.05] hover:text-ink;
   }
   .btn-danger {
     @apply bg-rose-500 text-white hover:bg-rose-400;
@@ -107,7 +173,7 @@ svg.lucide {
   }
   /* Çift çerçeve: dış kabuk + iç çekirdek */
   .bezel {
-    @apply rounded-[2rem] bg-white/[0.03] p-1.5 ring-1 ring-line;
+    @apply rounded-[2rem] bg-tint/[0.03] p-1.5 ring-1 ring-line;
   }
   .bezel-core {
     @apply rounded-[calc(2rem-0.375rem)] bg-surface shadow-[inset_0_1px_1px_rgb(255_255_255/0.06)];
@@ -116,7 +182,7 @@ svg.lucide {
     @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
   }
   .eyebrow {
-    @apply inline-flex items-center gap-2 rounded-full bg-white/[0.04] px-3 py-1 text-3xs font-medium uppercase tracking-[0.2em] text-ink-2 ring-1 ring-line;
+    @apply inline-flex items-center gap-2 rounded-full bg-tint/[0.04] px-3 py-1 text-3xs font-medium uppercase tracking-[0.2em] text-ink-2 ring-1 ring-line;
   }
   .text-gradient {
     @apply bg-gradient-to-br from-brand-200 via-brand-400 to-gold bg-clip-text text-transparent;
@@ -138,7 +204,7 @@ svg.lucide {
     @apply list-decimal space-y-1.5 pl-5;
   }
   .legal a {
-    @apply text-brand-300 underline-offset-4 hover:underline;
+    @apply text-accent underline-offset-4 hover:underline;
   }
   .legal strong {
     @apply font-semibold text-ink;

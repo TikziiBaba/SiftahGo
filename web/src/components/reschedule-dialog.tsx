@@ -108,7 +108,7 @@ export function RescheduleDialog({ appointment: a, onClose, onDone }: Props) {
           </div>
         </div>
 
-        {error && <p className="mt-3 text-sm text-rose-400">{error}</p>}
+        {error && <p className="mt-3 text-sm text-bad">{error}</p>}
         <button type="button" disabled={!time || busy} onClick={save} className="btn btn-primary mt-5 w-full py-3">
           {busy && <Loader2 className="size-4 animate-spin" />}
           {time ? `${formatDate(time, { weekday: undefined })} ${formatTime(time)} olarak değiştir` : "Yeni saat seçin"}

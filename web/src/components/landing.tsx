@@ -22,7 +22,7 @@ export function Backdrop() {
         className="absolute inset-0 opacity-[0.35] [mask-image:radial-gradient(ellipse_at_top,black_20%,transparent_70%)]"
         style={{
           backgroundImage:
-            "linear-gradient(rgb(255 255 255 / 0.035) 1px, transparent 1px), linear-gradient(90deg, rgb(255 255 255 / 0.035) 1px, transparent 1px)",
+            "linear-gradient(color-mix(in oklab, var(--color-tint) 3.5%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in oklab, var(--color-tint) 3.5%, transparent) 1px, transparent 1px)",
           backgroundSize: "64px 64px",
         }}
       />
@@ -127,7 +127,7 @@ export function BookingMock() {
         {services.map(([name, dur, price, on]) => (
           <div
             key={name}
-            className={`flex items-center justify-between rounded-2xl p-3.5 ring-1 ${on ? "bg-brand-400/10 ring-brand-400/40" : "bg-white/[0.02] ring-line"}`}
+            className={`flex items-center justify-between rounded-2xl p-3.5 ring-1 ${on ? "bg-brand-400/10 ring-brand-400/40" : "bg-tint/[0.02] ring-line"}`}
           >
             <div>
               <p className="text-sm font-medium">{name}</p>
@@ -163,7 +163,7 @@ export function BookingMock() {
           </span>
         ))}
       </div>
-      <div className="flex items-center justify-between gap-3 rounded-2xl bg-white/[0.03] p-2 pl-4 ring-1 ring-line">
+      <div className="flex items-center justify-between gap-3 rounded-2xl bg-tint/[0.03] p-2 pl-4 ring-1 ring-line">
         <div className="min-w-0 text-sm">
           <p className="truncate font-medium">Cuma 10 Ekim · 13:00</p>
           <p className="truncate text-xs text-ink-3">

@@ -41,7 +41,7 @@ export function AuthPitch() {
       <ul className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm text-ink-3">
         {perks.map((t) => (
           <li key={t} className="flex items-center gap-2">
-            <Check className="size-4 text-brand-300" /> {t}
+            <Check className="size-4 text-accent" /> {t}
           </li>
         ))}
       </ul>

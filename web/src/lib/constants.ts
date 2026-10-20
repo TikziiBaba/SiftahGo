@@ -45,11 +45,11 @@ export const CITIES = [
 export const WEEKDAYS = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"];
 
 export const STATUS: Record<AppointmentStatus, { label: string; className: string }> = {
-  pending: { label: "Onay bekliyor", className: "bg-amber-400/10 text-amber-300 ring-1 ring-amber-400/20" },
-  confirmed: { label: "Onaylandı", className: "bg-emerald-400/10 text-emerald-300 ring-1 ring-emerald-400/20" },
-  completed: { label: "Tamamlandı", className: "bg-sky-400/10 text-sky-300 ring-1 ring-sky-400/20" },
-  cancelled: { label: "İptal", className: "bg-white/5 text-ink-3 ring-1 ring-line" },
-  no_show: { label: "Gelmedi", className: "bg-rose-400/10 text-rose-300 ring-1 ring-rose-400/20" },
+  pending: { label: "Onay bekliyor", className: "bg-amber-400/10 text-warn ring-1 ring-amber-400/20" },
+  confirmed: { label: "Onaylandı", className: "bg-emerald-400/10 text-ok ring-1 ring-emerald-400/20" },
+  completed: { label: "Tamamlandı", className: "bg-sky-400/10 text-info ring-1 ring-sky-400/20" },
+  cancelled: { label: "İptal", className: "bg-tint/5 text-ink-3 ring-1 ring-line" },
+  no_show: { label: "Gelmedi", className: "bg-rose-400/10 text-bad ring-1 ring-rose-400/20" },
 };
 
 // Veritabanındaki kısıtla aynı olmalı (supabase/schema.sql).
@@ -109,8 +109,16 @@ export function accentOf(id: string | undefined) {
   return ACCENTS.find((a) => a.id === id) ?? ACCENTS[0];
 }
 
-/** Sayfa rengini, içindeki tüm marka renkli öğelere (brand-50…950) uygulayan CSS değişkenleri. */
-export function accentVars(id: string | undefined) {
+/**
+ * Sayfa rengini, içindeki tüm marka renkli öğelere (brand-50…950) uygulayan CSS değişkenleri.
+ * Marka yazı rengi (accent) üst öğede hesaplandığı için ayrıca verilir: açık temada koyu (700/800), koyuda açık ton.
+ */
+export function accentVars(id: string | undefined, { light = false }: { light?: boolean } = {}) {
   const steps = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
-  return Object.fromEntries(accentOf(id).scale.map((c, i) => [`--color-brand-${steps[i]}`, c])) as CSSProperties;
+  const scale = accentOf(id).scale;
+  return {
+    ...Object.fromEntries(scale.map((c, i) => [`--color-brand-${steps[i]}`, c])),
+    "--color-accent": light ? scale[7] : scale[3],
+    "--color-accent-strong": light ? scale[8] : scale[2],
+  } as CSSProperties;
 }

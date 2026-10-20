@@ -16,7 +16,7 @@ export function LegalPage({ href, title, children }: { href: string; title: stri
                   href={d.href}
                   aria-current={d.href === href ? "page" : undefined}
                   className={`block rounded-full px-3 py-1.5 text-sm transition-colors duration-300 md:rounded-xl ${
-                    d.href === href ? "bg-brand-400/10 text-brand-200 ring-1 ring-brand-400/20" : "text-ink-3 ring-1 ring-line hover:text-ink md:ring-0 md:hover:bg-white/[0.04]"
+                    d.href === href ? "bg-brand-400/10 text-accent-strong ring-1 ring-brand-400/20" : "text-ink-3 ring-1 ring-line hover:text-ink md:ring-0 md:hover:bg-tint/[0.04]"
                   }`}
                 >
                   {d.label}

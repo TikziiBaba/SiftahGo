@@ -17,10 +17,10 @@ type Item = {
 };
 
 const KIND: Record<Item["kind"], { icon: LucideIcon; className: string }> = {
-  booked: { icon: CalendarPlus, className: "bg-brand-400/10 text-brand-300" },
-  confirmed: { icon: CheckCircle2, className: "bg-emerald-400/10 text-emerald-300" },
-  cancelled: { icon: XCircle, className: "bg-rose-400/10 text-rose-300" },
-  rescheduled: { icon: CalendarClock, className: "bg-brand-400/10 text-brand-300" },
+  booked: { icon: CalendarPlus, className: "bg-brand-400/10 text-accent" },
+  confirmed: { icon: CheckCircle2, className: "bg-emerald-400/10 text-ok" },
+  cancelled: { icon: XCircle, className: "bg-rose-400/10 text-bad" },
+  rescheduled: { icon: CalendarClock, className: "bg-brand-400/10 text-accent" },
   reminder: { icon: AlarmClock, className: "bg-gold/10 text-gold" },
   review: { icon: Star, className: "bg-gold/10 text-gold" },
   reviewed: { icon: MessageSquareText, className: "bg-gold/10 text-gold" },
@@ -107,7 +107,7 @@ export function InboxBell() {
         aria-label={unread ? `Bildirimler, ${unread} okunmamış` : "Bildirimler"}
         aria-expanded={open}
         aria-haspopup="dialog"
-        className="relative grid size-10 place-items-center rounded-full text-ink-2 ring-1 ring-line-strong transition-colors duration-300 ease-spring hover:bg-white/[0.05] hover:text-ink"
+        className="relative grid size-10 place-items-center rounded-full text-ink-2 ring-1 ring-line-strong transition-colors duration-300 ease-spring hover:bg-tint/[0.05] hover:text-ink"
       >
         <Bell className="size-4.5" />
         {unread > 0 && (
@@ -138,7 +138,7 @@ export function InboxBell() {
                     <Link
                       href={item.kind === "reviewed" ? "/panel/yorumlar" : item.recipient === "business" ? "/panel" : "/hesabim"}
                       onClick={() => setOpen(false)}
-                      className={`flex items-start gap-3 px-4 py-3 transition-colors hover:bg-white/[0.04] ${isNew ? "bg-brand-400/[0.05]" : ""}`}
+                      className={`flex items-start gap-3 px-4 py-3 transition-colors hover:bg-tint/[0.04] ${isNew ? "bg-brand-400/[0.05]" : ""}`}
                     >
                       <span className={`mt-0.5 grid size-8 shrink-0 place-items-center rounded-full ${k.className}`}>
                         <k.icon className="size-4" />

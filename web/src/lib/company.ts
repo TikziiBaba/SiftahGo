@@ -9,10 +9,12 @@ export const COMPANY = {
 };
 
 /** Yasal metinlerin son güncellenme tarihi. Metin değişince güncelleyin. */
-export const LEGAL_UPDATED = "13 Ekim 2026";
+export const LEGAL_UPDATED = "20 Ekim 2026";
 
 export const LEGAL_DOCS = [
   { href: "/yasal/gizlilik", label: "Gizlilik politikası" },
+  { href: "/yasal/cerez-politikasi", label: "Çerez politikası" },
+  { href: "/yasal/kvkk-basvuru", label: "KVKK başvuru formu" },
   { href: "/yasal/kullanim-kosullari", label: "Hizmet şartları" },
   { href: "/yasal/guvenlik", label: "Güvenlik açıklamaları" },
   { href: "/yasal/mesafeli-satis", label: "Mesafeli satış sözleşmesi" },

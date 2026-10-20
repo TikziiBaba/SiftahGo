@@ -98,15 +98,15 @@ export function ShopShortcuts({
           {...(s.external ? { target: "_blank", rel: "noreferrer" } : {})}
           className="btn btn-secondary shrink-0 py-2"
         >
-          <s.icon className="size-4 text-brand-300" /> {s.label}
+          <s.icon className="size-4 text-accent" /> {s.label}
         </a>
       ))}
       <button type="button" onClick={toggleFavorite} aria-pressed={favorite} className="btn btn-secondary shrink-0 py-2">
-        <Heart className={`size-4 ${favorite ? "fill-rose-400 text-rose-400" : "text-brand-300"}`} />
+        <Heart className={`size-4 ${favorite ? "fill-rose-400 text-bad" : "text-accent"}`} />
         {favorite ? "Favorilerde" : "Favorilere ekle"}
       </button>
       <button type="button" onClick={share} className="btn btn-secondary shrink-0 py-2">
-        {copied ? <Check className="size-4 text-brand-300" /> : <Share2 className="size-4 text-brand-300" />}
+        {copied ? <Check className="size-4 text-accent" /> : <Share2 className="size-4 text-accent" />}
         {copied ? "Bağlantı kopyalandı" : "Paylaş"}
       </button>
     </div>

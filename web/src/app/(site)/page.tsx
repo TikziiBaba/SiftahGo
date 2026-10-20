@@ -14,6 +14,7 @@ import {
   MapPin,
   Scissors,
   Search,
+  Sparkles,
   Star,
   Store,
   type LucideIcon,
@@ -21,6 +22,7 @@ import {
 import { BusinessCard, type BusinessCardData } from "@/components/business-card";
 import { GlowCard } from "@/components/glow-card";
 import { AppDownload, Backdrop, BookingMock, GridFloor, PrimaryCta, SectionHead } from "@/components/landing";
+import { GuestOnly, MemberHome } from "@/components/member-home";
 import { NearbyResults } from "@/components/nearby-results";
 import { Reveal } from "@/components/reveal";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
@@ -49,16 +51,27 @@ export default function Home() {
             ]),
           }}
         />
-        <Hero />
+        {/* Giriş yapmış üye kendi özetini görür; tanıtım bölümleri yalnızca ziyaretçiye. */}
+        <MemberHome />
+        <GuestOnly>
+          <Hero />
+        </GuestOnly>
+        <Suspense fallback={<div className="h-[22rem]" />}>
+          <Shelves />
+        </Suspense>
         <Categories />
         <Suspense fallback={<div className="h-[40rem]" />}>
           <Businesses />
         </Suspense>
-        <HowToBook />
+        <GuestOnly>
+          <HowToBook />
+        </GuestOnly>
         <Suspense fallback={<div className="h-[36rem]" />}>
           <AppDownload />
         </Suspense>
-        <ForBusinesses />
+        <GuestOnly>
+          <ForBusinesses />
+        </GuestOnly>
       </main>
       <SiteFooter />
     </>
@@ -66,7 +79,7 @@ export default function Home() {
 }
 
 const pill =
-  "inline-flex items-center gap-2 rounded-full bg-white/[0.04] px-4 py-2 text-sm text-ink-2 ring-1 ring-line transition-colors duration-300 hover:bg-white/[0.08] hover:text-ink";
+  "inline-flex items-center gap-2 rounded-full bg-tint/[0.04] px-4 py-2 text-sm text-ink-2 ring-1 ring-line transition-colors duration-300 hover:bg-tint/[0.08] hover:text-ink";
 
 /* ------------------------------------------------------------------ */
 /* Hero: arama ve hızlı yollar                                          */
@@ -76,7 +89,7 @@ function Hero() {
   return (
     <section className="relative isolate overflow-x-clip">
       <GridFloor />
-      <div className="mx-auto grid max-w-6xl items-center gap-6 px-4 pb-24 pt-8 md:pt-14 lg:grid-cols-[1.05fr_1fr] lg:gap-10">
+      <div className="mx-auto grid max-w-6xl items-center gap-6 px-4 pb-16 pt-6 md:pt-10 lg:grid-cols-[1.05fr_1fr] lg:gap-10">
         <div className="relative z-10">
           <Reveal onLoad>
             <span className="eyebrow">
@@ -117,14 +130,14 @@ function Hero() {
           <Reveal onLoad delay={320}>
             <div className="mt-5 flex flex-wrap gap-2">
               <Link href="/kesfet?bugun=1" className={pill}>
-                <CalendarClock className="size-4 text-brand-300" /> Bugün müsait
+                <CalendarClock className="size-4 text-accent" /> Bugün müsait
               </Link>
               <Link href="#yakinimda" className={pill}>
-                <LocateFixed className="size-4 text-brand-300" /> Yakınımda
+                <LocateFixed className="size-4 text-accent" /> Yakınımda
               </Link>
               {popular.map((id) => (
                 <Link key={id} href={`/kesfet?kategori=${id}`} className={pill}>
-                  <CategoryIcon id={id} className="size-4 text-brand-300" /> {CATEGORIES.find((c) => c.id === id)?.label}
+                  <CategoryIcon id={id} className="size-4 text-accent" /> {CATEGORIES.find((c) => c.id === id)?.label}
                 </Link>
               ))}
             </div>
@@ -178,9 +191,9 @@ function HeroVisual() {
               {rows.map(([Icon, title, text]) => (
                 <li
                   key={title}
-                  className="depth-1 flex items-center gap-3 rounded-2xl bg-white/[0.04] p-3 ring-1 ring-line"
+                  className="depth-1 flex items-center gap-3 rounded-2xl bg-tint/[0.04] p-3 ring-1 ring-line"
                 >
-                  <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-brand-400/10 text-brand-300">
+                  <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-brand-400/10 text-accent">
                     <Icon className="size-4" />
                   </span>
                   <div className="min-w-0 flex-1">
@@ -198,7 +211,7 @@ function HeroVisual() {
       <div className="animate-float absolute left-0 top-4 hidden w-64 sm:block">
         <div className="bezel rounded-3xl p-1 backdrop-blur-md">
           <div className="flex items-center gap-3 rounded-[calc(1.5rem-0.25rem)] bg-surface-2/90 p-3 shadow-[inset_0_1px_1px_rgb(255_255_255/0.06)]">
-            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand-400/15 text-brand-300">
+            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand-400/15 text-accent">
               <CalendarClock className="size-4.5" />
             </span>
             <div className="min-w-0">
@@ -227,6 +240,93 @@ function HeroVisual() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Raflar: bugün boş saati olanlar ve yeni katılanlar (her ziyarette farklı) */
+/* ------------------------------------------------------------------ */
+const CARD_FIELDS = "id, slug, name, category, city, district, logo_url, cover_url, rating_avg, rating_count";
+
+async function getShelves(): Promise<{ today: BusinessCardData[]; newest: BusinessCardData[] }> {
+  "use cache";
+  cacheLife("minutes");
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) return { today: [], newest: [] };
+  try {
+    const supabase = createSupabase(url, key);
+    const [top, fresh] = await Promise.all([
+      supabase.from("businesses").select(CARD_FIELDS).eq("is_published", true).order("rating_score", { ascending: false }).limit(40),
+      supabase.from("businesses").select(CARD_FIELDS).eq("is_published", true).order("created_at", { ascending: false }).limit(8),
+    ]);
+    const candidates = (top.data ?? []) as BusinessCardData[];
+    const { data: open } = candidates.length
+      ? await supabase.rpc("available_today", { p_ids: candidates.map((b) => b.id) })
+      : { data: [] };
+    const ids = new Set((open ?? []) as string[]);
+    return { today: candidates.filter((b) => ids.has(b.id)).slice(0, 8), newest: (fresh.data ?? []) as BusinessCardData[] };
+  } catch {
+    return { today: [], newest: [] };
+  }
+}
+
+async function Shelves() {
+  const { today, newest } = await getShelves();
+  if (today.length === 0 && newest.length === 0) return null;
+  return (
+    <div className="mx-auto max-w-6xl space-y-10 px-4 pt-6">
+      {today.length > 0 && (
+        <BusinessShelf
+          icon={CalendarClock}
+          title="Bugün boş saati olanlar"
+          text="Bugün randevu verebilen işletmeler, puana göre"
+          more={{ href: "/kesfet?bugun=1", label: "Tümü" }}
+          items={today}
+        />
+      )}
+      {newest.length > 0 && (
+        <BusinessShelf icon={Sparkles} title="Yeni katılanlar" text="SiftahGo’ya yeni gelen esnaf" more={{ href: "/kesfet", label: "Keşfet" }} items={newest} />
+      )}
+    </div>
+  );
+}
+
+function BusinessShelf({
+  icon: Icon,
+  title,
+  text,
+  more,
+  items,
+}: {
+  icon: LucideIcon;
+  title: string;
+  text: string;
+  more: { href: string; label: string };
+  items: BusinessCardData[];
+}) {
+  return (
+    <Reveal as="section">
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <h2 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
+            <Icon className="size-5 text-accent" /> {title}
+          </h2>
+          <p className="text-sm text-ink-3">{text}</p>
+        </div>
+        <Link href={more.href} className="flex shrink-0 items-center gap-1 text-sm font-medium text-accent hover:underline">
+          {more.label} <ArrowRight className="size-4" />
+        </Link>
+      </div>
+      {/* Yana kayan raf; telefonda bir sonraki kart yarım görünür. */}
+      <ul className="-mx-4 mt-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-3 [scrollbar-width:none]">
+        {items.map((b) => (
+          <li key={b.id} className="w-72 shrink-0 snap-start">
+            <BusinessCard b={b} />
+          </li>
+        ))}
+      </ul>
+    </Reveal>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Kategoriler                                                          */
 /* ------------------------------------------------------------------ */
 function Categories() {
@@ -239,7 +339,7 @@ function Categories() {
     { href: "/kesfet", label: "Tüm işletmeler", Icon: LayoutGrid },
   ];
   return (
-    <section className="mx-auto max-w-6xl px-4 py-28 md:py-36">
+    <section className="mx-auto max-w-6xl px-4 py-16 md:py-24">
       <SectionHead
         id="kategoriler"
         eyebrow="Kategoriler"
@@ -257,9 +357,9 @@ function Categories() {
             <GlowCard className="card h-full">
               <Link
                 href={href}
-                className="group flex h-full items-center gap-3 rounded-[inherit] p-4 transition-colors duration-300 hover:bg-white/[0.03]"
+                className="group flex h-full items-center gap-3 rounded-[inherit] p-4 transition-colors duration-300 hover:bg-tint/[0.03]"
               >
-                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-400/10 text-brand-300 ring-1 ring-brand-400/20">
+                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-400/10 text-accent ring-1 ring-brand-400/20">
                   <Icon className="size-5" />
                 </span>
                 <span className="min-w-0 flex-1 text-sm font-medium leading-snug">{label}</span>
@@ -318,7 +418,7 @@ async function Businesses() {
           actions={
             <>
               <Link href="/kesfet?bugun=1" className="btn btn-secondary">
-                <CalendarClock className="size-4 text-brand-300" /> Bugün müsait
+                <CalendarClock className="size-4 text-accent" /> Bugün müsait
               </Link>
               <Link href="/kesfet" className="btn btn-ghost">
                 Tüm işletmeler <ArrowRight className="size-4" />
@@ -366,7 +466,7 @@ function HowToBook() {
     },
   ];
   return (
-    <section className="relative mx-auto max-w-6xl px-4 py-28 md:py-36">
+    <section className="relative mx-auto max-w-6xl px-4 py-20 md:py-28">
       <SectionHead
         id="nasil"
         eyebrow="Nasıl randevu alınır"

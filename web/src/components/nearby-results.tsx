@@ -65,7 +65,7 @@ export function NearbyResults({
       <div className="mt-4 flex flex-wrap items-center gap-2">
         {list === null ? (
           <button type="button" onClick={locate} disabled={busy} className="btn btn-secondary">
-            {busy ? <Loader2 className="size-4 animate-spin" /> : <LocateFixed className="size-4 text-brand-300" />} Yakınımda
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <LocateFixed className="size-4 text-accent" />} Yakınımda
           </button>
         ) : (
           <button type="button" onClick={() => setList(null)} className="btn btn-secondary">
@@ -73,7 +73,7 @@ export function NearbyResults({
           </button>
         )}
         {actions}
-        {error && <p className="text-sm text-rose-400">{error}</p>}
+        {error && <p className="text-sm text-bad">{error}</p>}
       </div>
       {list === null ? (
         children

@@ -17,7 +17,10 @@ import {
 } from "@/lib/format";
 import type { Business, Service, Staff, StaffService, WorkingHour } from "@/lib/types";
 
-type Props = { business: Business; services: Service[]; staff: Staff[]; staffServices: StaffService[]; hours: WorkingHour[] };
+// Yalnızca gereken alanlar: işletme satırının tamamı (sahip kimliği, davet kodu vb.) tarayıcıya gönderilmez.
+export type BookingBusiness = Pick<Business, "id" | "slug" | "name" | "address" | "district" | "city" | "booking_days" | "auto_confirm">;
+
+type Props = { business: BookingBusiness; services: Service[]; staff: Staff[]; staffServices: StaffService[]; hours: WorkingHour[] };
 
 export function BookingWidget({ business, services, staff: allStaff, staffServices, hours }: Props) {
   const supabase = createClient();
@@ -149,7 +152,7 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
   if (booked && service && time) {
     return (
       <section className="card p-8 text-center">
-        <CheckCircle2 className="mx-auto size-14 text-emerald-400" />
+        <CheckCircle2 className="mx-auto size-14 text-ok" />
         <h2 className="mt-4 text-xl font-bold">Randevunuz alındı!</h2>
         <p className="mt-2 text-ink-2">
           {formatDate(time)} saat <b>{formatTime(time)}</b> · {service.name}
@@ -232,7 +235,7 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
                   setTime(null);
                 }}
                 className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
-                  p.id === staffId ? "border-brand-400 bg-brand-700 text-white" : "border-line-strong hover:bg-white/5"
+                  p.id === staffId ? "border-brand-400 bg-brand-700 text-white" : "border-line-strong hover:bg-tint/5"
                 }`}
               >
                 {p.name}
@@ -261,7 +264,7 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
             <div className="mt-3 rounded-xl border border-line p-4 text-sm">
               {waitDays.includes(day) ? (
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="flex items-center gap-2 text-brand-300">
+                  <p className="flex items-center gap-2 text-accent">
                     <BellRing className="size-4" /> Bu günde saat boşalırsa size haber vereceğiz.
                   </p>
                   <button type="button" disabled={waitBusy} onClick={leaveWaitlist} className="btn btn-ghost py-1.5">
@@ -282,7 +285,7 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
                   )}
                 </div>
               )}
-              {waitError && <p className="mt-2 text-rose-400">{waitError}</p>}
+              {waitError && <p className="mt-2 text-bad">{waitError}</p>}
             </div>
           )}
         </Step>
@@ -336,7 +339,7 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
               <textarea id="note" rows={2} maxLength={500} className="input" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
             </div>
           </div>
-          {error && <p className="mt-3 text-sm text-rose-400">{error}</p>}
+          {error && <p className="mt-3 text-sm text-bad">{error}</p>}
           <button disabled={busy} className="btn btn-primary mt-4 w-full py-3 text-base">
             {busy && <Loader2 className="size-4 animate-spin" />} Randevuyu Onayla
           </button>
@@ -354,7 +357,7 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
   return (
     <div className="mt-5">
       <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink-2">
-        <span className="grid size-6 place-items-center rounded-full bg-brand-400/15 text-xs text-brand-300">{n}</span>
+        <span className="grid size-6 place-items-center rounded-full bg-brand-400/15 text-xs text-accent">{n}</span>
         {title}
       </h3>
       {children}

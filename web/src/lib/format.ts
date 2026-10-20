@@ -50,6 +50,16 @@ export function formatDate(isoOrDay: string, opts: Intl.DateTimeFormatOptions = 
   }).format(d);
 }
 
+/** Randevuya kalan süre: "45 dk sonra", "3 saat sonra", "yarın", "5 gün sonra". Geçmişse "başladı". */
+export function untilText(iso: string, now = Date.now()) {
+  const min = Math.round((new Date(iso).getTime() - now) / 60000);
+  if (min <= 0) return "başladı";
+  if (min < 60) return `${min} dk sonra`;
+  if (min < 24 * 60 && dayOf(iso) === dayOf(new Date(now).toISOString())) return `${Math.round(min / 60)} saat sonra`;
+  const days = Math.round((new Date(`${dayOf(iso)}T12:00:00Z`).getTime() - new Date(`${dayOf(new Date(now).toISOString())}T12:00:00Z`).getTime()) / 864e5);
+  return days === 1 ? "yarın" : `${days} gün sonra`;
+}
+
 export function formatPrice(n: number) {
   return new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", maximumFractionDigits: 0 }).format(
     Number(n),

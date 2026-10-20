@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { cache, Suspense } from "react";
-import { Clock, Globe, MapPin, Megaphone, Phone, Sparkles, Star } from "lucide-react";
+import Link from "next/link";
+import { ChevronRight, Clock, Globe, MapPin, Megaphone, Phone, Sparkles, Star } from "lucide-react";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
 import { BookingWidget } from "@/components/booking-widget";
 import { ShopShortcuts } from "@/components/shop-shortcuts";
+import { TrackRecent } from "@/components/track-recent";
 import { createClient } from "@/lib/supabase/server";
 import { accentVars, categoryLabel, isSubscribed, SITE_NAME, SITE_URL, WEEKDAYS } from "@/lib/constants";
 import { formatDate, isoWeekday, todayStr } from "@/lib/format";
@@ -118,26 +120,46 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
   };
 
   return (
-    <main className="w-full" style={accentVars(accent)}>
+    <main className="w-full" style={accentVars(accent, { light: true })}>
+      <TrackRecent slug={business.slug} name={business.name} category={business.category} logo_url={business.logo_url} city={business.city} />
+      {/* Nerede olduğunu gösteren yol: müşteri tek dokunuşla kategoriye veya Keşfet'e döner. */}
+      <nav aria-label="Konum" className="mx-auto max-w-6xl px-4 pb-3">
+        <ol className="flex flex-wrap items-center gap-1 text-sm text-ink-3">
+          <li>
+            <Link href="/" className="hover:text-ink">Ana sayfa</Link>
+          </li>
+          <ChevronRight className="size-3.5" aria-hidden />
+          <li>
+            <Link href="/kesfet" className="hover:text-ink">Keşfet</Link>
+          </li>
+          <ChevronRight className="size-3.5" aria-hidden />
+          <li>
+            <Link href={`/kesfet?kategori=${business.category}`} className="hover:text-ink">{categoryLabel(business.category)}</Link>
+          </li>
+          <ChevronRight className="size-3.5" aria-hidden />
+          <li aria-current="page" className="max-w-[12rem] truncate font-medium text-ink-2">{business.name}</li>
+        </ol>
+      </nav>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
       />
-      <div className="relative h-48 overflow-hidden md:h-72">
+      <div className="relative mx-auto h-48 max-w-6xl overflow-hidden md:h-72 md:w-[calc(100%-2rem)] md:rounded-3xl">
         {business.cover_url ? (
           <img src={business.cover_url} alt="" className="size-full object-cover" />
         ) : (
-          <div className="size-full bg-gradient-to-br from-brand-800 via-brand-950 to-bg">
+          <div className="size-full bg-gradient-to-br from-brand-400 via-brand-600 to-brand-800">
             <div className="absolute -left-24 -top-24 size-96 rounded-full bg-brand-400/25 blur-3xl" />
             <div className="absolute inset-0 bg-[radial-gradient(rgb(255_255_255/0.07)_1px,transparent_1px)] bg-[size:22px_22px]" />
           </div>
         )}
-        <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-bg to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/25 to-transparent" />
       </div>
 
       {/* Kapağın üstüne binen başlık: konumlandırılmış kapağın altında kalmaması için z-10. */}
-      <div className="relative z-10 mx-auto -mt-16 max-w-6xl px-4">
-        <div className="flex items-end gap-4">
+      <div className="relative z-10 mx-auto -mt-12 max-w-6xl px-4 md:px-8">
+        {/* Logo kapağa biner; ad ve bilgiler kapağın altında kalır (açık zeminde okunur). */}
+        <div className="flex items-start gap-4">
           <div className="size-24 shrink-0 overflow-hidden rounded-3xl bg-gradient-to-br from-brand-300 to-brand-600 shadow-xl ring-4 ring-bg md:size-28">
             {business.logo_url ? (
               <img src={business.logo_url} alt={business.name} className="size-full object-cover" />
@@ -145,7 +167,7 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
               <span className="grid size-full place-items-center text-4xl font-bold text-brand-950">{business.name.charAt(0).toLocaleUpperCase("tr")}</span>
             )}
           </div>
-          <div className="min-w-0 pb-1">
+          <div className="min-w-0 pt-14 md:pt-16">
             <h1 className="text-balance text-2xl font-bold tracking-tight md:text-4xl">{business.name}</h1>
             <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-ink-3 md:text-base">
               {[categoryLabel(business.category), [business.district, business.city].filter(Boolean).join(", ")].filter(Boolean).join(" · ")}
@@ -157,7 +179,7 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
                   <span className="font-normal text-ink-3">({business.rating_count})</span>
                 </a>
               ) : (
-                <span className="chip ml-1 gap-1 bg-brand-400/10 text-brand-300">
+                <span className="chip ml-1 gap-1 bg-brand-400/10 text-accent">
                   <Sparkles className="size-3.5" /> Yeni işletme
                 </span>
               )}
@@ -180,7 +202,7 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
 
         {announcement && (
           <div className="mt-5 flex items-start gap-3 rounded-2xl bg-brand-400/10 p-4 ring-1 ring-brand-400/25">
-            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-400/15 text-brand-300">
+            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-400/15 text-accent">
               <Megaphone className="size-4.5" />
             </span>
             <p className="self-center whitespace-pre-line text-sm leading-relaxed text-ink">{announcement}</p>
@@ -188,12 +210,12 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
         )}
 
         {business.is_suspended && (
-          <p className="mt-4 rounded-xl bg-rose-500/10 p-3 text-sm text-rose-300">
+          <p className="mt-4 rounded-xl bg-rose-500/10 p-3 text-sm text-bad">
             Bu sayfa yönetici tarafından yayından kaldırıldı; sadece siz görebilirsiniz.
           </p>
         )}
         {!business.is_published && (
-          <p className="mt-4 rounded-xl bg-amber-400/10 p-3 text-sm text-amber-300">
+          <p className="mt-4 rounded-xl bg-amber-400/10 p-3 text-sm text-warn">
             Bu sayfa şu an yayında değil; sadece siz görebilirsiniz. Ayarlardan yayına alabilirsiniz.
           </p>
         )}
@@ -202,7 +224,16 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
           {/* min-w-0: kaydırılan gün şeridi sütunu ekrandan genişletmesin */}
           <div id="randevu" className="min-w-0 scroll-mt-28">
             <BookingWidget
-              business={business}
+              business={{
+                id: business.id,
+                slug: business.slug,
+                name: business.name,
+                address: business.address,
+                district: business.district,
+                city: business.city,
+                booking_days: business.booking_days,
+                auto_confirm: business.auto_confirm,
+              }}
               services={(services.data ?? []) as Service[]}
               staff={staffList}
               staffServices={(links ?? []) as StaffService[]}
@@ -220,25 +251,25 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
             {(location || business.phone || website) && (
               <section className="card space-y-3 p-5 text-sm">
                 {location && mapsUrl && (
-                  <a href={mapsUrl} target="_blank" rel="noreferrer" className="flex gap-2.5 text-ink-2 transition-colors hover:text-brand-300">
-                    <MapPin className="size-4 shrink-0 translate-y-0.5 text-brand-300" /> {location}
+                  <a href={mapsUrl} target="_blank" rel="noreferrer" className="flex gap-2.5 text-ink-2 transition-colors hover:text-accent">
+                    <MapPin className="size-4 shrink-0 translate-y-0.5 text-accent" /> {location}
                   </a>
                 )}
                 {business.phone && (
-                  <a href={`tel:${business.phone}`} className="flex gap-2.5 text-ink-2 transition-colors hover:text-brand-300">
-                    <Phone className="size-4 shrink-0 translate-y-0.5 text-brand-300" /> {business.phone}
+                  <a href={`tel:${business.phone}`} className="flex gap-2.5 text-ink-2 transition-colors hover:text-accent">
+                    <Phone className="size-4 shrink-0 translate-y-0.5 text-accent" /> {business.phone}
                   </a>
                 )}
                 {website && (
-                  <a href={website} target="_blank" rel="noreferrer" className="flex gap-2.5 break-all text-ink-2 transition-colors hover:text-brand-300">
-                    <Globe className="size-4 shrink-0 translate-y-0.5 text-brand-300" /> {website.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}
+                  <a href={website} target="_blank" rel="noreferrer" className="flex gap-2.5 break-all text-ink-2 transition-colors hover:text-accent">
+                    <Globe className="size-4 shrink-0 translate-y-0.5 text-accent" /> {website.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}
                   </a>
                 )}
               </section>
             )}
             <section className="card p-5">
               <h2 className="flex items-center gap-2 font-semibold">
-                <Clock className="size-4 text-brand-300" /> Çalışma saatleri
+                <Clock className="size-4 text-accent" /> Çalışma saatleri
               </h2>
               <ul className="mt-3 space-y-1 text-sm">
                 {hourList.map((h) => {
@@ -248,7 +279,7 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
                       key={h.weekday}
                       className={`-mx-2 flex justify-between rounded-lg px-2 py-1 ${isToday ? "bg-brand-400/10" : ""}`}
                     >
-                      <span className={isToday ? "font-medium text-brand-300" : "text-ink-2"}>
+                      <span className={isToday ? "font-medium text-accent" : "text-ink-2"}>
                         {WEEKDAYS[h.weekday - 1]}
                         {isToday && " · Bugün"}
                       </span>
@@ -278,8 +309,8 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
                         {formatDate(r.created_at, { weekday: undefined, year: "numeric" })} · Randevulu müşteri
                       </p>
                       {r.reply && (
-                        <div className="mt-2 rounded-lg border-l-2 border-brand-400/40 bg-white/[0.03] px-3 py-2">
-                          <p className="text-xs font-medium text-brand-300">İşletmenin cevabı</p>
+                        <div className="mt-2 rounded-lg border-l-2 border-brand-400/40 bg-tint/[0.03] px-3 py-2">
+                          <p className="text-xs font-medium text-accent">İşletmenin cevabı</p>
                           <p className="mt-0.5 text-ink-2">{r.reply}</p>
                         </div>
                       )}
