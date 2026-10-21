@@ -23,7 +23,13 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="tr" className={`${geist.variable} h-full antialiased`}>
+    // suppressHydrationWarning: aşağıdaki betik <html>'e data-cerez yazar.
+    <html lang="tr" className={`${geist.variable} h-full antialiased`} suppressHydrationWarning>
+      <head>
+        {/* Çerez bandı ilk çizimde görünsün (sonradan belirip sayfanın en büyük öğesi olarak açılışı geciktirmesin):
+            karar verilmemişse boyamadan önce işaretlenir. Çerez adı ve sürüm lib/consent.ts ile aynı. */}
+        <script dangerouslySetInnerHTML={{ __html: `if(!/(?:^|;\\s*)sg_cerez=v1\\./.test(document.cookie))document.documentElement.dataset.cerez="sor"` }} />
+      </head>
       <body className="flex min-h-full flex-col font-sans">
         {children}
         <CookieConsent />

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Loader2, LocateFixed, X } from "lucide-react";
 import { BusinessCard, type BusinessCardData } from "@/components/business-card";
-import { createClient } from "@/lib/supabase/client";
+import { loadClient } from "@/lib/supabase/lazy";
 
 type Nearby = BusinessCardData & { distance_km: number };
 
@@ -35,7 +35,7 @@ export function NearbyResults({
     setError("");
     navigator.geolocation.getCurrentPosition(
       async (p) => {
-        const supabase = createClient();
+        const supabase = await loadClient();
         const { data, error } = await supabase.rpc("nearby_businesses", {
           p_lat: p.coords.latitude,
           p_lng: p.coords.longitude,

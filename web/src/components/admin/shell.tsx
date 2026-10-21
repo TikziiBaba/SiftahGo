@@ -75,10 +75,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getUser().then(async ({ data }) => {
-      if (!data.user) return router.replace(`/giris?next=${encodeURIComponent(pathname)}`);
+    // Yerel oturum yeterli (Auth sunucusuna ayrıca gidilmez); yetkiyi is_admin ve RLS denetler.
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session) return router.replace(`/giris?next=${encodeURIComponent(pathname)}`);
       const { data: admin } = await supabase.rpc("is_admin");
-      setState({ email: data.user.email ?? "", admin: admin === true });
+      setState({ email: session.user.email ?? "", admin: admin === true });
     });
     // Sadece ilk açılışta kontrol edilir; sayfa değişiminde tekrar gerekmez.
     // eslint-disable-next-line react-hooks/exhaustive-deps

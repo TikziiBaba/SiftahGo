@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/client";
+import { loadClient } from "@/lib/supabase/lazy";
 
 // Tarayıcı eklentilerinden ve zararsız tarayıcı uyarılarından gelen gürültü kaydedilmez.
 const IGNORED = [/ResizeObserver loop/, /^Script error\.?$/, /chrome-extension:|moz-extension:|safari-extension:/];
@@ -16,14 +16,16 @@ export function reportClientError(error: unknown) {
   const message = `${err.name}: ${err.message}`;
   if (IGNORED.some((re) => re.test(message) || re.test(err.stack ?? ""))) return;
   sent++;
-  createClient()
-    .rpc("log_error", {
-      p_source: "web",
-      p_message: message,
-      p_stack: err.stack ?? "",
-      p_url: location.pathname,
-      p_user_agent: navigator.userAgent,
-    })
+  loadClient()
+    .then((supabase) =>
+      supabase.rpc("log_error", {
+        p_source: "web",
+        p_message: message,
+        p_stack: err.stack ?? "",
+        p_url: location.pathname,
+        p_user_agent: navigator.userAgent,
+      }),
+    )
     .then(
       () => {},
       () => {},

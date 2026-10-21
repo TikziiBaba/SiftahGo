@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { MapPin, Navigation, Star } from "lucide-react";
 import { GlowCard } from "@/components/glow-card";
@@ -24,7 +25,13 @@ export function BusinessCard({ b, distanceKm }: { b: BusinessCardData; distanceK
       <Link href={`/${b.slug}`} className="block h-full overflow-hidden rounded-[inherit]">
         <div className="relative h-32 overflow-hidden bg-gradient-to-br from-brand-400/25 via-brand-300/10 to-surface-2">
           {b.cover_url ? (
-            <img src={b.cover_url} alt="" className="size-full object-cover transition-transform duration-700 ease-spring group-hover:scale-[1.04]" />
+            <Image
+              src={b.cover_url}
+              alt=""
+              fill
+              sizes="(min-width: 1024px) 360px, (min-width: 640px) 50vw, 100vw"
+              className="object-cover transition-transform duration-700 ease-spring group-hover:scale-[1.04]"
+            />
           ) : (
             // Kapak görseli yoksa zeminde kategorinin ikonu durur.
             <CategoryIcon
@@ -37,7 +44,7 @@ export function BusinessCard({ b, distanceKm }: { b: BusinessCardData; distanceK
         <div className="flex gap-3 p-4">
           <div className="-mt-10 size-14 shrink-0 overflow-hidden rounded-xl border-4 border-bg bg-brand-700 shadow">
             {b.logo_url ? (
-              <img src={b.logo_url} alt="" className="size-full object-cover" />
+              <Image src={b.logo_url} alt="" width={56} height={56} className="size-full object-cover" />
             ) : (
               <span className="grid size-full place-items-center text-lg font-bold text-white">{b.name.charAt(0)}</span>
             )}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { hasSessionCookie, loadClient, onClientReady } from "@/lib/supabase/lazy";
 
 // "user": oturum var ama hesap türü henüz okunmadı (ilk birkaç yüz milisaniye).
 export type Account =
@@ -22,7 +22,18 @@ function set(next: Account) {
 function start() {
   if (started) return;
   started = true;
-  const supabase = createClient();
+  // Oturum çerezi yoksa ziyaretçidir; Supabase istemcisi yüklenmez. Sayfada istemci kurulunca (ör. bu sekmede giriş
+  // formu) oturum dinlenmeye başlar, giriş yapılınca hesap görünür.
+  if (!hasSessionCookie()) {
+    set({ kind: "guest" });
+    onClientReady(() => void listen());
+    return;
+  }
+  void listen();
+}
+
+async function listen() {
+  const supabase = await loadClient();
   supabase.auth.onAuthStateChange((_event, session) => {
     const userId = session?.user.id;
     // Oturum yenilemesi (TOKEN_REFRESHED) aynı kullanıcı için tekrar sorgu yapmasın.

@@ -211,6 +211,14 @@ svg.lucide {
   }
 }
 
+/* Çerez bandı sunucu HTML'inde durur; yalnızca karar verilmemişse görünür (bkz. app/layout.tsx). */
+.cerez-bant {
+  display: none;
+}
+[data-cerez="sor"] .cerez-bant {
+  display: block;
+}
+
 /* Belirme animasyonları (bkz. components/reveal.tsx). JavaScript gerekmez:
    içerik her zaman görünürdür, animasyon sadece destekleyen tarayıcıda eklenir. */
 @keyframes reveal-in {

@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AlarmClock, Bell, CalendarClock, CalendarPlus, CheckCircle2, MessageSquareText, Star, XCircle, type LucideIcon } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { loadClient } from "@/lib/supabase/lazy";
+import { useAccount } from "@/lib/use-account";
 import { formatTime, todayStr } from "@/lib/format";
 
 type Item = {
@@ -35,7 +36,8 @@ function when(iso: string) {
 
 /** Üst menüdeki bildirim düğmesi. Yeni bildirimler Realtime ile anında gelir. */
 export function InboxBell() {
-  const [userId, setUserId] = useState<string | null>(null);
+  const account = useAccount();
+  const userId = account && account.kind !== "guest" ? account.id : null;
   const [items, setItems] = useState<Item[]>([]);
   const [open, setOpen] = useState(false);
   // Açılışta okunmamış olanlar; liste açık kaldıkça vurgulu görünür.
@@ -43,32 +45,31 @@ export function InboxBell() {
   const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const supabase = createClient();
-    supabase.auth.getSession().then(({ data }) => setUserId(data.session?.user.id ?? null));
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => setUserId(session?.user.id ?? null));
-    return () => sub.subscription.unsubscribe();
-  }, []);
-
-  useEffect(() => {
     if (!userId) return;
-    const supabase = createClient();
-    async function load() {
-      const { data } = await supabase
-        .from("inbox")
-        .select("id, kind, recipient, title, body, read_at, created_at")
-        .order("created_at", { ascending: false })
-        .limit(30);
-      if (data) setItems(data as Item[]);
-    }
-    // İlk yükleme abonelik kurulunca yapılır; arada gelen bildirim kaçmaz.
-    const channel = supabase
-      .channel(`inbox-${userId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "inbox", filter: `user_id=eq.${userId}` }, () => load())
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") load();
-      });
+    let cancelled = false;
+    let stop = () => {};
+    loadClient().then((supabase) => {
+      if (cancelled) return;
+      async function load() {
+        const { data } = await supabase
+          .from("inbox")
+          .select("id, kind, recipient, title, body, read_at, created_at")
+          .order("created_at", { ascending: false })
+          .limit(30);
+        if (data) setItems(data as Item[]);
+      }
+      // İlk yükleme abonelik kurulunca yapılır; arada gelen bildirim kaçmaz.
+      const channel = supabase
+        .channel(`inbox-${userId}`)
+        .on("postgres_changes", { event: "*", schema: "public", table: "inbox", filter: `user_id=eq.${userId}` }, () => load())
+        .subscribe((status) => {
+          if (status === "SUBSCRIBED") load();
+        });
+      stop = () => supabase.removeChannel(channel);
+    });
     return () => {
-      supabase.removeChannel(channel);
+      cancelled = true;
+      stop();
     };
   }, [userId]);
 
@@ -94,7 +95,7 @@ export function InboxBell() {
       setFresh(new Set(items.filter((i) => !i.read_at).map((i) => i.id)));
       const now = new Date().toISOString();
       setItems((list) => list.map((i) => (i.read_at ? i : { ...i, read_at: now })));
-      createClient().rpc("mark_inbox_read").then(() => {});
+      loadClient().then((supabase) => supabase.rpc("mark_inbox_read"));
     }
     setOpen(!open);
   }

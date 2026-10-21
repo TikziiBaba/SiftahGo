@@ -79,9 +79,12 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
 
   const refresh = useCallback(async () => {
     const supabase = createClient();
-    const { data: auth } = await supabase.auth.getUser();
-    if (!auth.user) return router.replace("/giris?next=/panel");
-    const { data } = await supabase.from("businesses").select("*").eq("owner_id", auth.user.id).maybeSingle();
+    // Yerel oturum yeterli (Auth sunucusuna ayrıca gidilmez, panel bir tur erken açılır); veriyi RLS korur.
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session) return router.replace("/giris?next=/panel");
+    const { data } = await supabase.from("businesses").select("*").eq("owner_id", session.user.id).maybeSingle();
     const b = (data as Business) ?? null;
     setSub({
       subscribed: b ? isSubscribed(b) : false,

@@ -4,6 +4,10 @@ const isDev = process.env.NODE_ENV === "development";
 const supabase = process.env.NEXT_PUBLIC_SUPABASE_URL
   ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).origin
   : "https://*.supabase.co";
+// İşletme görselleri (logo, kapak, galeri) R2'de. Görseller yalnızca buradan yüklenir: işletmenin yazabildiği başka bir
+// adres (ör. ziyaretçinin IP'sini toplayan izleme pikseli) sayfaya girmez.
+const r2 = process.env.CLOUDFLARE_R2_PUBLIC_URL ? new URL(process.env.CLOUDFLARE_R2_PUBLIC_URL).hostname : null;
+const imageHosts = ["*.r2.dev", ...(r2 && !r2.endsWith(".r2.dev") ? [r2] : [])];
 
 // İçerik güvenlik politikası. Sayfalar önceden hazırlandığı (cacheComponents) için nonce kullanılamıyor; satır içi
 // betikler açık, ama dışarıdan betik yalnızca Cloudflare Turnstile'dan, bağlantı yalnızca Supabase'e yapılır.
@@ -12,7 +16,7 @@ const csp = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https:",
+  `img-src 'self' data: blob: ${imageHosts.map((h) => `https://${h}`).join(" ")}`,
   "font-src 'self' data:",
   `connect-src 'self' ${supabase} ${supabase.replace(/^https:/, "wss:")} https://challenges.cloudflare.com`,
   "frame-src 'self' https:",
@@ -39,6 +43,12 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   poweredByHeader: false,
+  // R2 görselleri sayfada gösterildiği boyuta küçültülüp WebP olarak verilir (next/image). Yalnızca R2 adresleri:
+  // işletmenin yazabildiği başka adresler sunucu üzerinden çekilmez.
+  images: {
+    remotePatterns: imageHosts.map((hostname) => ({ protocol: "https" as const, hostname })),
+    maximumRedirects: 0,
+  },
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },

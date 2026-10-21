@@ -49,7 +49,8 @@ export default function ShopScene({
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.domElement.style.cssText = "width:100%;height:100%;display:block";
+    // Geç kurulduğu için (bkz. shop.tsx) belirerek gelir.
+    renderer.domElement.style.cssText = "width:100%;height:100%;display:block;opacity:0;transition:opacity 0.8s";
     host.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
@@ -343,6 +344,7 @@ export default function ShopScene({
 
     if (reduceMotion) frame(2.2);
     else start();
+    requestAnimationFrame(() => (renderer.domElement.style.opacity = "1"));
 
     return () => {
       stop();

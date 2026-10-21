@@ -39,7 +39,8 @@ export function AuthShell({ title, subtitle, children }: { title: string; subtit
           <Shop className="absolute inset-0" focus={{ x: 0, y: 0 }} narrowFocus={{ x: 0, y: 0 }} scale={1.25} tiles={4} />
         </div>
 
-        <div className="mx-auto my-auto w-full max-w-md py-6 lg:py-10">
+        {/* Dar ekranda ortalanmaz: form (adresteki ?next vb. okunduktan sonra) gelince kart yerinden kaymasın. */}
+        <div className="mx-auto w-full max-w-md py-6 lg:my-auto lg:py-10">
           <div className="bezel">
             <div className="bezel-core p-6 md:p-8">
               <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>

@@ -25,8 +25,10 @@ export async function proxy(request: NextRequest) {
 
   const { data } = await supabase.auth.getClaims();
   const path = request.nextUrl.pathname;
+  // Bölüm sınırıyla: "/panelli-kuafor" gibi işletme sayfaları giriş istemez.
+  const isPrivate = ["/panel", "/hesabim", "/admin"].some((p) => path === p || path.startsWith(`${p}/`));
 
-  if (!data?.claims && (path.startsWith("/panel") || path.startsWith("/hesabim") || path.startsWith("/admin"))) {
+  if (!data?.claims && isPrivate) {
     const url = request.nextUrl.clone();
     url.pathname = "/giris";
     url.search = `?next=${encodeURIComponent(path)}`;

@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { cacheLife } from "next/cache";
+import { connection } from "next/server";
 import { cache, Suspense } from "react";
+import Image from "next/image";
 import Link from "next/link";
+import { createClient as createSupabase, type SupabaseClient } from "@supabase/supabase-js";
 import { ChevronRight, Clock, Globe, MapPin, Megaphone, Phone, Sparkles, Star } from "lucide-react";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
 import { BookingWidget } from "@/components/booking-widget";
@@ -12,14 +16,71 @@ import { accentVars, categoryLabel, isSubscribed, SITE_NAME, SITE_URL, WEEKDAYS 
 import { formatDate, isoWeekday, todayStr } from "@/lib/format";
 import type { Business, Review, Service, Staff, StaffService, WorkingHour } from "@/lib/types";
 
-const getBusiness = cache(async (slug: string) => {
-  const supabase = await createClient();
-  const { data } = await supabase.from("businesses").select("*").eq("slug", slug).maybeSingle();
-  return data as Business | null;
-});
+type BusinessData = {
+  business: Business;
+  services: Service[];
+  staff: Staff[];
+  staffServices: StaffService[];
+  hours: WorkingHour[];
+  reviews: Review[];
+  /** Paketteki özellikler; abonelik bittiyse boş (özelleştirmeler gizlenir). */
+  features: string[];
+};
+
+type BusinessRow = Business & {
+  plan: { features: string[] } | null;
+  services: Service[];
+  staff: (Staff & { staff_services: StaffService[] })[];
+  working_hours: WorkingHour[];
+  reviews: Review[];
+};
+
+// Sayfanın tüm verisi tek sorguda: işletme, paket özellikleri, hizmetler, personel ve hizmetleri, saatler, son 10 yorum.
+async function loadBusiness(supabase: SupabaseClient, slug: string): Promise<BusinessData | null> {
+  const { data } = await supabase
+    .from("businesses")
+    .select("*, plan:plans!businesses_plan_id_fkey(features), services(*), staff(*, staff_services(*)), working_hours(*), reviews(*)")
+    .eq("slug", slug)
+    .eq("services.is_active", true)
+    .eq("staff.is_active", true)
+    .order("sort_order", { referencedTable: "services" })
+    .order("created_at", { referencedTable: "services" })
+    .order("sort_order", { referencedTable: "staff" })
+    .order("created_at", { referencedTable: "staff" })
+    .order("weekday", { referencedTable: "working_hours" })
+    .order("created_at", { referencedTable: "reviews", ascending: false })
+    .limit(10, { referencedTable: "reviews" })
+    .maybeSingle();
+  if (!data) return null;
+  const { plan, services, staff, working_hours, reviews, ...business } = data as BusinessRow;
+  return {
+    business,
+    services,
+    staff,
+    staffServices: staff.flatMap((s) => s.staff_services),
+    hours: working_hours,
+    reviews,
+    features: isSubscribed(business) ? (plan?.features ?? []) : [],
+  };
+}
+
+// Yayındaki işletmenin sayfası herkes için aynı: çerezsiz istemciyle okunur ve önbellekte tutulur (dakikada bir
+// tazelenir). Böylece sayfa veritabanına gitmeden, hazır HTML olarak açılır. Boş saatler ve randevu tarayıcıda canlı
+// sorulur.
+async function getPublicBusiness(slug: string) {
+  "use cache";
+  cacheLife("minutes");
+  const supabase = createSupabase(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  return loadBusiness(supabase, slug);
+}
+
+// Herkese açık değilse (yayında değil, onay bekliyor, askıda) sahibi ve yönetici kendi oturumuyla görür.
+const getBusiness = cache(async (slug: string) => (await getPublicBusiness(slug)) ?? loadBusiness(await createClient(), slug));
 
 export async function generateMetadata({ params }: PageProps<"/[slug]">): Promise<Metadata> {
-  const business = await getBusiness((await params).slug);
+  const business = (await getBusiness((await params).slug))?.business;
   if (!business) return { title: "İşletme bulunamadı" };
   const place = [business.district, business.city].filter(Boolean).join(", ");
   const title = `${business.name} — Online Randevu`;
@@ -49,7 +110,8 @@ export default function BusinessPage({ params }: PageProps<"/[slug]">) {
   return (
     <>
       <SiteHeader minimal />
-      <Suspense fallback={<div className="mx-auto h-96 w-full max-w-6xl animate-pulse px-4 py-8" />}>
+      {/* Yer tutucu ekran boyunda: içerik gelince alt bilgi görünür alanda kaymasın. */}
+      <Suspense fallback={<div className="mx-auto min-h-[100dvh] w-full max-w-6xl animate-pulse px-4 py-8" />}>
         <BusinessView params={params} />
       </Suspense>
       <SiteFooter />
@@ -58,29 +120,14 @@ export default function BusinessPage({ params }: PageProps<"/[slug]">) {
 }
 
 async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"] }) {
-  const business = await getBusiness((await params).slug);
-  if (!business) notFound();
+  const data = await getBusiness((await params).slug);
+  if (!data) notFound();
 
-  const supabase = await createClient();
-  const [services, staff, hours, reviews, plan] = await Promise.all([
-    supabase.from("services").select("*").eq("business_id", business.id).eq("is_active", true).order("sort_order").order("created_at"),
-    supabase.from("staff").select("*").eq("business_id", business.id).eq("is_active", true).order("sort_order").order("created_at"),
-    supabase.from("working_hours").select("*").eq("business_id", business.id).order("weekday"),
-    supabase.from("reviews").select("*").eq("business_id", business.id).order("created_at", { ascending: false }).limit(10),
-    supabase.from("plans").select("features").eq("id", business.plan_id ?? "").maybeSingle(),
-  ]);
-  const staffList = (staff.data ?? []) as Staff[];
-  const { data: links } = staffList.length
-    ? await supabase.from("staff_services").select("*").in("staff_id", staffList.map((s) => s.id))
-    : { data: [] };
-  const reviewList = (reviews.data ?? []) as Review[];
-  const hourList = (hours.data ?? []) as WorkingHour[];
+  const { business, services, staff: staffList, staffServices, hours: hourList, reviews: reviewList, features } = data;
   const location = [business.address, business.district, business.city].filter(Boolean).join(", ");
   const mapsUrl = location ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${business.name} ${location}`)}` : null;
-  const today = isoWeekday(todayStr());
 
   // Paketteki özelliğe göre görünen özelleştirmeler; paket düşerse ayarlar saklanır ama gösterilmez.
-  const features = isSubscribed(business) ? ((plan.data?.features as string[] | undefined) ?? []) : [];
   const accent = features.includes("theme") ? business.accent : undefined;
   const announcement = features.includes("announcement") ? business.announcement?.trim() : "";
   const custom = features.includes("links");
@@ -146,7 +193,8 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
       />
       <div className="relative mx-auto h-48 max-w-6xl overflow-hidden md:h-72 md:w-[calc(100%-2rem)] md:rounded-3xl">
         {business.cover_url ? (
-          <img src={business.cover_url} alt="" className="size-full object-cover" />
+          // Sayfanın en büyük öğesi: önceden yüklenir.
+          <Image src={business.cover_url} alt="" fill preload sizes="(min-width: 1152px) 1152px, 100vw" className="object-cover" />
         ) : (
           <div className="size-full bg-gradient-to-br from-brand-400 via-brand-600 to-brand-800">
             <div className="absolute -left-24 -top-24 size-96 rounded-full bg-brand-400/25 blur-3xl" />
@@ -162,7 +210,7 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
         <div className="flex items-start gap-4">
           <div className="size-24 shrink-0 overflow-hidden rounded-3xl bg-gradient-to-br from-brand-300 to-brand-600 shadow-xl ring-4 ring-bg md:size-28">
             {business.logo_url ? (
-              <img src={business.logo_url} alt={business.name} className="size-full object-cover" />
+              <Image src={business.logo_url} alt={business.name} width={112} height={112} loading="eager" className="size-full object-cover" />
             ) : (
               <span className="grid size-full place-items-center text-4xl font-bold text-brand-950">{business.name.charAt(0).toLocaleUpperCase("tr")}</span>
             )}
@@ -223,22 +271,25 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
         <div className="grid items-start gap-6 py-8 lg:grid-cols-[1fr_360px]">
           {/* min-w-0: kaydırılan gün şeridi sütunu ekrandan genişletmesin */}
           <div id="randevu" className="min-w-0 scroll-mt-28">
-            <BookingWidget
-              business={{
-                id: business.id,
-                slug: business.slug,
-                name: business.name,
-                address: business.address,
-                district: business.district,
-                city: business.city,
-                booking_days: business.booking_days,
-                auto_confirm: business.auto_confirm,
-              }}
-              services={(services.data ?? []) as Service[]}
-              staff={staffList}
-              staffServices={(links ?? []) as StaffService[]}
-              hours={hourList}
-            />
+            {/* Randevu kutusu bugünün tarihine ve adresteki ?hizmet/?gun'e bakar: önbellekteki sayfaya her istekte eklenir. */}
+            <Suspense fallback={<div className="card min-h-[28rem] animate-pulse" />}>
+              <BookingWidget
+                business={{
+                  id: business.id,
+                  slug: business.slug,
+                  name: business.name,
+                  address: business.address,
+                  district: business.district,
+                  city: business.city,
+                  booking_days: business.booking_days,
+                  auto_confirm: business.auto_confirm,
+                }}
+                services={services}
+                staff={staffList}
+                staffServices={staffServices}
+                hours={hourList}
+              />
+            </Suspense>
           </div>
 
           <aside className="space-y-4">
@@ -267,30 +318,9 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
                 )}
               </section>
             )}
-            <section className="card p-5">
-              <h2 className="flex items-center gap-2 font-semibold">
-                <Clock className="size-4 text-accent" /> Çalışma saatleri
-              </h2>
-              <ul className="mt-3 space-y-1 text-sm">
-                {hourList.map((h) => {
-                  const isToday = h.weekday === today;
-                  return (
-                    <li
-                      key={h.weekday}
-                      className={`-mx-2 flex justify-between rounded-lg px-2 py-1 ${isToday ? "bg-brand-400/10" : ""}`}
-                    >
-                      <span className={isToday ? "font-medium text-accent" : "text-ink-2"}>
-                        {WEEKDAYS[h.weekday - 1]}
-                        {isToday && " · Bugün"}
-                      </span>
-                      <span className={`tabular-nums ${h.is_open ? "font-medium" : "text-ink-3"}`}>
-                        {h.is_open ? `${h.open_time.slice(0, 5)} – ${h.close_time.slice(0, 5)}` : "Kapalı"}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
+            <Suspense fallback={<Hours hours={hourList} today={null} />}>
+              <TodayHours hours={hourList} />
+            </Suspense>
             {reviewList.length > 0 && (
               <section id="yorumlar" className="card scroll-mt-28 p-5">
                 <h2 className="flex items-center gap-2 font-semibold">
@@ -325,7 +355,14 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
                 <div className="mt-3 grid grid-cols-3 gap-2">
                   {business.gallery.map((url) => (
                     <a key={url} href={url} target="_blank" rel="noreferrer">
-                      <img src={url} alt="" className="aspect-square w-full rounded-lg object-cover transition-opacity hover:opacity-80" />
+                      <Image
+                        src={url}
+                        alt=""
+                        width={240}
+                        height={240}
+                        sizes="(min-width: 1024px) 110px, 33vw"
+                        className="aspect-square w-full rounded-lg object-cover transition-opacity hover:opacity-80"
+                      />
                     </a>
                   ))}
                 </div>
@@ -335,6 +372,41 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
         </div>
       </div>
     </main>
+  );
+}
+
+// "Bugün" satırı istek anındaki güne göre işaretlenir; sayfanın geri kalanı önbellekten gelir.
+async function TodayHours({ hours }: { hours: WorkingHour[] }) {
+  await connection();
+  return <Hours hours={hours} today={isoWeekday(todayStr())} />;
+}
+
+function Hours({ hours, today }: { hours: WorkingHour[]; today: number | null }) {
+  return (
+    <section className="card p-5">
+      <h2 className="flex items-center gap-2 font-semibold">
+        <Clock className="size-4 text-accent" /> Çalışma saatleri
+      </h2>
+      <ul className="mt-3 space-y-1 text-sm">
+        {hours.map((h) => {
+          const isToday = h.weekday === today;
+          return (
+            <li
+              key={h.weekday}
+              className={`-mx-2 flex justify-between rounded-lg px-2 py-1 ${isToday ? "bg-brand-400/10" : ""}`}
+            >
+              <span className={isToday ? "font-medium text-accent" : "text-ink-2"}>
+                {WEEKDAYS[h.weekday - 1]}
+                {isToday && " · Bugün"}
+              </span>
+              <span className={`tabular-nums ${h.is_open ? "font-medium" : "text-ink-3"}`}>
+                {h.is_open ? `${h.open_time.slice(0, 5)} – ${h.close_time.slice(0, 5)}` : "Kapalı"}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 

@@ -66,12 +66,15 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
 
 
   useEffect(() => {
-    supabase.auth.getUser().then(async ({ data }) => {
-      if (!data.user) return setLoggedIn(false);
+    // Yerel oturum yeterli (Auth sunucusuna gidilmez); veriyi RLS korur.
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session) return setLoggedIn(false);
       setLoggedIn(true);
-      const { data: waits } = await supabase.from("waitlist").select("day").eq("business_id", business.id);
+      const [{ data: waits }, { data: p }] = await Promise.all([
+        supabase.from("waitlist").select("day").eq("business_id", business.id),
+        supabase.from("profiles").select("full_name, phone").eq("id", session.user.id).maybeSingle(),
+      ]);
       setWaitDays((waits ?? []).map((w: { day: string }) => w.day));
-      const { data: p } = await supabase.from("profiles").select("full_name, phone").eq("id", data.user.id).maybeSingle();
       if (p) setForm((f) => ({ ...f, name: f.name || p.full_name, phone: f.phone || p.phone || "" }));
     });
   }, [supabase, business.id]);

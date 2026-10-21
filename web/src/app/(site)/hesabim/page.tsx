@@ -82,8 +82,11 @@ function AccountView() {
   const load = useCallback(async () => {
     // İstemci burada oluşturulur: build sırasında (env yokken) sayfa çizilirken değil.
     const supabase = createClient();
-    const { data: auth } = await supabase.auth.getUser();
-    if (!auth.user) return router.replace("/giris?next=/hesabim");
+    // Yerel oturum yeterli (Auth sunucusuna ayrıca gidilmez); veriyi RLS korur.
+    const {
+      data: { session: auth },
+    } = await supabase.auth.getSession();
+    if (!auth) return router.replace("/giris?next=/hesabim");
     setEmail(auth.user.email ?? "");
     const [p, a, r, f] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", auth.user.id).maybeSingle(),

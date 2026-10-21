@@ -46,8 +46,9 @@ export function ShopShortcuts({
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getUser().then(async ({ data }) => {
-      if (!data.user) return;
+    // Yerel oturum yeterli (Auth sunucusuna gidilmez); veriyi RLS korur.
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (!data.session) return;
       const { data: row } = await supabase.from("favorites").select("business_id").eq("business_id", businessId).maybeSingle();
       setFavorite(!!row);
     });

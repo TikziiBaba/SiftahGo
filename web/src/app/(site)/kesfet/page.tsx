@@ -2,14 +2,14 @@ import type { Metadata } from "next";
 import Form from "next/form";
 import Link from "next/link";
 import { Suspense } from "react";
+import { cacheLife } from "next/cache";
+import { createClient as createSupabase } from "@supabase/supabase-js";
 import { CalendarCheck, Check, Search, Store, X } from "lucide-react";
-import { BusinessCard } from "@/components/business-card";
+import { BusinessCard, type BusinessCardData } from "@/components/business-card";
 import { NearbyResults } from "@/components/nearby-results";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
-import { createClient } from "@/lib/supabase/server";
 import { CategoryIcon } from "@/lib/category-icons";
 import { CATEGORIES, categoryLabel, CITIES } from "@/lib/constants";
-import type { Business } from "@/lib/types";
 
 export const metadata: Metadata = {
   title: "İşletme Bul",
@@ -67,17 +67,16 @@ const chip =
 const chipOff = "bg-tint/[0.04] text-ink-2 ring-line hover:bg-tint/[0.08] hover:text-ink";
 const chipOn = "bg-brand-400/10 text-accent-strong ring-brand-400/40";
 
-async function Results({ searchParams }: { searchParams: PageProps<"/kesfet">["searchParams"] }) {
-  const sp = await searchParams;
-  const sort = (SORTS.find((s) => s.id === one(sp.sirala))?.id ?? "puan") as Sort;
-  const f: Filters = { q: one(sp.q), category: one(sp.kategori), city: one(sp.sehir), today: one(sp.bugun) === "1", sort };
-  const { q, category, city, today } = f;
-  const filtered = !!(q || category || city || today);
-
-  const supabase = await createClient();
+// Sonuçlar herkes için aynı (yalnızca yayındaki işletmeler): süzgeç başına önbellekte tutulur, dakikada bir tazelenir.
+async function findBusinesses({ q, category, city, today, sort }: Filters) {
+  "use cache";
+  cacheLife("minutes");
+  const supabase = createSupabase(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
   let query = supabase
     .from("businesses")
-    .select("id, slug, name, category, city, district, logo_url, cover_url, description, rating_avg, rating_count")
+    .select("id, slug, name, category, city, district, logo_url, cover_url, rating_avg, rating_count")
     .eq("is_published", true)
     .order(sort === "yeni" ? "created_at" : sort === "yorum" ? "rating_count" : "rating_score", { ascending: false })
     .order("created_at", { ascending: false })
@@ -86,13 +85,21 @@ async function Results({ searchParams }: { searchParams: PageProps<"/kesfet">["s
   if (category) query = query.eq("category", category);
   if (city) query = query.eq("city", city);
   const { data } = await query;
-  let businesses = (data ?? []) as Business[];
+  const businesses = (data ?? []) as BusinessCardData[];
   // "Bugün müsait": bugün boş saati olanlar
-  if (today && businesses.length) {
-    const { data: open } = await supabase.rpc("available_today", { p_ids: businesses.map((b) => b.id) });
-    const ids = new Set((open ?? []) as string[]);
-    businesses = businesses.filter((b) => ids.has(b.id));
-  }
+  if (!today || !businesses.length) return businesses;
+  const { data: open } = await supabase.rpc("available_today", { p_ids: businesses.map((b) => b.id) });
+  const ids = new Set((open ?? []) as string[]);
+  return businesses.filter((b) => ids.has(b.id));
+}
+
+async function Results({ searchParams }: { searchParams: PageProps<"/kesfet">["searchParams"] }) {
+  const sp = await searchParams;
+  const sort = (SORTS.find((s) => s.id === one(sp.sirala))?.id ?? "puan") as Sort;
+  const f: Filters = { q: one(sp.q), category: one(sp.kategori), city: one(sp.sehir), today: one(sp.bugun) === "1", sort };
+  const { q, category, city, today } = f;
+  const filtered = !!(q || category || city || today);
+  const businesses = await findBusinesses(f);
   const summary = [category && categoryLabel(category), city, today && "bugün müsait"].filter(Boolean).join(" · ");
 
   return (

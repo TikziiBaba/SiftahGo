@@ -23,7 +23,7 @@ import { CategoryIcon } from "@/lib/category-icons";
 import { categoryLabel } from "@/lib/constants";
 import { formatDate, formatTime, untilText } from "@/lib/format";
 import { getRecent, type RecentBusiness } from "@/lib/recent";
-import { createClient } from "@/lib/supabase/client";
+import { loadClient } from "@/lib/supabase/lazy";
 import { useAccount, type Account } from "@/lib/use-account";
 
 type Biz = { name: string; slug: string; phone: string; logo_url: string | null; category: string; address: string; district: string; city: string };
@@ -66,24 +66,27 @@ function MemberDashboard({ account }: { account: Exclude<Account, { kind: "guest
   const [now] = useState(() => new Date());
 
   useEffect(() => {
-    const supabase = createClient();
-    Promise.all([
-      supabase
-        .from("appointments")
-        .select("id, starts_at, status, service_id, staff_id, service_name, businesses(name, slug, phone, logo_url, category, address, district, city)")
-        .eq("customer_id", account.id)
-        .order("starts_at", { ascending: false })
-        .limit(50),
-      supabase
-        .from("favorites")
-        .select("businesses(slug, name, logo_url, category, district, city)")
-        .eq("customer_id", account.id)
-        .order("created_at", { ascending: false })
-        .limit(12),
-    ]).then(([a, f]) => {
-      setAppts((a.data ?? []) as unknown as Appt[]);
-      setFavs(((f.data ?? []) as unknown as { businesses: Fav | null }[]).flatMap((x) => (x.businesses ? [x.businesses] : [])));
-    });
+    loadClient()
+      .then((supabase) =>
+        Promise.all([
+          supabase
+            .from("appointments")
+            .select("id, starts_at, status, service_id, staff_id, service_name, businesses(name, slug, phone, logo_url, category, address, district, city)")
+            .eq("customer_id", account.id)
+            .order("starts_at", { ascending: false })
+            .limit(50),
+          supabase
+            .from("favorites")
+            .select("businesses(slug, name, logo_url, category, district, city)")
+            .eq("customer_id", account.id)
+            .order("created_at", { ascending: false })
+            .limit(12),
+        ]),
+      )
+      .then(([a, f]) => {
+        setAppts((a.data ?? []) as unknown as Appt[]);
+        setFavs(((f.data ?? []) as unknown as { businesses: Fav | null }[]).flatMap((x) => (x.businesses ? [x.businesses] : [])));
+      });
   }, [account.id]);
 
   const iso = now.toISOString();
