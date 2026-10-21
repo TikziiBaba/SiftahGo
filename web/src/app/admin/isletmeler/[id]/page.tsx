@@ -28,9 +28,10 @@ import {
   Tile,
   TONE,
 } from "@/components/admin/ui";
+import { ReviewActions } from "@/components/admin/review";
 import { AreaChart, Donut, STATUS_COLORS } from "@/components/charts";
 import { createClient } from "@/lib/supabase/client";
-import { categoryLabel, STATUS } from "@/lib/constants";
+import { categoryLabel, confirmMode, STATUS } from "@/lib/constants";
 import { addDays, dayOf, errorMessage, formatDate, formatDuration, formatPrice, intlPhone, isoWeekday, todayStr } from "@/lib/format";
 import type { AppointmentStatus } from "@/lib/types";
 import type { AdminUser } from "@/lib/admin-types";
@@ -231,7 +232,7 @@ export default function AdminBusinessDetail() {
               <Info label="Adres">{[b.address, b.district, b.city].filter(Boolean).join(", ") || "—"}</Info>
               <Info label="Randevu kuralları">
                 {b.slot_minutes} dk aralık · {b.booking_days} gün ileri · en erken {formatDuration(b.min_notice_minutes)} önce ·{" "}
-                {b.auto_confirm ? "otomatik onay" : "elle onay"}
+                {confirmMode(b).label.toLocaleLowerCase("tr")}
               </Info>
               {b.description && (
                 <div className="sm:col-span-2">
@@ -337,7 +338,25 @@ export default function AdminBusinessDetail() {
         </div>
 
         <div className="space-y-4">
-          <Actions data={data} onDone={load} />
+          {b.approval_status === "approved" ? (
+            <Actions data={data} onDone={load} />
+          ) : (
+            <Section title="Başvuru" className="ring-1 ring-gold/20">
+              <p className="mt-2 text-sm text-ink-3">
+                {b.approval_status === "pending"
+                  ? `Başvuru ${dateTime(b.submitted_at)} geldi. Onaylanınca sayfa yayına açılır ve 7 günlük Pro denemesi başlar.`
+                  : `${dateTime(b.reviewed_at)} reddedildi. İşletme sahibi bilgileri düzeltip yeniden başvurabilir.`}
+              </p>
+              {b.approval_note && (
+                <p className="mt-3 rounded-xl bg-rose-500/10 p-3 text-sm text-rose-200">
+                  <span className="font-medium">{b.approval_status === "pending" ? "Önceki ret sebebi" : "Ret sebebi"}:</span> {b.approval_note}
+                </p>
+              )}
+              <div className="mt-4">
+                <ReviewActions business={b} onDone={load} />
+              </div>
+            </Section>
+          )}
 
           <Section title="Ödeme geçmişi">
             {data.payments.length === 0 ? (

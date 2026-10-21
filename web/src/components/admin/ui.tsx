@@ -3,11 +3,19 @@
 import { Download } from "lucide-react";
 import { formatDate } from "@/lib/format";
 
-/** İşletmenin yayın/abonelik durumu. `now` veri yüklenirken alınır (render sırasında saat okunmaz). */
+/** İşletmenin onay/yayın/abonelik durumu. `now` veri yüklenirken alınır (render sırasında saat okunmaz). */
 export function businessState(
-  b: { subscription_ends_at: string | null; trial_ends_at: string | null; is_suspended: boolean; is_published: boolean },
+  b: {
+    approval_status: string;
+    subscription_ends_at: string | null;
+    trial_ends_at: string | null;
+    is_suspended: boolean;
+    is_published: boolean;
+  },
   now: number,
 ) {
+  if (b.approval_status === "pending") return { key: "pending", label: "Onay bekliyor", className: TONE.amber };
+  if (b.approval_status === "rejected") return { key: "rejected", label: "Reddedildi", className: TONE.rose };
   if (b.is_suspended) return { key: "suspended", label: "Askıda", className: TONE.rose };
   if (!b.subscription_ends_at) return { key: "never", label: "Paketsiz", className: TONE.muted };
   const days = Math.ceil((new Date(b.subscription_ends_at).getTime() - now) / 864e5);

@@ -7,7 +7,7 @@ import { BusinessLocation } from "@/components/business-location";
 import { PageAppearance } from "@/components/page-appearance";
 import { useBusiness } from "@/components/panel-context";
 import { createClient } from "@/lib/supabase/client";
-import { CATEGORIES, CITIES, RESERVED_SLUGS, SITE_DOMAIN } from "@/lib/constants";
+import { CATEGORIES, CITIES, CONFIRM_MODES, confirmMode, RESERVED_SLUGS, SITE_DOMAIN } from "@/lib/constants";
 import { errorMessage, slugInput, slugify } from "@/lib/format";
 import { uploadImage } from "@/lib/upload";
 
@@ -32,6 +32,7 @@ export default function SettingsPage() {
     booking_days: business.booking_days,
     min_notice_minutes: business.min_notice_minutes,
     auto_confirm: business.auto_confirm,
+    auto_confirm_known_only: business.auto_confirm_known_only,
     is_published: business.is_published,
   });
   const [busy, setBusy] = useState(false);
@@ -201,14 +202,36 @@ export default function SettingsPage() {
               <label className="label">En geç (gün sonrası)</label>
               <input type="number" min={1} max={365} className="input" value={form.booking_days} onChange={set("booking_days")} />
             </div>
-            <label className="flex items-start gap-2 text-sm sm:col-span-3">
-              <input type="checkbox" className="mt-0.5 size-4 accent-brand-400" checked={form.auto_confirm}
-                onChange={(e) => setForm({ ...form, auto_confirm: e.target.checked })} />
-              <span>
-                <b>Randevuları otomatik onayla</b>
-                <span className="block text-ink-3">Kapalıysa her randevuyu panelden sizin onaylamanız gerekir.</span>
-              </span>
-            </label>
+            <fieldset className="sm:col-span-3">
+              <legend className="label">Randevu onayı</legend>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {CONFIRM_MODES.map((m) => {
+                  const on = confirmMode(form).id === m.id;
+                  return (
+                    <label
+                      key={m.id}
+                      className={`flex cursor-pointer items-start gap-2 rounded-xl p-3 text-sm ring-1 transition ${on ? "bg-brand-400/10 ring-brand-400/40" : "ring-line hover:bg-tint/5"}`}
+                    >
+                      <input
+                        type="radio"
+                        name="confirm_mode"
+                        className="mt-0.5 size-4 accent-brand-400"
+                        checked={on}
+                        onChange={() => setForm({ ...form, auto_confirm: m.auto_confirm, auto_confirm_known_only: m.auto_confirm_known_only })}
+                      />
+                      <span>
+                        <b>{m.label}</b>
+                        <span className="block text-ink-3">{m.hint}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="mt-2 text-xs text-ink-3">
+                Sık iptal eden veya randevusuna gelmeyen müşterilerin randevusu her durumda onayınıza düşer. Reddederken yazdığınız sebep
+                müşteriye iletilir.
+              </p>
+            </fieldset>
             <label className="flex items-start gap-2 text-sm sm:col-span-3">
               <input type="checkbox" className="mt-0.5 size-4 accent-brand-400" checked={form.is_published}
                 onChange={(e) => setForm({ ...form, is_published: e.target.checked })} />

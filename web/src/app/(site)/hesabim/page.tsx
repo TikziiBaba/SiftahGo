@@ -371,7 +371,7 @@ function AppointmentCard({
             {formatDate(row.starts_at)} · {row.service_name} · {formatPrice(row.price)}
           </p>
         </div>
-        <span className={`chip ${status.className}`}>{status.label}</span>
+        <span className={`chip ${status.className}`}>{row.rejected ? "Onaylanmadı" : status.label}</span>
         <div className="flex w-full flex-wrap gap-2 sm:w-auto">
           {onReschedule && (
             <button onClick={onReschedule} className="btn btn-secondary py-2">
@@ -395,6 +395,11 @@ function AppointmentCard({
           )}
         </div>
       </div>
+      {row.status === "cancelled" && row.cancel_reason && (
+        <p className="mt-3 rounded-xl bg-tint/[0.03] p-3 text-sm text-ink-2 ring-1 ring-line">
+          <span className="font-medium">İşletmenin açıklaması:</span> {row.cancel_reason}
+        </p>
+      )}
       {reviewing && (
         <ReviewForm
           appointmentId={row.id}

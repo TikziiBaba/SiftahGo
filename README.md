@@ -144,10 +144,14 @@ gh release create v1.0.1 siftahgo.apk --title "SiftahGo 1.0.1" --notes "..."
 
 ### 4. Yönetim paneli
 
-`/admin`: platform özeti, işletmeler (paket tanımlama/süre uzatma, aboneliği bitirme, askıya alma), kullanıcılar,
-ödemeler, randevular ve paket fiyatları. Yöneticiler `admins` tablosundaki e-postalardır (şemada
+`/admin`: platform özeti, işletme başvuruları (onay/ret), işletmeler (paket tanımlama/süre uzatma, aboneliği bitirme,
+askıya alma), kullanıcılar, ödemeler, randevular ve paket fiyatları. Yöneticiler `admins` tablosundaki e-postalardır (şemada
 `dedyusuf99@gmail.com`); hesabın e-postası doğrulanmış olmalı. Yeni yönetici eklemek için SQL Editor'de:
 `insert into public.admins (email) values ('ornek@alan.com');`
+
+Yeni işletme "onay bekliyor" açılır: sahibi onaylanana kadar yalnızca bekleme ekranını görür, işletme sitede görünmez,
+randevu ve ödeme almaz. Yetkili `/admin/basvurular`'da adres ve telefonu kontrol edip onaylar (7 günlük Pro deneme o an
+başlar) ya da sebebini yazarak reddeder; reddedilen işletme bilgilerini düzeltip yeniden başvurur.
 
 Askıya alınan işletme sitede ve uygulamada görünmez, randevu almaz; sahibi bunu ayarlardan geri açamaz.
 Yöneticinin tanımladığı paketler ödeme geçmişinde `ADM` ile başlayan kayıt olarak görünür.
@@ -164,7 +168,10 @@ tamamlanan randevuya puan ve yorum, şifremi unuttum.
 - Müşteriler: telefon numarasına göre müşteri defteri (ziyaret, harcama, gelmeme, son/sıradaki randevu)
 - Raporlar: ciro, randevu sayısı, ortalama sepet, gelmeme oranı, günlük ciro grafiği, hizmet ve personel dağılımı
 - Hizmetler, personel (hangi personelin hangi hizmeti verdiği), çalışma saatleri, izin/tatil günleri
-- Randevu kuralları (saat aralığı, en erken/en geç), otomatik onay, logo/kapak/galeri (R2), QR kod
+- Randevu kuralları (saat aralığı, en erken/en geç), logo/kapak/galeri (R2), QR kod
+- Randevu onayı: hepsini otomatik / tanıdık müşteriyi (sizde randevusu tamamlanmış) otomatik, yeni müşteriyi elle /
+  hepsini elle. Gelen randevuda müşteri kartı (üyelik, bu işletmedeki ve tüm SiftahGo'daki geçmiş, yazdığı yorumlar);
+  sebebiyle reddetme veya iptal (sebep müşteriye e-posta ve bildirimle gider), istenirse müşteriyi engelleme
 
 **İşletme (mobil):** web panelindeki işlerin tamamı uygulamada da var: işletme kurulumu, takvim (hafta görünümü,
 onay bekleyenler, durum yönetimi, elle randevu ekleme, canlı güncelleme), müşteri defteri, raporlar, hizmetler, personel,

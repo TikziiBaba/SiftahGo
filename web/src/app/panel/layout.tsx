@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { InboxBell } from "@/components/inbox-bell";
 import { Logo } from "@/components/site-header";
-import { BusinessContext, SetupDoneContext } from "@/components/panel-context";
+import { BusinessContext, SetupContext } from "@/components/panel-context";
 import { createClient } from "@/lib/supabase/client";
 import { isSubscribed, isTrial } from "@/lib/constants";
 import type { Business } from "@/lib/types";
@@ -112,19 +112,21 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
     ]).then(([p, r]) => setBadges({ pending: p.count ?? 0, reviews: r.count ?? 0 }));
   }, [businessId, pathname]);
 
+  // İşletmesi olmayan ya da başvurusu onaylanmamış hesap yalnızca kurulum (başvuru) sayfasını görür.
+  const approved = business?.approval_status === "approved";
   useEffect(() => {
-    if (business === null && pathname !== "/panel/kurulum") router.replace("/panel/kurulum");
-    if (business && pathname === "/panel/kurulum") router.replace("/panel");
-    if (business && !sub.subscribed && !OPEN_WITHOUT_PLAN.includes(pathname)) router.replace("/panel/abonelik");
-  }, [business, sub.subscribed, pathname, router]);
+    if (business !== undefined && !approved && pathname !== "/panel/kurulum") router.replace("/panel/kurulum");
+    if (approved && pathname === "/panel/kurulum") router.replace("/panel");
+    if (approved && !sub.subscribed && !OPEN_WITHOUT_PLAN.includes(pathname)) router.replace("/panel/abonelik");
+  }, [business, approved, sub.subscribed, pathname, router]);
 
-  if (pathname === "/panel/kurulum" && business === null) {
-    return <SetupDoneContext.Provider value={refresh}>{children}</SetupDoneContext.Provider>;
+  if (pathname === "/panel/kurulum" && business !== undefined && !approved) {
+    return <SetupContext.Provider value={{ business, refresh }}>{children}</SetupContext.Provider>;
   }
 
   const { subscribed, trial, daysLeft } = sub;
 
-  if (!business || pathname === "/panel/kurulum" || (!subscribed && !OPEN_WITHOUT_PLAN.includes(pathname))) {
+  if (!business || !approved || pathname === "/panel/kurulum" || (!subscribed && !OPEN_WITHOUT_PLAN.includes(pathname))) {
     return (
       <div className="grid flex-1 place-items-center py-24">
         <Loader2 className="size-6 animate-spin text-ink-3" />

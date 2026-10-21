@@ -22,6 +22,9 @@ export type QueuedNotification = {
   prior_cancels: number;
   prior_no_shows: number;
   customer_flagged: boolean;
+  // İşletmenin iptal/ret açıklaması; rejected: onay bekleyen randevu reddedildi
+  cancel_reason: string;
+  rejected: boolean;
 };
 
 type Content = {
@@ -125,10 +128,10 @@ function content(n: QueuedNotification, appUrl: string): Content {
       };
     case "cancelled":
       return {
-        subject: `Randevunuz iptal edildi: ${n.business_name}`,
-        title: "Randevunuz iptal edildi",
-        intro: "İşletme bu randevuyu iptal etti. Dilerseniz başka bir saate yeni randevu alabilirsiniz.",
-        rows: forCustomer,
+        subject: `${n.rejected ? "Randevu talebiniz onaylanmadı" : "Randevunuz iptal edildi"}: ${n.business_name}`,
+        title: n.rejected ? "Randevu talebiniz onaylanmadı" : "Randevunuz iptal edildi",
+        intro: `${n.rejected ? "İşletme bu randevu talebini onaylamadı." : "İşletme bu randevuyu iptal etti."} Dilerseniz başka bir saate yeni randevu alabilirsiniz.`,
+        rows: [...forCustomer, ...(n.cancel_reason ? [["İşletmenin açıklaması", n.cancel_reason] as [string, string]] : [])],
         action: { label: "Yeni randevu al", href: `${appUrl}/${n.business_slug}` },
       };
     case "rescheduled":

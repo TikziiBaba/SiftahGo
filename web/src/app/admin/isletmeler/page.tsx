@@ -20,6 +20,8 @@ type Row = Business & {
 
 const FILTERS = [
   { id: "all", label: "Tümü" },
+  { id: "pending", label: "Onay bekliyor" },
+  { id: "rejected", label: "Reddedildi" },
   { id: "live", label: "Yayında" },
   { id: "trial", label: "Denemede" },
   { id: "expiring", label: "Bitmek üzere" },

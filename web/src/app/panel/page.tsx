@@ -23,10 +23,12 @@ import {
   Star,
   StickyNote,
   TrendingUp,
+  UserRound,
   Users,
   Wallet,
   X,
 } from "lucide-react";
+import { AppointmentReview } from "@/components/appointment-review";
 import { KpiCard } from "@/components/charts";
 import { useBusiness } from "@/components/panel-context";
 import { DayCalendar, WeekView } from "@/components/panel-schedule";
@@ -92,6 +94,8 @@ export default function AppointmentsPage() {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [adding, setAdding] = useState(false);
   const [moving, setMoving] = useState<Row | null>(null);
+  // Müşteri kartı ve onay/ret penceresi; rejecting: doğrudan ret adımında açılır.
+  const [reviewing, setReviewing] = useState<{ row: Row; rejecting: boolean } | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
   const [allPending, setAllPending] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -335,17 +339,15 @@ export default function AppointmentsPage() {
                       {r.customer_name} · {r.service_name}
                       {r.customer_flagged && <FlaggedChip row={r} />}
                     </span>
+                    <button className="btn btn-secondary py-1.5" onClick={() => setReviewing({ row: r, rejecting: false })}>
+                      <UserRound className="size-4" /> Müşteriyi incele
+                    </button>
                     <button className="btn btn-primary py-1.5" onClick={() => setStatus(r.id, "confirmed")}>
                       Onayla
                     </button>
-                    <button className="btn btn-ghost py-1.5 text-bad" onClick={() => setStatus(r.id, "cancelled")}>
+                    <button className="btn btn-ghost py-1.5 text-bad" onClick={() => setReviewing({ row: r, rejecting: true })}>
                       Reddet
                     </button>
-                    {r.customer_id && (
-                      <button className="btn btn-ghost py-1.5 text-bad" onClick={() => block(r)} title="Reddet ve engelle">
-                        <Ban className="size-4" /> Engelle
-                      </button>
-                    )}
                   </li>
                 ))}
               </ul>
@@ -477,12 +479,20 @@ export default function AppointmentsPage() {
                             <CalendarClock className="size-3.5" /> Saati değiştir
                           </button>
                         )}
+                        <button onClick={() => setReviewing({ row: r, rejecting: false })} className="inline-flex items-center gap-1 text-accent">
+                          <UserRound className="size-3.5" /> Müşteri kartı
+                        </button>
                         {r.customer_id && (
                           <button onClick={() => block(r)} className="inline-flex items-center gap-1 text-bad">
                             <Ban className="size-3.5" /> Engelle
                           </button>
                         )}
                       </div>
+                      {r.status === "cancelled" && r.cancel_reason && (
+                        <p className="mt-1 text-sm text-ink-3">
+                          {r.rejected ? "Ret" : "İptal"} sebebi: {r.cancel_reason}
+                        </p>
+                      )}
                       {r.note && <p className="mt-1 text-sm italic text-ink-3">“{r.note}”</p>}
                       <PackageChip row={r} packages={packages} />
                       {notes[phoneKey(r.customer_phone)] && (
@@ -599,6 +609,19 @@ export default function AppointmentsPage() {
           </Link>
         </aside>
       </div>
+
+      {reviewing && (
+        <AppointmentReview
+          appointment={reviewing.row}
+          rejecting={reviewing.rejecting}
+          onClose={() => setReviewing(null)}
+          onDone={() => {
+            setReviewing(null);
+            load();
+            loadSummary();
+          }}
+        />
+      )}
 
       {moving && (
         <RescheduleDialog

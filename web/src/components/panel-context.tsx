@@ -13,5 +13,11 @@ export function useBusiness() {
   return ctx;
 }
 
-/** Kurulum sayfası işletmeyi oluşturduktan sonra paneli yenilemek için kullanır. */
-export const SetupDoneContext = createContext<() => Promise<void>>(async () => {});
+/**
+ * Kurulum (başvuru) sayfası: onaylanmamış işletme (henüz açılmadıysa null) ve başvuru gönderildikten
+ * ya da durum sorulduktan sonra paneli yenileme.
+ */
+export const SetupContext = createContext<{ business: Business | null; refresh: () => Promise<void> }>({
+  business: null,
+  refresh: async () => {},
+});
