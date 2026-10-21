@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Check, Copy, Gift, Loader2, Share2 } from "lucide-react";
 import { useBusiness } from "@/components/panel-context";
+import { ScrambleText } from "@/components/scramble-text";
 import { createClient } from "@/lib/supabase/client";
 import { errorMessage, formatDate } from "@/lib/format";
 
@@ -62,7 +63,9 @@ export function ReferralCard({ hasPaid }: { hasPaid: boolean }) {
       <div className="card mt-3 space-y-4 p-5">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm text-ink-3">Davet kodunuz</span>
-          <code className="rounded-lg bg-surface-2 px-3 py-1.5 text-lg font-semibold tracking-widest">{business.referral_code}</code>
+          <code className="rounded-lg bg-surface-2 px-3 py-1.5 text-lg font-semibold tracking-widest">
+            <ScrambleText text={business.referral_code} />
+          </code>
           <button type="button" className="btn btn-ghost" onClick={() => copy("code")}>
             {copied === "code" ? <Check className="size-4 text-brand-300" /> : <Copy className="size-4" />} Kodu kopyala
           </button>

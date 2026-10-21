@@ -1,9 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { ImagePlus, Loader2, X } from "lucide-react";
+import { Check, Loader2, X } from "lucide-react";
 import { BlockedCustomers } from "@/components/blocked-customers";
 import { BusinessLocation } from "@/components/business-location";
+import { DropZone } from "@/components/drop-zone";
+import { DynamicButton } from "@/components/dynamic-button";
+import { ImageButton } from "@/components/image-button";
 import { PageAppearance } from "@/components/page-appearance";
 import { useBusiness } from "@/components/panel-context";
 import { createClient } from "@/lib/supabase/client";
@@ -36,6 +39,7 @@ export default function SettingsPage() {
     is_published: business.is_published,
   });
   const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -49,10 +53,13 @@ export default function SettingsPage() {
       return setMessage({ ok: false, text: "Lütfen en az 3 karakterlik farklı bir sayfa adresi seçin." });
     }
     setBusy(true);
+    setMessage(null);
     const { error } = await createClient().from("businesses").update({ ...form, slug, name: form.name.trim() }).eq("id", business.id);
     setBusy(false);
     if (error) return setMessage({ ok: false, text: errorMessage(error) });
-    setMessage({ ok: true, text: "Ayarlar kaydedildi." });
+    // Başarı düğmede görünür ("Kaydedildi"), biraz sonra düğme eski haline döner.
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
     refresh();
   }
 
@@ -128,7 +135,13 @@ export default function SettingsPage() {
             </div>
             {business.gallery.length < 12 && (
               <div className="mt-3">
-                <ImageButton label="Fotoğraf ekle" multiple busy={uploading === "gallery"} onPick={(f) => onPick("gallery", f)} />
+                <DropZone
+                  label="Fotoğraf ekle"
+                  hint={`Sürükleyip bırakın ya da tıklayıp seçin · ${12 - business.gallery.length} yer kaldı`}
+                  multiple
+                  busy={uploading === "gallery"}
+                  onPick={(f) => onPick("gallery", f)}
+                />
               </div>
             )}
           </div>
@@ -244,9 +257,13 @@ export default function SettingsPage() {
         </section>
 
         <div className="flex items-center gap-3">
-          <button disabled={busy} className="btn btn-primary px-6">
-            {busy && <Loader2 className="size-4 animate-spin" />} Kaydet
-          </button>
+          <DynamicButton
+            disabled={busy}
+            className="btn btn-primary px-6"
+            icon={busy ? <Loader2 className="size-4 animate-spin" /> : saved ? <Check className="size-4" /> : undefined}
+          >
+            {busy ? "Kaydediliyor" : saved ? "Kaydedildi" : "Kaydet"}
+          </DynamicButton>
           {message && <p className={`text-sm ${message.ok ? "text-emerald-400" : "text-rose-400"}`}>{message.text}</p>}
         </div>
       </form>
@@ -256,23 +273,5 @@ export default function SettingsPage() {
 
       <BlockedCustomers businessId={business.id} />
     </div>
-  );
-}
-
-function ImageButton({ label, busy, multiple, onPick }: { label: string; busy: boolean; multiple?: boolean; onPick: (f: FileList | null) => void }) {
-  return (
-    <label className={`btn btn-secondary cursor-pointer ${busy ? "pointer-events-none opacity-60" : ""}`}>
-      {busy ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />} {label}
-      <input
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        multiple={multiple}
-        className="hidden"
-        onChange={(e) => {
-          onPick(e.target.files);
-          e.target.value = "";
-        }}
-      />
-    </label>
   );
 }

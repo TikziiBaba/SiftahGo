@@ -55,7 +55,10 @@ export function Turnstile({ onToken }: { onToken: (token: string | null) => void
         if (cancelled || !ref.current || !window.turnstile) return;
         id = window.turnstile.render(ref.current, {
           sitekey: SITE_KEY,
-          theme: "dark",
+          // Giriş/kayıt sayfaları açık temada. Kutu yalnızca ziyaretçinin bir şey yapması gerekirse görünür;
+          // çoğu zaman doğrulama görünmeden biter ve form tek ekrana sığar.
+          theme: "light",
+          appearance: "interaction-only",
           language: "tr",
           callback: (token: string) => callback.current(token),
           "expired-callback": () => callback.current(null),
@@ -70,5 +73,5 @@ export function Turnstile({ onToken }: { onToken: (token: string | null) => void
   }, []);
 
   if (!SITE_KEY) return null;
-  return <div ref={ref} className="flex min-h-[65px] justify-center" />;
+  return <div ref={ref} className="flex justify-center empty:hidden" />;
 }

@@ -1,10 +1,13 @@
-/** Görseli tarayıcıda küçültüp /api/upload üzerinden R2'ye yükler, adresini döndürür. */
-export async function uploadImage(file: File, kind: "logo" | "cover" | "gallery") {
+/**
+ * Görseli tarayıcıda küçültüp /api/upload üzerinden R2'ye yükler, adresini döndürür.
+ * businessId yalnızca yönetici başka bir işletmenin görselini yüklerken verilir.
+ */
+export async function uploadImage(file: File, kind: "logo" | "cover" | "gallery", businessId?: string) {
   const blob = await shrink(file, kind === "logo" ? 512 : 1600);
   const body = new FormData();
   body.append("file", new File([blob], "image.jpg", { type: "image/jpeg" }));
   body.append("kind", kind);
-  const res = await fetch("/api/upload", { method: "POST", body });
+  const res = await fetch(businessId ? `/api/upload?business=${encodeURIComponent(businessId)}` : "/api/upload", { method: "POST", body });
   const json = await res.json();
   if (!res.ok) throw new Error(json.error ?? "Görsel yüklenemedi.");
   return json.url as string;

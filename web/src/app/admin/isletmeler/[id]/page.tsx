@@ -12,10 +12,13 @@ import {
   Loader2,
   Mail,
   MessageCircle,
+  Pencil,
   Phone,
   PlayCircle,
   Star,
 } from "lucide-react";
+import { BusinessEdit } from "@/components/admin/business-edit";
+import { HoldButton } from "@/components/hold-button";
 import {
   businessState,
   dateTime,
@@ -55,6 +58,7 @@ export default function AdminBusinessDetail() {
   const { id } = useParams<{ id: string }>();
   const [data, setData] = useState<Data | null | undefined>(undefined);
   const [error, setError] = useState("");
+  const [editing, setEditing] = useState(false);
 
   const load = useCallback(async () => {
     const supabase = createClient();
@@ -163,11 +167,18 @@ export default function AdminBusinessDetail() {
               {categoryLabel(b.category)} · {[b.district, b.city].filter(Boolean).join(", ") || "Konum yok"} · Kayıt {shortDate(b.created_at)}
             </p>
           </div>
-          <Link href={`/${b.slug}`} target="_blank" className="btn btn-secondary">
-            <ExternalLink className="size-4" /> /{b.slug}
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => setEditing(!editing)} className="btn btn-secondary">
+              <Pencil className="size-4" /> Düzenle
+            </button>
+            <Link href={`/${b.slug}`} target="_blank" className="btn btn-secondary">
+              <ExternalLink className="size-4" /> /{b.slug}
+            </Link>
+          </div>
         </div>
       </div>
+
+      {editing && <BusinessEdit business={b} onClose={() => setEditing(false)} onDone={load} />}
 
       <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
         <Tile label="Randevu" value={String(stats.total)} hint={`${stats.upcoming} yaklaşan · ${stats.cancelled} iptal`} />
@@ -415,15 +426,8 @@ function Actions({ data, onDone }: { data: Data; onDone: () => Promise<void> }) 
       () => supabase.rpc("admin_grant_subscription", { p_business_id: b.id, p_plan_id: planId, p_days: days, p_amount: Number(amount) || 0 }),
       `${plans.find((p) => p.id === planId)?.name} paketi ${days} gün tanımlandı.`,
     );
-  const end = () =>
-    confirm(`${b.name} aboneliği şimdi bitirilsin mi? Sayfa yayından düşer ve randevu almaz.`) &&
-    run("end", () => supabase.rpc("admin_end_subscription", { p_business_id: b.id }), "Abonelik bitirildi.");
+  const end = () => run("end", () => supabase.rpc("admin_end_subscription", { p_business_id: b.id }), "Abonelik bitirildi.");
   const suspend = () =>
-    confirm(
-      b.is_suspended
-        ? `${b.name} askıdan çıkarılsın mı?`
-        : `${b.name} askıya alınsın mı? Sayfası gizlenir ve randevu alamaz; sahibi bunu kendisi kaldıramaz.`,
-    ) &&
     run(
       "suspend",
       () => supabase.rpc("admin_set_suspended", { p_business_id: b.id, p_suspended: !b.is_suspended }),
@@ -483,20 +487,23 @@ function Actions({ data, onDone }: { data: Data; onDone: () => Promise<void> }) 
 
       <div className="mt-5 space-y-2 border-t border-line pt-4">
         {subscribed && (
-          <button type="button" disabled={!!busy} onClick={end} className="btn btn-secondary w-full justify-start">
-            {busy === "end" ? <Loader2 className="size-4 animate-spin" /> : <CircleSlash className="size-4 text-amber-300" />} Aboneliği şimdi bitir
-          </button>
+          <HoldButton pending="Abonelik bitiriliyor" disabled={!!busy} onConfirm={end} className="btn btn-secondary w-full justify-start">
+            <CircleSlash className="size-4 text-amber-300" /> Aboneliği şimdi bitir
+          </HoldButton>
         )}
-        <button type="button" disabled={!!busy} onClick={suspend} className={`btn w-full justify-start ${b.is_suspended ? "btn-secondary" : "bg-rose-500/10 text-bad ring-1 ring-rose-400/20 hover:bg-rose-500/20"}`}>
-          {busy === "suspend" ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : b.is_suspended ? (
-            <PlayCircle className="size-4 text-emerald-300" />
-          ) : (
-            <Ban className="size-4" />
-          )}
+        <HoldButton
+          pending={b.is_suspended ? "Askıdan çıkarılıyor" : "Askıya alınıyor"}
+          disabled={!!busy}
+          onConfirm={suspend}
+          className={`btn w-full justify-start ${b.is_suspended ? "btn-secondary" : "bg-rose-500/10 text-bad ring-1 ring-rose-400/20 hover:bg-rose-500/20"}`}
+        >
+          {b.is_suspended ? <PlayCircle className="size-4 text-emerald-300" /> : <Ban className="size-4" />}
           {b.is_suspended ? "Askıdan çıkar (yayına aç)" : "Askıya al (yayından kaldır)"}
-        </button>
+        </HoldButton>
+        <p className="text-xs text-ink-3">
+          Onaylamak için basılı tutun. Abonelik bitince ya da askıda sayfa yayından düşer ve randevu almaz; askıyı sahibi
+          kaldıramaz.
+        </p>
       </div>
     </Section>
   );

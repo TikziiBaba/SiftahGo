@@ -24,7 +24,8 @@ export function AuthShell({ title, subtitle, children }: { title: string; subtit
         </div>
       </aside>
 
-      <div className="relative flex flex-col px-4 pb-10 pt-5 sm:px-8">
+      {/* Sayfa tek ekrana sığar: kaydırma yalnızca çok kısa ekranlarda (ya da açılan bot kontrolüyle) devreye girer. */}
+      <div className="relative flex min-h-[100dvh] flex-col px-4 py-3 sm:px-8 sm:py-4">
         <div className="flex items-center justify-between lg:justify-end">
           <span className="lg:hidden">
             <Logo />
@@ -34,18 +35,19 @@ export function AuthShell({ title, subtitle, children }: { title: string; subtit
           </Suspense>
         </div>
 
-        {/* Dar ekranda küçük dükkân */}
-        <div className="relative mx-auto -mb-4 h-40 w-full max-w-md lg:hidden">
+        {/* Küçük dükkân yalnızca formun altına yer kalan uzun ekranlarda (tablet); telefonda gizli kap kurulmaz. */}
+        <div className="relative mx-auto -mb-4 hidden h-40 w-full max-w-md [@media(min-height:900px)]:block lg:hidden!">
           <Shop className="absolute inset-0" focus={{ x: 0, y: 0 }} narrowFocus={{ x: 0, y: 0 }} scale={1.25} tiles={4} />
         </div>
 
         {/* Dar ekranda ortalanmaz: form (adresteki ?next vb. okunduktan sonra) gelince kart yerinden kaymasın. */}
-        <div className="mx-auto w-full max-w-md py-6 lg:my-auto lg:py-10">
+        <div className="reveal-load mx-auto w-full max-w-md py-3 sm:py-4 lg:my-auto">
           <div className="bezel">
-            <div className="bezel-core p-6 md:p-8">
-              <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-              {subtitle && <p className="mt-1.5 text-sm text-ink-3">{subtitle}</p>}
-              <div className="mt-6">
+            <div className="bezel-core p-4 sm:p-7">
+              <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{title}</h1>
+              {/* Kısa ekranda (tarayıcı çubuklu telefon, alçak dizüstü) yer açmak için gizlenir. */}
+              {subtitle && <p className="mt-1 text-sm text-ink-3 [@media(max-height:760px)]:hidden">{subtitle}</p>}
+              <div className="mt-4 sm:mt-5">
                 <Suspense>{children}</Suspense>
               </div>
             </div>

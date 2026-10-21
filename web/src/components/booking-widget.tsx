@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { BellRing, CalendarPlus, CheckCircle2, ChevronLeft, Loader2 } from "lucide-react";
+import { BellRing, CalendarPlus, ChevronLeft, Loader2 } from "lucide-react";
+import { AppointmentTicket } from "@/components/appointment-ticket";
 import { bookableDays, DayStrip, SlotGrid } from "@/components/slot-picker";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -154,16 +155,21 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
 
   if (booked && service && time) {
     return (
-      <section className="card p-8 text-center">
-        <CheckCircle2 className="mx-auto size-14 text-ok" />
-        <h2 className="mt-4 text-xl font-bold">Randevunuz alındı!</h2>
-        <p className="mt-2 text-ink-2">
-          {formatDate(time)} saat <b>{formatTime(time)}</b> · {service.name}
-        </p>
-        <p className="mt-1 text-sm text-ink-3">
+      <section className="py-2 text-center">
+        <AppointmentTicket
+          businessName={business.name}
+          serviceName={service.name}
+          staffName={allStaff.find((p) => p.id === staffId)?.name}
+          startsAt={time}
+          durationMinutes={service.duration_minutes}
+          price={Number(service.price)}
+          place={[business.address, business.district, business.city].filter(Boolean).join(", ")}
+          confirmed={booked === "confirmed"}
+        />
+        <p className="mt-5 text-sm text-ink-3">
           {booked === "confirmed" ? "Randevunuz onaylandı." : "İşletme randevunuzu onayladığında kesinleşecek."}
         </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-3">
+        <div className="mt-5 flex flex-wrap justify-center gap-3">
           <a
             href={googleCalendarLink(
               `${business.name} — ${service.name}`,

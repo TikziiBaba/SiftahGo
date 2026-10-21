@@ -317,13 +317,99 @@ svg.lucide {
   animation: float 6s ease-in-out infinite;
 }
 
+/* Dinamik düğme: yeni yazı alttan gelir, eskisi yukarı çıkar (bkz. components/dynamic-button.tsx) */
+@keyframes dyn-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+    filter: blur(2px);
+  }
+}
+@keyframes dyn-out {
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+    filter: blur(2px);
+  }
+}
+.dyn-in {
+  animation: dyn-in 0.22s cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+.dyn-out {
+  animation: dyn-out 0.18s cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* Basılı tutma düğmesi: "Geri al" süresi azalan çizgi (bkz. components/hold-button.tsx) */
+@keyframes shrink-x {
+  to {
+    transform: scaleX(0);
+  }
+}
+.hold-countdown {
+  animation: shrink-x linear both;
+}
+
+/* Ödeme fişi yazıcının ağzından çıkar; alt kenarı tırtıklı (bkz. components/payment-receipt.tsx) */
+@keyframes receipt-print {
+  from {
+    transform: translateY(-100%);
+  }
+}
+.receipt-print {
+  animation: receipt-print 1.8s cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+.receipt-paper {
+  mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 12px 100%;
+}
+.receipt-barcode {
+  background: repeating-linear-gradient(
+    90deg,
+    #262626 0 2px,
+    #0000 2px 4px,
+    #262626 4px 5px,
+    #0000 5px 8px,
+    #262626 8px 11px,
+    #0000 11px 12px,
+    #262626 12px 13px,
+    #0000 13px 17px
+  );
+}
+
+/* Randevu bileti: iki parça birleşim yerinde yarım daire çentikle ayrılır (bkz. components/appointment-ticket.tsx) */
+.ticket-top {
+  mask:
+    radial-gradient(circle at 0 100%, #0000 12px, #000 12.5px) 0 0 / 51% 100% no-repeat,
+    radial-gradient(circle at 100% 100%, #0000 12px, #000 12.5px) 100% 0 / 51% 100% no-repeat;
+}
+.ticket-stub {
+  mask:
+    radial-gradient(circle at 0 0, #0000 12px, #000 12.5px) 0 0 / 51% 100% no-repeat,
+    radial-gradient(circle at 100% 0, #0000 12px, #000 12.5px) 100% 0 / 51% 100% no-repeat;
+}
+@keyframes ticket-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px) rotate(-3deg) scale(0.96);
+  }
+}
+.ticket-in {
+  animation: ticket-in 0.7s var(--ease-spring) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .reveal,
   .reveal-load,
   .animate-marquee,
   .animate-float,
-  .animate-grid-flow {
+  .animate-grid-flow,
+  .dyn-in,
+  .receipt-print,
+  .ticket-in {
     animation: none;
+  }
+  /* Animasyon bitişi beklenmez; eski yazı hemen kalkar. */
+  .dyn-out {
+    display: none;
   }
 }
 

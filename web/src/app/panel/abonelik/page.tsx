@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, CheckCircle2, Loader2, ShieldCheck, X } from "lucide-react";
+import { Check, Loader2, ShieldCheck, X } from "lucide-react";
 import { useBusiness } from "@/components/panel-context";
+import { PaymentReceipt } from "@/components/payment-receipt";
 import { ReferralCard } from "@/components/referral-card";
 import { createClient } from "@/lib/supabase/client";
 import { BASE_FEATURES, isSubscribed, isTrial, PLAN_FEATURES } from "@/lib/constants";
@@ -107,15 +108,10 @@ export default function SubscriptionPage() {
         Aylık (30 gün) ya da yıllık (365 gün, 2 ay bedava) ödeyin. Taahhüt ve otomatik yenileme yok; her ödeme kalan sürenize eklenir. Paket değiştirirseniz kalan süreniz yeni paketin fiyatına göre çevrilir.
       </p>
 
-      {waiting && (
-        <div className="mt-6 flex items-center gap-3 rounded-2xl bg-brand-400/10 p-4 text-sm text-brand-200 ring-1 ring-brand-400/20">
-          <Loader2 className="size-5 animate-spin" /> Ödemeniz alındı, onay bekleniyor. Bu birkaç saniye sürebilir…
-        </div>
-      )}
-      {result === "basarili" && !waiting && lastPayment?.status === "paid" && (
-        <div className="mt-6 flex items-center gap-3 rounded-2xl bg-emerald-400/10 p-4 text-sm text-emerald-200 ring-1 ring-emerald-400/20">
-          <CheckCircle2 className="size-5" />
-          Teşekkürler! Aboneliğiniz aktif. Sayfanız yayında ve randevu alabilirsiniz.
+      {/* Onay beklenirken yazıcı çalışır; ödeme onaylanınca fiş çıkar. */}
+      {result === "basarili" && (waiting || lastPayment?.status === "paid") && (
+        <div className="mt-6">
+          <PaymentReceipt payment={lastPayment} planName={plans?.find((p) => p.id === lastPayment?.plan_id)?.name} />
         </div>
       )}
       {result === "hata" && (

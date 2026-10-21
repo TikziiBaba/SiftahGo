@@ -15,7 +15,7 @@ const SIGNATURES: Record<string, [number, number[]][]> = {
 };
 const MAX_BYTES = 4 * 1024 * 1024;
 
-// İşletme sahibinin görsel yüklemesi. Görsel R2'ye gider, adresi döner;
+// İşletme sahibinin (ya da yöneticinin) görsel yüklemesi. Görsel R2'ye gider, adresi döner;
 // adresi işletme kaydına yazmak istemcinin işidir (RLS ile korunur).
 // Mobil uygulamada çerez yok; oturum "Authorization: Bearer <erişim anahtarı>" ile gelir.
 export async function POST(request: Request) {
@@ -32,7 +32,10 @@ export async function POST(request: Request) {
   const userId = claims?.claims.sub;
   if (!userId) return NextResponse.json({ error: "Giriş yapmalısınız." }, { status: 401 });
 
-  const { data: business } = await supabase.from("businesses").select("id").eq("owner_id", userId).maybeSingle();
+  // Yönetici başka bir işletmenin görselini yükleyebilir (?business=<id>); diğerleri yalnızca kendi işletmesine.
+  const target = new URL(request.url).searchParams.get("business");
+  if (target && !(await supabase.rpc("is_admin")).data) return NextResponse.json({ error: "Yetkiniz yok." }, { status: 403 });
+  const { data: business } = await supabase.from("businesses").select("id").eq(target ? "id" : "owner_id", target ?? userId).maybeSingle();
   if (!business) return NextResponse.json({ error: "İşletme bulunamadı." }, { status: 403 });
 
   const length = Number(request.headers.get("content-length") ?? 0);

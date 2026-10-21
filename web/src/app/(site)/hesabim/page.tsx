@@ -22,6 +22,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { CookieSettingsButton } from "@/components/cookie-consent";
+import { HoldButton } from "@/components/hold-button";
 import { RescheduleDialog } from "@/components/reschedule-dialog";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
 import { createClient } from "@/lib/supabase/client";
@@ -129,8 +130,8 @@ function AccountView() {
     router.replace(t === "yaklasan" ? pathname : `${pathname}?sekme=${t}`, { scroll: false });
   }
 
+  // Onay, basılı tutulan "İptal et" düğmesinde (HoldButton): kısa bir "Geri al" süresinden sonra çağrılır.
   async function cancel(id: string) {
-    if (!confirm("Randevuyu iptal etmek istediğinize emin misiniz?")) return;
     const { error } = await createClient().rpc("cancel_appointment", { p_id: id });
     if (error) return setError(errorMessage(error));
     load();
@@ -382,9 +383,9 @@ function AppointmentCard({
             </button>
           )}
           {onCancel && (
-            <button onClick={onCancel} className="btn btn-ghost py-2 text-bad">
+            <HoldButton pending="İptal ediliyor" onConfirm={onCancel} className="btn btn-ghost py-2 text-bad">
               İptal et
-            </button>
+            </HoldButton>
           )}
           {!onCancel && row.businesses && (
             <Link href={rebookHref(row.businesses.slug, row)} className="btn btn-secondary py-2">

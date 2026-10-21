@@ -4,10 +4,11 @@ const isDev = process.env.NODE_ENV === "development";
 const supabase = process.env.NEXT_PUBLIC_SUPABASE_URL
   ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).origin
   : "https://*.supabase.co";
-// İşletme görselleri (logo, kapak, galeri) R2'de. Görseller yalnızca buradan yüklenir: işletmenin yazabildiği başka bir
-// adres (ör. ziyaretçinin IP'sini toplayan izleme pikseli) sayfaya girmez.
+// İşletme görselleri (logo, kapak, galeri) R2'de. Görseller yalnızca bizim kovadan yüklenir: işletmenin yazabildiği başka
+// bir adres (ör. ziyaretçinin IP'sini toplayan izleme pikseli) sayfaya girmez; görsel küçültme hizmeti (next/image) de
+// başkasının r2.dev kovasındaki dosyaları işlemez (kotamızı harcatamaz). Adres tanımlı değilse (yerel kurulum) r2.dev.
 const r2 = process.env.CLOUDFLARE_R2_PUBLIC_URL ? new URL(process.env.CLOUDFLARE_R2_PUBLIC_URL).hostname : null;
-const imageHosts = ["*.r2.dev", ...(r2 && !r2.endsWith(".r2.dev") ? [r2] : [])];
+const imageHosts = r2 ? [r2] : ["*.r2.dev"];
 
 // İçerik güvenlik politikası. Sayfalar önceden hazırlandığı (cacheComponents) için nonce kullanılamıyor; satır içi
 // betikler açık, ama dışarıdan betik yalnızca Cloudflare Turnstile'dan, bağlantı yalnızca Supabase'e yapılır.
