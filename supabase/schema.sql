@@ -321,6 +321,8 @@ create table public.reviews (
   created_at     timestamptz not null default now()
 );
 create index reviews_business_idx on public.reviews (business_id, created_at desc);
+-- Müşteri kartı (customer_card) ve hesap silme müşterinin yorumlarını arar.
+create index reviews_customer_idx on public.reviews (customer_id, created_at desc);
 
 -- PayTR ödemeleri
 create table public.payments (
@@ -711,7 +713,8 @@ create trigger appointments_before_write
 
 -- İşletme sahibi randevuyu doğrudan (RLS ile) yazarken: elle eklenen randevu bir müşteri hesabına veya e-postaya
 -- bağlanamaz (başkasına bildirim, e-posta gönderilemez); hesap, e-posta, işletme ve paket sonradan değiştirilemez;
--- hesapla alınan randevunun telefonu da değiştirilemez (telefon değiştirilip "gelmedi" denerek başkası engellenemez);
+-- hesapla alınan randevunun telefonu da değiştirilemez (telefon değiştirilip "gelmedi" denerek başkası engellenemez),
+-- saati gelmeden "gelmedi" işaretlenemez;
 -- personel ve hizmet aynı işletmenin olmalı (başka işletmenin saatleri doldurulamaz).
 -- Fonksiyonlardan (book_appointment vb.) gelen yazmalar etkilenmez: onlar fonksiyon sahibi olarak çalışır.
 create function public.protect_appointment_columns()
@@ -732,6 +735,15 @@ begin
       new.created_at := old.created_at;
       if old.customer_id is not null then
         new.customer_phone := old.customer_phone;
+        -- Hesapla alınan yaklaşan randevu "gelmedi" yapılamaz, saati de geçmişe alınamaz: müşterinin gelmeme sayısı
+        -- tüm işletmelerde sayıldığı için (customer_history) işletme, randevuyu hemen "gelmedi" işaretleyip müşteriyi
+        -- her yerde "sık gelmeyen" gösterebilirdi.
+        if new.starts_at is distinct from old.starts_at and new.starts_at <= now() and old.starts_at > now() then
+          raise exception 'Randevu geçmiş bir saate alınamaz.';
+        end if;
+        if new.status = 'no_show' and old.status is distinct from 'no_show' and new.starts_at > now() then
+          raise exception 'Randevu saati gelmeden "Gelmedi" işaretlenemez.';
+        end if;
       end if;
     end if;
     if new.staff_id is not null and (tg_op = 'INSERT' or new.staff_id is distinct from old.staff_id)
@@ -1180,7 +1192,7 @@ $$;
 -- Saat dilimi geçerli olmalı: geçersiz değer tüm işletmelerin ortak işlerini (hatırlatma, bekleme listesi) bozar.
 create function public.protect_business_columns()
 returns trigger
-language plpgsql
+language plpgsql set search_path = ''
 as $$
 begin
   if current_user in ('anon', 'authenticated') then
@@ -2890,6 +2902,7 @@ $$;
 -- ---------------------------------------------------------------------
 -- 4) Satır düzeyi güvenlik (RLS)
 -- ---------------------------------------------------------------------
+-- auth.uid() ve is_admin() "(select ...)" içinde: her satırda değil, sorguda bir kez hesaplanır.
 -- Politika yok: sadece is_admin() ve admin_* fonksiyonları okur.
 alter table public.admins        enable row level security;
 alter table public.profiles      enable row level security;
@@ -2911,7 +2924,7 @@ alter table public.appointment_reminders enable row level security;
 alter table public.inbox          enable row level security;
 
 create policy "bildirim: kendininkini okur" on public.inbox
-  for select using (user_id = auth.uid());
+  for select using (user_id = (select auth.uid()));
 
 alter table public.blocked_customers   enable row level security;
 
@@ -2947,7 +2960,7 @@ create policy "müşteri notu: sahibi yönetir" on public.customer_notes
 alter table public.favorites enable row level security;
 
 create policy "favori: kendi listesini yönetir" on public.favorites
-  for all using (customer_id = auth.uid()) with check (customer_id = auth.uid());
+  for all using (customer_id = (select auth.uid())) with check (customer_id = (select auth.uid()));
 
 alter table public.session_packages enable row level security;
 
@@ -2960,28 +2973,28 @@ alter table public.waitlist enable row level security;
 
 -- Müşteri listeye join_waitlist ile yazılır; kendi kayıtlarını görür ve siler.
 create policy "bekleme: kendininkini okur" on public.waitlist
-  for select using (customer_id = auth.uid());
+  for select using (customer_id = (select auth.uid()));
 create policy "bekleme: kendininkini siler" on public.waitlist
-  for delete using (customer_id = auth.uid());
+  for delete using (customer_id = (select auth.uid()));
 
 -- profiles
 create policy "profil: kendini okur" on public.profiles
-  for select using (id = auth.uid());
+  for select using (id = (select auth.uid()));
 create policy "profil: kendini günceller" on public.profiles
-  for update using (id = auth.uid()) with check (id = auth.uid());
+  for update using (id = (select auth.uid())) with check (id = (select auth.uid()));
 
 -- businesses
 create policy "işletme: yayındakileri herkes okur" on public.businesses
   for select using (
     (approval_status = 'approved' and is_published and not is_suspended and subscription_ends_at > now())
-    or owner_id = auth.uid()
+    or owner_id = (select auth.uid())
   );
 create policy "işletme: sahibi oluşturur" on public.businesses
-  for insert with check (owner_id = auth.uid());
+  for insert with check (owner_id = (select auth.uid()));
 create policy "işletme: sahibi günceller" on public.businesses
-  for update using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+  for update using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()));
 create policy "işletme: sahibi siler" on public.businesses
-  for delete using (owner_id = auth.uid());
+  for delete using (owner_id = (select auth.uid()));
 
 -- services
 create policy "hizmet: herkes okur" on public.services
@@ -3040,7 +3053,7 @@ create policy "izin: sahibi yönetir" on public.time_off
 
 -- appointments (müşteri randevuyu book_appointment ile alır)
 create policy "randevu: müşteri ve işletme okur" on public.appointments
-  for select using (customer_id = auth.uid() or public.is_business_owner(business_id));
+  for select using (customer_id = (select auth.uid()) or public.is_business_owner(business_id));
 create policy "randevu: işletme manuel ekler" on public.appointments
   for insert with check (
     public.is_business_owner(business_id)
@@ -3051,23 +3064,23 @@ create policy "randevu: işletme günceller" on public.appointments
   with check (public.is_business_owner(business_id));
 
 -- Yönetici her şeyi okur; değişiklikleri admin_* fonksiyonlarıyla yapar (paketler hariç).
-create policy "admin: profilleri okur" on public.profiles for select using (public.is_admin());
-create policy "admin: işletmeleri okur" on public.businesses for select using (public.is_admin());
-create policy "admin: hizmetleri okur" on public.services for select using (public.is_admin());
-create policy "admin: personeli okur" on public.staff for select using (public.is_admin());
-create policy "admin: randevuları okur" on public.appointments for select using (public.is_admin());
-create policy "admin: ödemeleri okur" on public.payments for select using (public.is_admin());
-create policy "admin: bildirimleri okur" on public.notifications for select using (public.is_admin());
-create policy "admin: paket ekler" on public.plans for insert with check (public.is_admin());
+create policy "admin: profilleri okur" on public.profiles for select using ((select public.is_admin()));
+create policy "admin: işletmeleri okur" on public.businesses for select using ((select public.is_admin()));
+create policy "admin: hizmetleri okur" on public.services for select using ((select public.is_admin()));
+create policy "admin: personeli okur" on public.staff for select using ((select public.is_admin()));
+create policy "admin: randevuları okur" on public.appointments for select using ((select public.is_admin()));
+create policy "admin: ödemeleri okur" on public.payments for select using ((select public.is_admin()));
+create policy "admin: bildirimleri okur" on public.notifications for select using ((select public.is_admin()));
+create policy "admin: paket ekler" on public.plans for insert with check ((select public.is_admin()));
 create policy "admin: paket günceller" on public.plans
-  for update using (public.is_admin()) with check (public.is_admin());
+  for update using ((select public.is_admin())) with check ((select public.is_admin()));
 
 -- Hata kayıtları: log_error yazar; yönetici okur, çözüldü işaretler ve siler.
 alter table public.error_logs enable row level security;
-create policy "hata: yönetici okur" on public.error_logs for select using (public.is_admin());
+create policy "hata: yönetici okur" on public.error_logs for select using ((select public.is_admin()));
 create policy "hata: yönetici günceller" on public.error_logs
-  for update using (public.is_admin()) with check (public.is_admin());
-create policy "hata: yönetici siler" on public.error_logs for delete using (public.is_admin());
+  for update using ((select public.is_admin())) with check ((select public.is_admin()));
+create policy "hata: yönetici siler" on public.error_logs for delete using ((select public.is_admin()));
 
 -- ---------------------------------------------------------------------
 -- 5) Canlı güncelleme (panelde yeni randevular ve bildirimler anında görünür)

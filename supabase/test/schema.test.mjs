@@ -853,6 +853,15 @@ const accountAppt = (await book(C, svc30, free[5])).rows[0].id;
 await as(A, `update appointments set customer_phone = '0533 444 55 66' where id = $1`, [accountAppt]);
 ok((await db.query(`select customer_phone from appointments where id = $1`, [accountAppt])).rows[0].customer_phone === '0555 111 22 33',
   'hesapla alınan randevunun telefonu işletme tarafından değiştirilemez');
+// Gelmeme tüm işletmelerde sayılır: yaklaşan randevu hemen "gelmedi" yapılıp müşteri lekelenemez.
+await expectError(() => as(A, `update appointments set status = 'no_show' where id = $1`, [accountAppt]), /Gelmedi/,
+  'hesapla alınan yaklaşan randevu "gelmedi" işaretlenemez');
+await expectError(() => as(A, `update appointments set starts_at = now() - interval '1 hour', ends_at = now() - interval '30 minutes' where id = $1`, [accountAppt]),
+  /geçmiş bir saate/, 'hesapla alınan yaklaşan randevu geçmişe alınamaz');
+await db.query(`update appointments set starts_at = now() - interval '2 hours', ends_at = now() - interval '90 minutes' where id = $1`, [accountAppt]);
+await as(A, `update appointments set status = 'no_show' where id = $1`, [accountAppt]);
+ok((await db.query(`select status from appointments where id = $1`, [accountAppt])).rows[0].status === 'no_show', 'saati geçen randevu "gelmedi" işaretlenir');
+await db.query(`delete from blocked_customers where business_id = $1 and customer_id = $2`, [biz, C]);
 await db.query(`delete from appointments where id = $1`, [accountAppt]);
 
 const victimPhone = '0533 444 55 66';
