@@ -31,6 +31,8 @@ await db.exec(schema); // tekrar çalıştırılabilir olmalı
 await db.exec(`grant all on all tables in schema public to anon, authenticated;`);
 ok((await db.query(`select count(*)::int c from public.profiles`)).rows[0].c === 1, 'eski kullanıcıya profil oluşturuldu');
 
+// Sitenin R2'ye yüklediği görsellerin adresi (is_upload_url).
+const UP = 'https://pub-2085cc7ac85a468292c6576a0f6ea8af.r2.dev/businesses/00000000-0000-0000-0000-000000000000';
 const A = '00000000-0000-0000-0000-00000000000a'; // işletme sahibi
 const C = '00000000-0000-0000-0000-00000000000c'; // müşteri
 const G = '00000000-0000-0000-0000-00000000000f'; // telefonsuz, başka adla randevu alan müşteri (eski "misafir")
@@ -764,6 +766,22 @@ ok((await db.query(`select is_suspended from businesses where id = $1`, [biz])).
 await as(ADM, `select admin_set_suspended($1, false)`, [biz]);
 ok((await as(null, `select id from businesses`)).rows.length === 1, 'askıdan çıkınca tekrar görünür');
 
+// Yönetici işletmeyi düzenler (ad, görseller); sahip, abonelik, askı, onay ve puan alanları korunur.
+const bizCols = `select name, logo_url, owner_id, subscription_ends_at, is_suspended, approval_status, rating_count from businesses where id = $1`;
+const prev = (await db.query(bizCols, [biz])).rows[0];
+await as(ADM, `update businesses set name = 'Ahmet Berber Salonu', logo_url = '${UP}/logo/adm.jpg', owner_id = $2,
+  subscription_ends_at = now() + interval '10 years', is_suspended = true, approval_status = 'rejected', rating_count = 99 where id = $1`, [biz, C]);
+const edited = (await db.query(bizCols, [biz])).rows[0];
+ok(edited.name === 'Ahmet Berber Salonu' && edited.logo_url === `${UP}/logo/adm.jpg` && edited.owner_id === A
+  && edited.subscription_ends_at.getTime() === prev.subscription_ends_at.getTime() && !edited.is_suspended
+  && edited.approval_status === 'approved' && edited.rating_count === prev.rating_count,
+  'yönetici adı ve logoyu değiştirdi; sahip, abonelik, askı, onay ve puan değişmedi');
+await as(A, `update businesses set owner_id = $2 where id = $1`, [biz, C]);
+ok((await db.query(bizCols, [biz])).rows[0].owner_id === A, 'işletme sahibi işletmeyi başkasına devredemez');
+ok((await as(C, `update businesses set name = 'Ele geçirildi' where id = $1 returning id`, [biz])).rows.length === 0,
+  'yönetici olmayan başkasının işletmesini düzenleyemez');
+await as(ADM, `update businesses set name = $2, logo_url = $3 where id = $1`, [biz, prev.name, prev.logo_url]);
+
 await as(ADM, `select admin_end_subscription($1)`, [biz]);
 ok((await as(null, `select id from businesses`)).rows.length === 0, 'yönetici aboneliği bitirince işletme yayından düştü');
 
@@ -946,8 +964,15 @@ await db.query(`delete from auth.users where id = any($1)`, [[K, N]]);
 const delAppt = (await book(V, svc30, free[4], 'Kurban', victimPhone)).rows[0].id;
 await expectError(() => as(null, `select delete_my_account()`), /Giriş yapmalısınız/, 'girişsiz hesap silinemez');
 await expectError(() => as(A, `select delete_my_account()`), /İşletme hesabı/, 'işletme sahibi hesabını buradan silemez');
+ok((await db.query(`select count(*)::int c from notifications where appointment_id = $1 and recipient = 'customer'`, [delAppt])).rows[0].c > 0,
+  'silinecek müşteriye e-posta kuyruğa girmişti');
 await as(V, `select delete_my_account()`);
-ok((await db.query(`select status from appointments where id = $1`, [delAppt])).rows[0].status === 'cancelled', 'hesap silinirken yaklaşan randevu iptal edildi');
+const deleted = (await db.query(`select status, customer_email from appointments where id = $1`, [delAppt])).rows[0];
+ok(deleted.status === 'cancelled', 'hesap silinirken yaklaşan randevu iptal edildi');
+ok(deleted.customer_email === null
+  && (await db.query(`select count(*)::int c from notifications where appointment_id = $1 and recipient = 'customer'`, [delAppt])).rows[0].c === 0
+  && (await db.query(`select count(*)::int c from notifications where appointment_id = $1 and recipient = 'business' and kind = 'cancelled'`, [delAppt])).rows[0].c === 1,
+  'silinen hesabın e-postası randevudan ve gönderim kayıtlarından kalktı, işletmeye iptal haberi gitti');
 await db.query(`delete from appointments where id = $1`, [delAppt]);
 await db.query(`delete from auth.users where id = $1`, [V]);
 
@@ -957,12 +982,30 @@ for (const [sql, label] of [
   [`description = repeat('a', 2001)`, '2000 karakterden uzun açıklama'],
   [`logo_url = 'javascript:alert(1)'`, 'https olmayan logo adresi'],
   [`cover_url = 'http://ornek.com/kapak.jpg'`, 'http kapak adresi'],
-  [`gallery = array_fill('https://cdn.ornek.com/a.jpg'::text, array[13])`, '12 görselden büyük galeri'],
-  [`gallery = array['https://cdn.ornek.com/a.jpg', 'data:image/svg+xml,<svg onload=alert(1)>']`, 'https olmayan galeri görseli'],
+  [`gallery = array_fill('${UP}/gallery/a.jpg'::text, array[13])`, '12 görselden büyük galeri'],
+  [`gallery = array['${UP}/gallery/a.jpg', 'data:image/svg+xml,<svg onload=alert(1)>']`, 'https olmayan galeri görseli'],
+  // Sitenin yüklemediği adresler (izleme pikseli): mobil uygulamada ziyaretçinin IP'sini sızdırırdı.
+  [`logo_url = 'https://izleyici.ornek.com/p.gif'`, 'başka sunucudaki logo'],
+  [`cover_url = 'https://baska-kova.r2.dev/businesses/00000000-0000-0000-0000-000000000000/cover/a.jpg'`, 'başka R2 kovasındaki kapak'],
+  [`gallery = array['${UP}/gallery/a.jpg', 'https://izleyici.ornek.com/p.gif']`, 'başka sunucudaki galeri görseli'],
+  [`gallery = array['${UP}/gallery/a.jpg', null]`, 'boş galeri öğesi'],
+  [`logo_url = '${UP}/logo/../../../x.jpg'`, 'yükleme klasörü dışına çıkan logo'],
 ]) await expectError(() => as(A, `update businesses set ${sql} where id = $1`, [biz]), /check constraint/, `${label} reddedildi`);
-await as(A, `update businesses set logo_url = 'https://cdn.ornek.com/logo.jpg', gallery = array['https://cdn.ornek.com/1.jpg', 'https://cdn.ornek.com/2.jpg'] where id = $1`, [biz]);
-ok((await db.query(`select cardinality(gallery) n from businesses where id = $1`, [biz])).rows[0].n === 2, 'https görseller kabul edildi');
+await expectError(() => as(A, `update staff set avatar_url = 'https://izleyici.ornek.com/p.gif' where business_id = $1`, [biz]), /check constraint/,
+  'başka sunucudaki personel fotoğrafı reddedildi');
+await as(A, `update businesses set logo_url = '${UP}/logo/1.jpg', gallery = array['${UP}/gallery/1.jpg', '${UP}/gallery/2.webp'] where id = $1`, [biz]);
+ok((await db.query(`select cardinality(gallery) n from businesses where id = $1`, [biz])).rows[0].n === 2, 'sitenin yüklediği görseller kabul edildi');
 await expectError(() => as(C, `update profiles set full_name = repeat('a', 101) where id = $1`, [C]), /check constraint/, 'çok uzun profil adı reddedildi');
+
+// Kayıt tarihleri elle yazılamaz: müşteri kartındaki üyelik tarihi geriye alınıp eski üye gibi görünülemez.
+const since = (await db.query(`select created_at from profiles where id = $1`, [C])).rows[0].created_at;
+await as(C, `update profiles set created_at = '2015-01-01', full_name = 'Cem' where id = $1`, [C]);
+ok((await db.query(`select created_at from profiles where id = $1`, [C])).rows[0].created_at.getTime() === since.getTime(), 'müşteri üyelik tarihini değiştiremez');
+const bizSince = (await db.query(`select created_at from businesses where id = $1`, [biz])).rows[0].created_at;
+await as(A, `update businesses set created_at = '2015-01-01' where id = $1`, [biz]);
+ok((await db.query(`select created_at from businesses where id = $1`, [biz])).rows[0].created_at.getTime() === bizSince.getTime(), 'işletme kayıt tarihini değiştiremez');
+await expectError(() => as(C, `select register_push_token($1, 'android')`, [`ExponentPushToken[${'a'.repeat(300)}]`]), /check constraint/,
+  'çok uzun push adresi reddedildi');
 await expectError(() => book(C, svc30, `${monday}T08:00:00Z`, 'a'.repeat(101)), /en fazla 100/, 'çok uzun müşteri adıyla randevu reddedildi');
 await expectError(() => book(C, svc30, `${monday}T08:00:00Z`, 'Cem', '0'.repeat(31)), /telefon/, 'çok uzun telefonla randevu reddedildi');
 

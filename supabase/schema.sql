@@ -64,7 +64,8 @@ begin
         'auto_block_no_show', 'get_report_summary', 'join_waitlist', 'waitlist_on_free_slot', 'claim_waitlist',
         'use_package_session', 'available_today', 'nearby_businesses', 'apply_referral', 'my_referrals',
         'log_error', 'protect_appointment_columns', 'admin_dashboard', 'admin_activity', 'delete_my_account',
-        'admin_review_business', 'needs_confirmation', 'customer_card'
+        'admin_review_business', 'needs_confirmation', 'customer_card', 'is_upload_url', 'is_upload_urls',
+        'protect_profile_columns'
       )
   loop
     execute 'drop function if exists ' || r.sig || ' cascade';
@@ -78,6 +79,26 @@ drop type if exists
 cascade;
 
 create extension if not exists btree_gist with schema extensions;
+
+-- İşletme görselleri yalnızca sitenin yükleme adresinin (/api/upload) R2'ye yazdığı dosyalar olabilir. Başka bir adres
+-- (ör. ziyaretçinin IP'sini toplayan izleme pikseli) web'de CSP ile engellenir ama mobil uygulamada açılırdı.
+-- R2'nin herkese açık adresi değişirse yalnızca bu fonksiyon güncellenir.
+create function public.is_upload_url(p_url text)
+returns boolean
+language sql immutable set search_path = ''
+as $$
+  select coalesce(
+    p_url ~ '^https://pub-2085cc7ac85a468292c6576a0f6ea8af\.r2\.dev/businesses/[0-9a-f-]{36}/(logo|cover|gallery)/[A-Za-z0-9._-]+$',
+    false
+  );
+$$;
+
+create function public.is_upload_urls(p_urls text[])
+returns boolean
+language sql immutable set search_path = ''
+as $$
+  select coalesce(bool_and(public.is_upload_url(u)), true) from unnest(p_urls) u;
+$$;
 
 -- ---------------------------------------------------------------------
 -- 1) Tablolar
@@ -186,7 +207,12 @@ create table public.businesses (
   referred_by          uuid references public.businesses (id) on delete set null,
   referral_rewarded_at timestamptz,
   created_at         timestamptz not null default now(),
-  constraint businesses_location_check check ((latitude is null) = (longitude is null))
+  constraint businesses_location_check check ((latitude is null) = (longitude is null)),
+  constraint businesses_images_upload_check check (
+    (logo_url is null or public.is_upload_url(logo_url))
+    and (cover_url is null or public.is_upload_url(cover_url))
+    and public.is_upload_urls(gallery)
+  )
 );
 create index businesses_city_category_idx on public.businesses (city, category);
 create index businesses_pending_idx on public.businesses (submitted_at) where approval_status = 'pending';
@@ -212,7 +238,8 @@ create table public.staff (
   avatar_url  text check (avatar_url ~ '^https://\S+$' and length(avatar_url) <= 500),
   is_active   boolean not null default true,
   sort_order  int not null default 0,
-  created_at  timestamptz not null default now()
+  created_at  timestamptz not null default now(),
+  constraint staff_avatar_upload_check check (avatar_url is null or public.is_upload_url(avatar_url))
 );
 create index staff_business_idx on public.staff (business_id);
 
@@ -372,7 +399,8 @@ create table public.push_tokens (
   token      text primary key check (token ~ '^Expo(nent)?PushToken\[.+\]$'),
   user_id    uuid not null references public.profiles (id) on delete cascade,
   platform   text not null check (platform in ('android', 'ios')),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  constraint push_tokens_token_length check (length(token) <= 200)
 );
 create index push_tokens_user_idx on public.push_tokens (user_id);
 
@@ -536,6 +564,25 @@ $$;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
+
+-- Kullanıcı profilinin kimliğini ve kayıt tarihini değiştiremez: kayıt tarihi işletmeye müşteri kartında
+-- "üyelik tarihi" olarak gösterilir (customer_card); geriye alınarak eski üye gibi görünülmesin.
+create function public.protect_profile_columns()
+returns trigger
+language plpgsql set search_path = ''
+as $$
+begin
+  if current_user in ('anon', 'authenticated') then
+    new.id := old.id;
+    new.created_at := old.created_at;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger profiles_protect_columns
+  before update on public.profiles
+  for each row execute function public.protect_profile_columns();
 
 -- Mevcut kullanıcılar için profil oluştur (eski şemadan kalanlar).
 insert into public.profiles (id, full_name, phone, role)
@@ -1061,6 +1108,10 @@ begin
   update public.appointments set status = 'cancelled'
   where customer_id = v_uid and status in ('pending', 'confirmed') and starts_at > now();
   update public.reviews set customer_name = 'Eski üye' where customer_id = v_uid;
+  -- Hesabın e-posta adresi işletmelerin defterinde ve gönderim kayıtlarında kalmaz.
+  delete from public.notifications n using public.appointments a
+  where a.id = n.appointment_id and a.customer_id = v_uid and n.recipient = 'customer';
+  update public.appointments set customer_email = null where customer_id = v_uid;
 end;
 $$;
 
@@ -1189,6 +1240,8 @@ $$;
 -- İşletme sahibi puan, abonelik, askı ve onay alanlarını elle değiştiremez;
 -- bunları sadece refresh_business_rating, apply_subscription ve admin_* fonksiyonları yazar.
 -- Tek istisna: reddedilen başvuru yeniden gönderilebilir (approval_status 'rejected' -> 'pending').
+-- Yönetici de işletmeyi doğrudan (RLS ile) aynı kurallarla düzenler; işletmenin sahibini değiştiremez.
+-- Kayıt tarihi de elle yazılamaz (yönetimdeki kayıt tarihi ve dönem istatistikleri buna dayanır).
 -- Saat dilimi geçerli olmalı: geçersiz değer tüm işletmelerin ortak işlerini (hatırlatma, bekleme listesi) bozar.
 create function public.protect_business_columns()
 returns trigger
@@ -1200,6 +1253,7 @@ begin
       perform now() at time zone new.timezone;
     end if;
     if tg_op = 'INSERT' then
+      new.created_at := now();
       new.rating_avg := 0;
       new.rating_count := 0;
       new.plan_id := null;
@@ -1215,6 +1269,9 @@ begin
       new.reviewed_at := null;
       new.reviewed_by := null;
     else
+      new.id := old.id;
+      new.created_at := old.created_at;
+      new.owner_id := old.owner_id;
       new.rating_avg := old.rating_avg;
       new.rating_count := old.rating_count;
       new.plan_id := old.plan_id;
@@ -3066,6 +3123,9 @@ create policy "randevu: işletme günceller" on public.appointments
 -- Yönetici her şeyi okur; değişiklikleri admin_* fonksiyonlarıyla yapar (paketler hariç).
 create policy "admin: profilleri okur" on public.profiles for select using ((select public.is_admin()));
 create policy "admin: işletmeleri okur" on public.businesses for select using ((select public.is_admin()));
+-- Ad, adres, görseller vb.; abonelik, puan ve onay alanları protect_business_columns ile korunur.
+create policy "admin: işletmeleri günceller" on public.businesses
+  for update using ((select public.is_admin())) with check ((select public.is_admin()));
 create policy "admin: hizmetleri okur" on public.services for select using ((select public.is_admin()));
 create policy "admin: personeli okur" on public.staff for select using ((select public.is_admin()));
 create policy "admin: randevuları okur" on public.appointments for select using ((select public.is_admin()));
