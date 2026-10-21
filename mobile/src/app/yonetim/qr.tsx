@@ -1,4 +1,5 @@
 import * as Clipboard from 'expo-clipboard';
+import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { ScrollView, Share, View } from 'react-native';
 
@@ -17,7 +18,7 @@ export default function QrScreen() {
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <Text tone="muted">QR kodu dükkânınıza asın; bağlantıyı Instagram, WhatsApp ve Google profilinize ekleyin.</Text>
+      <Text tone="muted">Cam afişini yazdırıp dükkânınıza asın; bağlantıyı Instagram, WhatsApp ve Google profilinize ekleyin.</Text>
 
       <Card style={{ alignItems: 'center', gap: 14, paddingVertical: 28 }}>
         <Text variant="title" style={{ textAlign: 'center' }}>
@@ -25,12 +26,17 @@ export default function QrScreen() {
         </Text>
         <Text tone="muted">Randevu almak için kodu okutun</Text>
         <View style={{ padding: 12, borderRadius: radius.lg, backgroundColor: colors.white }}>
-          <QrCode value={link} size={220} />
+          <QrCode value={link} size={220} logo={business.logo_url} />
         </View>
         <Text variant="label" tone="brand" selectable>
           {link.replace(/^https?:\/\//, '')}
         </Text>
+        {!business.logo_url ? (
+          <Button title="Logonuzu ekleyin, QR’ın ortasında görünsün" icon="image-outline" variant="ghost" size="sm" onPress={() => router.push('/yonetim/gorseller')} />
+        ) : null}
       </Card>
+
+      <Button title="Cam afişini yazdır" icon="print-outline" size="lg" onPress={() => WebBrowser.openBrowserAsync(`${link}/afis`)} />
 
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <Button
@@ -47,7 +53,7 @@ export default function QrScreen() {
       </View>
       <Button title="Sayfamı aç" icon="open-outline" variant="ghost" onPress={() => WebBrowser.openBrowserAsync(link)} />
       <Text variant="caption" tone="muted" style={{ textAlign: 'center' }}>
-        Yazdırmak için QR kodu bilgisayardan web panelindeki QR Kod sayfasından indirebilirsiniz.
+        Afiş tarayıcıda A4 olarak açılır: Yazdır’a dokunup yazıcıya gönderin ya da PDF olarak kaydedip bir kırtasiyede bastırın.
       </Text>
     </ScrollView>
   );
