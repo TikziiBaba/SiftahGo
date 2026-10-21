@@ -36,7 +36,7 @@ export function CookieConsent() {
         <section
           role="region"
           aria-label="Çerez bildirimi"
-          className="fixed inset-x-3 bottom-[calc(max(0.75rem,env(safe-area-inset-bottom))+5.25rem)] z-50 rounded-3xl bg-surface p-5 text-sm shadow-[0_24px_60px_-20px_rgb(0_0_0/0.45)] ring-1 ring-line-strong md:inset-x-auto md:bottom-5 md:left-5 md:max-w-md"
+          className="fixed inset-x-3 bottom-[calc(max(0.75rem,env(safe-area-inset-bottom))+5.25rem)] z-50 rounded-3xl print:hidden bg-surface p-5 text-sm shadow-[0_24px_60px_-20px_rgb(0_0_0/0.45)] ring-1 ring-line-strong md:inset-x-auto md:bottom-5 md:left-5 md:max-w-md"
         >
           <div className="flex items-start gap-3">
             <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-brand-400/12 text-accent">

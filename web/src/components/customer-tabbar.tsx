@@ -46,7 +46,8 @@ function TabBar() {
   const path = usePathname();
   const query = useSearchParams();
   const account = useAccount();
-  if (HIDDEN.some((h) => path.startsWith(h))) return null;
+  // Cam afişi (/{işletme}/afis) yazdırılacak sayfa; çubuk önizlemeyi örtmesin.
+  if (HIDDEN.some((h) => path.startsWith(h)) || path.endsWith("/afis")) return null;
   // Oturum okunana kadar (birkaç yüz ms) yalnızca herkese ortak iki sekme; "Giriş" yanlışlıkla görünmesin.
   const tabs = account ? tabsFor(account.kind) : tabsFor(undefined).slice(0, 2);
 
