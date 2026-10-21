@@ -58,16 +58,17 @@ const staff = (await db.query(`select id, name from staff where business_id = $1
 ok(staff.length === 1 && staff[0].name === 'Ahmet Usta', 'varsayılan personel eklendi');
 ok((await db.query(`select role from profiles where id = $1`, [A])).rows[0].role === 'business', 'profil rolü business oldu');
 
-// ücretsiz deneme: yeni işletme 7 gün Pro
-const trial = (await db.query(`select plan_id, subscription_ends_at, trial_ends_at from businesses where id = $1`, [biz])).rows[0];
-const trialDays = (trial.subscription_ends_at - Date.now()) / 864e5;
-ok(trial.plan_id === 'pro' && trialDays > 6.9 && trialDays < 7.1 && trial.trial_ends_at.getTime() === trial.subscription_ends_at.getTime(),
-  `yeni işletmeye 7 gün Pro deneme: ${trialDays.toFixed(2)} gün`);
-ok((await as(null, `select id from businesses`)).rows.length === 1, 'denemedeki işletme yayında');
-await as(A, `update businesses set trial_ends_at = now() + interval '1 year' where id = $1`, [biz]);
-ok((await db.query(`select trial_ends_at from businesses where id = $1`, [biz])).rows[0].trial_ends_at.getTime() === trial.trial_ends_at.getTime(), 'işletme sahibi denemeyi uzatamaz');
-// Ödeme kurallarını sınamak için işletme hiç deneme almamış gibi sıfırlanır.
-await db.query(`update businesses set plan_id = null, subscription_ends_at = null, trial_ends_at = null where id = $1`, [biz]);
+// başvuru: yeni işletme onay bekler, görünmez ve ödeme başlatamaz; deneme onayla başlar (yönetici bölümünde sınanır)
+const fresh = (await db.query(`select approval_status, plan_id, subscription_ends_at, trial_ends_at from businesses where id = $1`, [biz])).rows[0];
+ok(fresh.approval_status === 'pending' && fresh.plan_id === null && fresh.subscription_ends_at === null && fresh.trial_ends_at === null,
+  'yeni işletme onay bekliyor, denemesi başlamadı');
+ok((await as(null, `select id from businesses`)).rows.length === 0, 'onay bekleyen işletme aramada görünmez');
+await expectError(() => as(A, `select * from create_payment('esnaf')`), /onaylanınca/, 'onay bekleyen işletme ödeme başlatamaz');
+await as(A, `update businesses set approval_status = 'approved', trial_ends_at = now() + interval '1 year' where id = $1`, [biz]);
+const self = (await db.query(`select approval_status, trial_ends_at from businesses where id = $1`, [biz])).rows[0];
+ok(self.approval_status === 'pending' && self.trial_ends_at === null, 'işletme sahibi kendini onaylayamaz, deneme yazamaz');
+// Ödeme kurallarını sınamak için işletme denemesiz onaylanır.
+await db.query(`update businesses set approval_status = 'approved' where id = $1`, [biz]);
 
 await expectError(() => as(C, `insert into businesses (owner_id, slug, name) values ($1, 'panel', 'X')`, [C]), /check constraint/, 'ayrılmış adres (panel) reddedildi');
 await expectError(() => as(C, `insert into businesses (owner_id, slug, name) values ($1, 'yasal', 'X')`, [C]), /check constraint/, 'ayrılmış adres (yasal) reddedildi');
@@ -693,6 +694,7 @@ for (const [sql, label] of [
   [`select admin_grant_subscription('${biz}', 'pro', 365)`, 'paket verme'],
   [`select admin_end_subscription('${biz}')`, 'abonelik bitirme'],
   [`select admin_set_suspended('${biz}', true)`, 'askıya alma'],
+  [`select admin_review_business('${biz}', true)`, 'başvuru onayı'],
 ]) await expectError(() => as(A, sql), /Yetkiniz yok/, `işletme sahibi admin ${label} yapamaz`);
 ok((await as(A, `update plans set price = 1 where id = 'pro' returning id`)).rows.length === 0, 'işletme sahibi paket fiyatı değiştiremez');
 
@@ -715,6 +717,25 @@ ok(admPay.length === 1 && admPay[0].amount === '1500.00' && admPay[0].status ===
 const B = '00000000-0000-0000-0000-00000000000b';
 await db.exec(`insert into auth.users values ('${B}', 'b@x.com', '{"full_name":"Berna"}')`);
 const bizB = (await as(B, `insert into businesses (owner_id, slug, name) values ($1, 'berna-kuafor', 'Berna Kuaför') returning id`, [B])).rows[0].id;
+// Başvuru önce sebebiyle reddedilir; sahibi düzeltip yeniden başvurur, onaylanınca 7 gün Pro denemeye girer.
+await expectError(() => as(ADM, `select admin_review_business($1, false, ' ')`, [bizB]), /Ret sebebini/, 'sebepsiz ret reddedildi');
+await expectError(() => as(ADM, `select admin_grant_subscription($1, 'pro', 30)`, [bizB]), /Önce başvuruyu onaylayın/, 'onaysız işletmeye paket verilemez');
+await as(ADM, `select admin_review_business($1, false, '  Adres eksik. ')`, [bizB]);
+const rej = (await as(B, `select approval_status, approval_note, reviewed_by from businesses where id = $1`, [bizB])).rows[0];
+ok(rej.approval_status === 'rejected' && rej.approval_note === 'Adres eksik.' && rej.reviewed_by === ADM, 'başvuru sebebiyle reddedildi, sahibi sebebi görür');
+await as(B, `update businesses set address = 'Atatürk Cd. 5', approval_status = 'pending', approval_note = '' where id = $1`, [bizB]);
+const re = (await db.query(`select approval_status, approval_note, address from businesses where id = $1`, [bizB])).rows[0];
+ok(re.approval_status === 'pending' && re.approval_note === 'Adres eksik.' && re.address === 'Atatürk Cd. 5',
+  'reddedilen işletme düzeltip yeniden başvurdu (ret sebebini silemez)');
+await as(B, `update businesses set approval_status = 'approved' where id = $1`, [bizB]);
+ok((await db.query(`select approval_status s from businesses where id = $1`, [bizB])).rows[0].s === 'pending', 'yeniden başvuran kendini onaylayamaz');
+await as(ADM, `select admin_review_business($1, true)`, [bizB]);
+const appr = (await db.query(`select approval_status, approval_note, plan_id, subscription_ends_at, trial_ends_at from businesses where id = $1`, [bizB])).rows[0];
+const trialDays = (appr.subscription_ends_at - Date.now()) / 864e5;
+ok(appr.approval_status === 'approved' && appr.approval_note === '' && appr.plan_id === 'pro' && trialDays > 6.9 && trialDays < 7.1
+  && appr.trial_ends_at.getTime() === appr.subscription_ends_at.getTime(), `onaylanan işletmeye 7 gün Pro deneme: ${trialDays.toFixed(2)} gün`);
+ok((await as(null, `select id from businesses where id = $1`, [bizB])).rows.length === 1, 'onaylanan, denemedeki işletme yayında');
+await expectError(() => as(ADM, `select admin_review_business($1, false, 'Geç kalan ret')`, [bizB]), /zaten onaylı/, 'onaylı işletme reddedilemez');
 const stats = (await as(ADM, `select admin_stats() s`)).rows[0].s;
 ok(stats.users === 7 && stats.businesses === 2 && stats.active === 1 && stats.trial === 1 && stats.never_paid === 1
   && Number(stats.mrr) === 999 && Number(stats.revenue_total) === 649 + 349 + 1500
@@ -758,6 +779,7 @@ const bizR = (await as(R, `insert into businesses (owner_id, slug, name, referra
   values ($1, 'riza-kuafor', 'Rıza Kuaför', 'HILE1234', $2) returning id, referral_code, referred_by`, [R, biz])).rows[0];
 ok(/^[0-9A-F]{8}$/.test(bizR.referral_code) && bizR.referral_code !== 'HILE1234' && bizR.referred_by === null,
   `davet kodu otomatik, istemci yazamaz: ${bizR.referral_code}`);
+await as(ADM, `select admin_review_business($1, true)`, [bizR.id]);
 const codeA = (await db.query(`select referral_code from businesses where id = $1`, [biz])).rows[0].referral_code;
 await expectError(() => as(R, `select apply_referral('YANLIS99')`), /geçersiz/, 'olmayan davet kodu reddedildi');
 await expectError(() => as(R, `select apply_referral($1)`, [bizR.referral_code]), /geçersiz/, 'kendi koduyla davet olmaz');
@@ -813,6 +835,7 @@ ok((await as(ADM, `select length(message) n from error_logs where source = 'serv
 const X = '00000000-0000-0000-0000-0000000000e1';
 await db.exec(`insert into auth.users values ('${X}', 'x@x.com', '{"full_name":"Rakip"}')`);
 const bizX = (await as(X, `insert into businesses (owner_id, slug, name) values ($1, 'rakip-berber', 'Rakip Berber') returning id`, [X])).rows[0].id;
+await as(ADM, `select admin_review_business($1, true)`, [bizX]);
 const staffX = (await db.query(`select id from staff where business_id = $1`, [bizX])).rows[0].id;
 const xAppt = (sid, svc) => as(X, `insert into appointments (business_id, staff_id, service_id, service_name, customer_name, customer_phone, starts_at, ends_at, status)
   values ($1, $2, $3, 'x', 'x', '05550000000', now() + interval '2 days', now() + interval '2 days 30 minutes', 'confirmed')`, [bizX, sid, svc]);
@@ -853,6 +876,62 @@ const vRow = (await db.query(`select prior_cancels, customer_flagged from appoin
 ok(victimBooking.status === 'confirmed' && vRow.prior_cancels === 0 && !vRow.customer_flagged,
   `başkasının telefonuyla yapılan iptaller kurbana yazılmaz: ${JSON.stringify(vRow)}`);
 await db.query(`delete from appointments where id = $1`, [victimBooking.id]);
+
+// randevu onay modları: "yalnızca tanıdık müşteriyi otomatik onayla" -> daha önce tamamlanmış randevusu olan (K)
+// onaylı, ilk kez gelen (N) onay bekler. Ret sebebi müşteriye bildirimle gider; müşteri kartı yalnızca işletmeye açık.
+const K = '00000000-0000-0000-0000-0000000000e3';
+const N = '00000000-0000-0000-0000-0000000000e4';
+await db.exec(`insert into auth.users values ('${K}', 'k@x.com', '{"full_name":"Kaan"}'), ('${N}', 'n@x.com', '{"full_name":"Nur"}')`);
+const kPast = (await db.query(`insert into appointments (business_id, staff_id, service_id, customer_id, service_name, customer_name, customer_phone, price, starts_at, ends_at, status)
+  values ($1, $2, $3, $4, 'Saç Kesimi', 'Kaan', '0544 222 33 44', 300, now() - interval '10 days', now() - interval '10 days' + interval '30 minutes', 'completed') returning id`,
+  [biz, staff[0].id, svc30, K])).rows[0].id;
+await db.query(`insert into reviews (business_id, appointment_id, customer_id, customer_name, rating, comment) values ($1, $2, $3, 'Kaan', 2, 'Geç kaldılar')`, [biz, kPast, K]);
+const modeDay = new Date(new Date(`${monday}T12:00:00Z`).getTime() + 21 * 864e5).toISOString().slice(0, 10);
+const modeFree = (await slots(svc30, modeDay)).map((r) => r.slot_start.toISOString());
+await as(A, `update businesses set auto_confirm = true, auto_confirm_known_only = true where id = $1`, [biz]);
+const kBook = (await book(K, svc30, modeFree[0], 'Kaan', '0544 222 33 44')).rows[0];
+const nBook = (await book(N, svc30, modeFree[1], 'Nur', '0544 555 66 77')).rows[0];
+ok(kBook.status === 'confirmed' && nBook.status === 'pending', `tanıdık müşteri otomatik, ilk kez gelen onaya düştü: ${kBook.status}, ${nBook.status}`);
+await expectError(() => as(A, `select needs_confirmation(b, $1) from businesses b where b.id = $2`, [K, biz]), /permission denied/, 'onay kuralı istemciden sorgulanamaz (ziyaretler açığa çıkmaz)');
+
+const card = (await as(A, `select customer_card($1) c`, [kBook.id])).rows[0].c;
+ok(card.member_since && card.here.completed === 1 && card.platform.completed === 1 && card.platform.businesses === 1
+  && card.reviews.count === 1 && Number(card.reviews.avg) === 2 && card.reviews.latest[0].comment === 'Geç kaldılar' && card.reviews.latest[0].business === 'Ahmet Berber',
+  `müşteri kartı: geçmiş ve yazdığı yorumlar ${JSON.stringify({ here: card.here, platform: card.platform, reviews: card.reviews.count })}`);
+const nCard = (await as(A, `select customer_card($1) c`, [nBook.id])).rows[0].c;
+ok(nCard.here.completed === 0 && nCard.platform.completed === 0 && nCard.reviews.count === 0 && nCard.reviews.latest.length === 0, 'yeni müşterinin kartı boş');
+await expectError(() => as(X, `select customer_card($1)`, [kBook.id]), /bulunamadı/, 'başka işletme müşteri kartını göremez');
+await expectError(() => as(K, `select customer_card($1)`, [kBook.id]), /bulunamadı/, 'müşteri kendi kartını sorgulayamaz');
+const manualCard = (await as(A, `select customer_card(id) c from appointments where id = $1`, [kPast])).rows[0].c;
+ok(manualCard.platform === null || manualCard.platform.completed === 0, 'kart geçerli randevunun kendisini saymaz');
+
+await as(A, `update appointments set status = 'cancelled', cancel_reason = '  Bu saat dolu  ' where id = $1`, [nBook.id]);
+const nRow = (await db.query(`select status, cancelled_by, rejected, cancel_reason from appointments where id = $1`, [nBook.id])).rows[0];
+ok(nRow.rejected && nRow.cancelled_by === 'business' && nRow.cancel_reason === 'Bu saat dolu', `bekleyen randevu sebebiyle reddedildi: ${JSON.stringify(nRow)}`);
+const nInbox = (await db.query(`select title, body from inbox where appointment_id = $1 and recipient = 'customer'`, [nBook.id])).rows[0];
+ok(nInbox?.title === 'Randevu talebiniz onaylanmadı' && nInbox.body.includes('Bu saat dolu'), `müşteriye "onaylanmadı" bildirimi sebebiyle: ${nInbox?.title} / ${nInbox?.body}`);
+ok((await db.query(`select 1 from notifications where appointment_id = $1 and kind = 'cancelled' and recipient = 'customer'`, [nBook.id])).rows.length === 1, 'ret e-postası kuyruğa girdi');
+
+await as(A, `update appointments set status = 'cancelled', cancel_reason = 'Dükkan kapalı' where id = $1`, [kBook.id]);
+const kRow = (await db.query(`select rejected, cancel_reason from appointments where id = $1`, [kBook.id])).rows[0];
+ok(!kRow.rejected && kRow.cancel_reason === 'Dükkan kapalı', 'onaylı randevunun iptali "reddedildi" sayılmaz, sebep kalır');
+const kInbox = (await db.query(`select title from inbox where appointment_id = $1 and recipient = 'customer' and kind = 'cancelled'`, [kBook.id])).rows[0];
+ok(kInbox?.title === 'Randevunuz iptal edildi', 'iptal bildirimi "iptal edildi" der');
+await as(A, `update appointments set status = 'confirmed' where id = $1`, [kBook.id]);
+ok((await db.query(`select cancel_reason r from appointments where id = $1`, [kBook.id])).rows[0].r === '', 'iptal geri alınınca sebep silindi');
+
+// Tanıdık olmayan müşteri saatini değiştirirse yeniden onaya düşer; elle onay modunda tanıdık da onaya düşer.
+const nBook2 = (await book(N, svc30, modeFree[2], 'Nur', '0544 555 66 77')).rows[0].id;
+await as(A, `update appointments set status = 'confirmed' where id = $1`, [nBook2]);
+await as(N, `select reschedule_appointment($1, $2)`, [nBook2, modeFree[3]]);
+ok((await db.query(`select status from appointments where id = $1`, [nBook2])).rows[0].status === 'pending', 'yeni müşterinin saat değişikliği onaya düştü');
+await as(A, `update businesses set auto_confirm = false where id = $1`, [biz]);
+const kManual = (await book(K, svc30, modeFree[4], 'Kaan', '0544 222 33 44')).rows[0];
+await as(A, `update businesses set auto_confirm = true, auto_confirm_known_only = false where id = $1`, [biz]);
+const nAuto = (await book(N, svc30, modeFree[5], 'Nur', '0544 555 66 77')).rows[0];
+ok(kManual.status === 'pending' && nAuto.status === 'confirmed', `elle onayda tanıdık bekler, otomatikte yeni müşteri onaylı: ${kManual.status}, ${nAuto.status}`);
+await db.query(`delete from appointments where customer_id = any($1)`, [[K, N]]);
+await db.query(`delete from auth.users where id = any($1)`, [[K, N]]);
 
 // hesap silme: müşteri yaklaşan randevusunu iptal eder ve yorumdaki adını kaldırır; işletme sahibi silemez
 const delAppt = (await book(V, svc30, free[4], 'Kurban', victimPhone)).rows[0].id;

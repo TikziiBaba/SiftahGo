@@ -63,7 +63,8 @@ begin
         'reply_review', 'start_phone_verification', 'confirm_phone_verification', 'block_customer',
         'auto_block_no_show', 'get_report_summary', 'join_waitlist', 'waitlist_on_free_slot', 'claim_waitlist',
         'use_package_session', 'available_today', 'nearby_businesses', 'apply_referral', 'my_referrals',
-        'log_error', 'protect_appointment_columns', 'admin_dashboard', 'admin_activity', 'delete_my_account'
+        'log_error', 'protect_appointment_columns', 'admin_dashboard', 'admin_activity', 'delete_my_account',
+        'admin_review_business', 'needs_confirmation', 'customer_card'
       )
   loop
     execute 'drop function if exists ' || r.sig || ' cascade';
@@ -150,9 +151,20 @@ create table public.businesses (
   booking_days       int not null default 30 check (booking_days between 1 and 365),
   min_notice_minutes int not null default 60 check (min_notice_minutes between 0 and 10080),
   auto_confirm       boolean not null default true,
+  -- auto_confirm açıkken yalnızca bu işletmede daha önce randevusu tamamlanmış müşteri otomatik onaylanır;
+  -- ilk kez gelenin randevusu onaya düşer (needs_confirmation). Paneldeki üç mod: otomatik / tanıdığı otomatik / elle.
+  auto_confirm_known_only boolean not null default false,
   is_published       boolean not null default true,
   -- Yönetici yayından kaldırdıysa sahibi yeniden açamaz (admin_set_suspended).
   is_suspended       boolean not null default false,
+  -- Başvuru onayı: yeni işletme 'pending' açılır, yönetici admin_review_business ile onaylar ya da sebebiyle reddeder.
+  -- Onaylanmayan işletme görünmez, randevu ve ödeme almaz; ücretsiz deneme onayla başlar. Reddedilen işletmenin
+  -- sahibi bilgilerini düzeltip approval_status'u 'pending' yaparak yeniden başvurur (protect_business_columns).
+  approval_status    text not null default 'pending' check (approval_status in ('pending', 'approved', 'rejected')),
+  approval_note      text not null default '' check (length(approval_note) <= 500), -- ret sebebi
+  submitted_at       timestamptz not null default now(),
+  reviewed_at        timestamptz,
+  reviewed_by        uuid references public.profiles (id) on delete set null,
   timezone           text not null default 'Europe/Istanbul',
   -- Değerlendirmelerden tetikleyiciyle hesaplanır.
   rating_avg         numeric(2, 1) not null default 0,
@@ -177,6 +189,7 @@ create table public.businesses (
   constraint businesses_location_check check ((latitude is null) = (longitude is null))
 );
 create index businesses_city_category_idx on public.businesses (city, category);
+create index businesses_pending_idx on public.businesses (submitted_at) where approval_status = 'pending';
 
 create table public.services (
   id               uuid primary key default gen_random_uuid(),
@@ -269,6 +282,10 @@ create table public.appointments (
                  check (status in ('pending', 'confirmed', 'completed', 'cancelled', 'no_show')),
   -- İptal eden taraf; müşteri iptalleri güvenilirlik sayısına girer. appointments_before_write yazar.
   cancelled_by   text check (cancelled_by in ('customer', 'business')),
+  -- İşletmenin iptal ederken ya da reddederken müşteriye yazdığı açıklama (bildirimde gider). rejected: onay
+  -- bekleyen randevu reddedildi; müşteriye "onaylanmadı" denir. İkisini de appointments_before_write düzenler.
+  cancel_reason  text not null default '' check (length(cancel_reason) <= 300),
+  rejected       boolean not null default false,
   -- Randevu alınırken müşterinin son 6 aydaki geçmişi (tüm işletmelerde; hesap veya telefonla eşleşir).
   -- appointments_before_write yazar. customer_flagged: sık iptal eden / gelmeyen müşteri.
   prior_cancels    int not null default 0,
@@ -464,14 +481,14 @@ as $$
   );
 $$;
 
--- İşletme herkese açık mı: yayında, askıda değil ve aboneliği süren.
+-- İşletme herkese açık mı: onaylı, yayında, askıda değil ve aboneliği süren.
 create function public.is_bookable(bid uuid)
 returns boolean
 language sql stable security definer set search_path = ''
 as $$
   select exists (
     select 1 from public.businesses
-    where id = bid and is_published and not is_suspended and subscription_ends_at > now()
+    where id = bid and approval_status = 'approved' and is_published and not is_suspended and subscription_ends_at > now()
   );
 $$;
 
@@ -528,7 +545,7 @@ select
 from auth.users u
 on conflict (id) do nothing;
 
--- Yeni işletmeye varsayılan çalışma saatleri ve bir personel ekle.
+-- Yeni işletmeye varsayılan çalışma saatleri ve bir personel ekle. Ücretsiz deneme onayla başlar (admin_review_business).
 create function public.business_after_insert()
 returns trigger
 language plpgsql security definer set search_path = ''
@@ -547,11 +564,6 @@ begin
   values (new.id, coalesce(v_owner_name, new.name));
 
   update public.profiles set role = 'business' where id = new.owner_id;
-
-  -- 7 gün ücretsiz deneme: Pro paketin tüm özellikleri.
-  update public.businesses
-  set plan_id = 'pro', subscription_ends_at = now() + interval '7 days', trial_ends_at = now() + interval '7 days'
-  where id = new.id;
   return new;
 end;
 $$;
@@ -673,6 +685,7 @@ begin
       new.status := 'pending';
     end if;
     new.cancelled_by := case when new.status = 'cancelled' then 'business' end;
+    new.rejected := false;
   else
     new.prior_cancels := old.prior_cancels;
     new.prior_no_shows := old.prior_no_shows;
@@ -683,7 +696,11 @@ begin
       when not v_owner and new.customer_id = auth.uid() then 'customer'
       else 'business'
     end;
+    new.rejected := new.status = 'cancelled' and new.cancelled_by = 'business'
+                    and (old.status = 'pending' or (old.status = 'cancelled' and old.rejected));
   end if;
+  -- Açıklamayı yalnızca iptal eden işletme yazar.
+  new.cancel_reason := case when new.cancelled_by = 'business' then trim(new.cancel_reason) else '' end;
   return new;
 end;
 $$;
@@ -771,10 +788,25 @@ create trigger appointments_use_package_session
   before update of status on public.appointments
   for each row execute function public.use_package_session();
 
+-- Müşterinin randevusu (veya saat değişikliği) işletme onayına düşer mü: elle onayda her zaman; "yalnızca tanıdık
+-- müşteriyi otomatik onayla" seçiliyse bu işletmede daha önce tamamlanmış randevusu olmayanda. Sık iptal eden
+-- müşteri ayrıca appointments_before_write'ta onaya düşer. İstemciye kapalı (müşterinin ziyaretlerini açığa çıkarır).
+create function public.needs_confirmation(p_business public.businesses, p_customer uuid)
+returns boolean
+language sql stable set search_path = ''
+as $$
+  select not p_business.auto_confirm
+    or (p_business.auto_confirm_known_only and not exists (
+      select 1 from public.appointments a
+      where a.business_id = p_business.id and a.customer_id = p_customer and a.status = 'completed'
+    ));
+$$;
+
 -- Girişli müşteri randevu alır. p_staff_id boşsa uygun ilk personel.
 -- Sahte randevuya karşı: işletmenin engellediği müşteri alamaz; aynı işletmede en fazla 3, toplamda
 -- en fazla 10 yaklaşan randevu; 24 saatte en fazla 10 randevu.
--- Dönen: {id, status}. Sık iptal eden müşterinin randevusu işletme onayına düşer (status = pending).
+-- Dönen: {id, status}. İşletme elle onaylıyorsa, yalnızca tanıdık müşteriyi otomatik onaylıyorsa ve müşteri ilk kez
+-- geliyorsa ya da müşteri sık iptal ediyorsa randevu işletme onayına düşer (status = pending).
 create function public.book_appointment(
   p_business_id    uuid,
   p_service_id     uuid,
@@ -861,7 +893,7 @@ begin
     b.id, s.id, v_staff, v_uid, s.name,
     trim(p_customer_name), v_phone, v_email, left(coalesce(p_note, ''), 500), s.price,
     p_starts_at, p_starts_at + make_interval(mins => s.duration_minutes),
-    case when b.auto_confirm then 'confirmed' else 'pending' end
+    case when public.needs_confirmation(b, v_uid) then 'pending' else 'confirmed' end
   )
   returning id, status into v_id, v_status;
 
@@ -873,6 +905,72 @@ begin
 exception
   when exclusion_violation then
     raise exception 'Bu saat artık müsait değil, lütfen başka bir saat seçin.';
+end;
+$$;
+
+-- İşletmenin gelen randevuyu değerlendirmesi için müşteri kartı: üyelik tarihi, bu işletmedeki ve tüm SiftahGo'daki
+-- geçmişi, müşterinin işletmelere yazdığı yorumlar (son 10). Yalnızca randevunun işletme sahibi görür. Elle eklenen
+-- (hesapsız) randevuda yalnızca bu işletmedeki telefon geçmişi döner: telefon doğrulanmadığı için başka işletmelerle
+-- eşleştirilmez (customer_history ile aynı kural).
+create function public.customer_card(p_appointment_id uuid)
+returns jsonb
+language plpgsql stable security definer set search_path = ''
+as $$
+declare
+  a     public.appointments;
+  v_key text;
+begin
+  select * into a from public.appointments where id = p_appointment_id;
+  if not found or not public.is_business_owner(a.business_id) then
+    raise exception 'Randevu bulunamadı.';
+  end if;
+  v_key := right(regexp_replace(a.customer_phone, '\D', '', 'g'), 10);
+
+  return jsonb_build_object(
+    'member_since', (select p.created_at from public.profiles p where p.id = a.customer_id),
+    'here', (
+      select jsonb_build_object(
+        'completed', count(*) filter (where x.status = 'completed'),
+        'cancelled', count(*) filter (where x.status = 'cancelled' and x.cancelled_by = 'customer'),
+        'no_show', count(*) filter (where x.status = 'no_show'),
+        'last_visit', max(x.starts_at) filter (where x.status = 'completed')
+      )
+      from public.appointments x
+      where x.business_id = a.business_id and x.id <> a.id
+        and case
+              when a.customer_id is not null then x.customer_id = a.customer_id
+              else x.customer_id is null and length(v_key) = 10
+                   and right(regexp_replace(x.customer_phone, '\D', '', 'g'), 10) = v_key
+            end
+    ),
+    'platform', case when a.customer_id is not null then (
+      select jsonb_build_object(
+        'completed', count(*) filter (where x.status = 'completed'),
+        'cancelled', count(*) filter (where x.status = 'cancelled' and x.cancelled_by = 'customer'),
+        'no_show', count(*) filter (where x.status = 'no_show'),
+        'businesses', count(distinct x.business_id) filter (where x.status = 'completed')
+      )
+      from public.appointments x
+      where x.customer_id = a.customer_id and x.id <> a.id
+    ) end,
+    'reviews', case when a.customer_id is not null then (
+      select jsonb_build_object(
+        'count', count(*),
+        'avg', round(avg(r.rating), 1),
+        'latest', coalesce((
+          select jsonb_agg(jsonb_build_object(
+            'business', b.name, 'rating', l.rating, 'comment', l.comment, 'created_at', l.created_at
+          ) order by l.created_at desc)
+          from (
+            select * from public.reviews r2 where r2.customer_id = a.customer_id order by r2.created_at desc limit 10
+          ) l
+          join public.businesses b on b.id = l.business_id
+        ), '[]')
+      )
+      from public.reviews r
+      where r.customer_id = a.customer_id
+    ) end
+  );
 end;
 $$;
 
@@ -956,7 +1054,7 @@ $$;
 
 -- Gelecekteki randevunun saatini değiştirir: müşterisi (girişli) veya işletme sahibi.
 -- Yeni saat boş saatlerden olmalı. p_staff_id boşsa uygun ilk personel.
--- Müşteri değiştirdiyse ve işletme randevuları elle onaylıyorsa randevu yeniden onay bekler.
+-- Müşteri değiştirdiyse ve randevusu onaya düşecek bir müşteriyse (needs_confirmation) randevu yeniden onay bekler.
 create function public.reschedule_appointment(p_id uuid, p_starts_at timestamptz, p_staff_id uuid default null)
 returns void
 language plpgsql volatile security definer set search_path = ''
@@ -1000,7 +1098,7 @@ begin
   set starts_at = p_starts_at,
       ends_at = p_starts_at + make_interval(mins => v_mins),
       staff_id = v_staff,
-      status = case when not v_owner and not b.auto_confirm then 'pending' else a.status end
+      status = case when not v_owner and public.needs_confirmation(b, a.customer_id) then 'pending' else a.status end
   where id = a.id;
 exception
   when exclusion_violation then
@@ -1076,8 +1174,9 @@ begin
 end;
 $$;
 
--- İşletme sahibi puan, abonelik ve askı alanlarını elle değiştiremez;
+-- İşletme sahibi puan, abonelik, askı ve onay alanlarını elle değiştiremez;
 -- bunları sadece refresh_business_rating, apply_subscription ve admin_* fonksiyonları yazar.
+-- Tek istisna: reddedilen başvuru yeniden gönderilebilir (approval_status 'rejected' -> 'pending').
 -- Saat dilimi geçerli olmalı: geçersiz değer tüm işletmelerin ortak işlerini (hatırlatma, bekleme listesi) bozar.
 create function public.protect_business_columns()
 returns trigger
@@ -1098,6 +1197,11 @@ begin
       new.referral_code := upper(substr(md5(gen_random_uuid()::text), 1, 8));
       new.referred_by := null;
       new.referral_rewarded_at := null;
+      new.approval_status := 'pending';
+      new.approval_note := '';
+      new.submitted_at := now();
+      new.reviewed_at := null;
+      new.reviewed_by := null;
     else
       new.rating_avg := old.rating_avg;
       new.rating_count := old.rating_count;
@@ -1108,6 +1212,15 @@ begin
       new.referral_code := old.referral_code;
       new.referred_by := old.referred_by;
       new.referral_rewarded_at := old.referral_rewarded_at;
+      if old.approval_status = 'rejected' and new.approval_status = 'pending' then
+        new.submitted_at := now();
+      else
+        new.approval_status := old.approval_status;
+        new.submitted_at := old.submitted_at;
+      end if;
+      new.approval_note := old.approval_note;
+      new.reviewed_at := old.reviewed_at;
+      new.reviewed_by := old.reviewed_by;
     end if;
   end if;
   return new;
@@ -1155,12 +1268,15 @@ language plpgsql volatile security definer set search_path = ''
 as $$
 declare
   v_business uuid;
+  v_status text;
   v_plan public.plans;
   v_oid text;
   v_amount numeric;
 begin
-  select id into v_business from public.businesses where owner_id = auth.uid();
+  select id, approval_status into v_business, v_status from public.businesses where owner_id = auth.uid();
   if v_business is null then raise exception 'Önce işletmenizi oluşturun.'; end if;
+  -- Reddedilebilecek başvurudan para alınmaz.
+  if v_status <> 'approved' then raise exception 'Başvurunuz onaylanınca paket seçebilirsiniz.'; end if;
   select * into v_plan from public.plans where id = p_plan_id;
   if not found then raise exception 'Paket bulunamadı.'; end if;
   if p_months is null or p_months not in (1, 12) then raise exception 'Geçersiz ödeme dönemi.'; end if;
@@ -1344,6 +1460,7 @@ begin
     when p_recipient = 'business' and p_kind = 'cancelled' then 'Randevu iptal edildi'
     when p_recipient = 'business' and a.status = 'pending' then 'Onay bekleyen randevu'
     when p_recipient = 'business' then 'Yeni randevu'
+    when p_kind = 'cancelled' and a.rejected then 'Randevu talebiniz onaylanmadı'
     when p_kind = 'cancelled' then 'Randevunuz iptal edildi'
     when p_kind = 'reminder' then 'Randevunuz yaklaşıyor'
     when a.status = 'pending' then 'Randevu talebiniz alındı'
@@ -1356,7 +1473,8 @@ begin
     else concat_ws(' · ', case when p_recipient = 'business' then a.customer_name else v_business end,
                    a.service_name, v_when,
                    case when v_flagged then format('Son 6 ayda %s iptal, %s gelmedi', a.prior_cancels, a.prior_no_shows) end,
-                   case when v_flagged and a.status = 'pending' then 'Onayınızı bekliyor' end)
+                   case when v_flagged and a.status = 'pending' then 'Onayınızı bekliyor' end,
+                   case when p_kind = 'cancelled' and p_recipient = 'customer' then nullif(a.cancel_reason, '') end)
   end;
 
   insert into public.inbox (user_id, appointment_id, kind, recipient, title, body)
@@ -1560,7 +1678,9 @@ returns table (
   business_address text,
   prior_cancels    int,
   prior_no_shows   int,
-  customer_flagged boolean
+  customer_flagged boolean,
+  cancel_reason    text,
+  rejected         boolean
 )
 language plpgsql volatile security definer set search_path = ''
 as $$
@@ -1598,7 +1718,7 @@ begin
     a.customer_name, a.customer_phone, a.service_name, a.note, a.price, a.starts_at, a.status,
     b.name, b.slug, b.phone,
     concat_ws(', ', nullif(b.address, ''), nullif(b.district, ''), nullif(b.city, '')),
-    a.prior_cancels, a.prior_no_shows, a.customer_flagged
+    a.prior_cancels, a.prior_no_shows, a.customer_flagged, a.cancel_reason, a.rejected
   from claimed c
   join public.appointments a on a.id = c.appointment_id
   join public.businesses b on b.id = a.business_id
@@ -1722,6 +1842,7 @@ revoke execute on function public.queue_due_reminders() from public, anon, authe
 revoke execute on function public.queue_review_requests() from public, anon, authenticated;
 -- Başka birinin geçmişini sorgulamak mümkün olmasın; sadece tetikleyici kullanır.
 revoke execute on function public.customer_history(uuid, text, uuid) from public, anon, authenticated;
+revoke execute on function public.needs_confirmation(public.businesses, uuid) from public, anon, authenticated;
 revoke execute on function public.claim_notifications(int) from public, anon, authenticated;
 revoke execute on function public.inbox_insert(uuid, text, text, public.appointments) from public, anon, authenticated;
 revoke execute on function public.claim_push(int) from public, anon, authenticated;
@@ -1756,6 +1877,9 @@ begin
   if not exists (select 1 from public.businesses where id = p_business_id) then
     raise exception 'İşletme bulunamadı.';
   end if;
+  if not exists (select 1 from public.businesses where id = p_business_id and approval_status = 'approved') then
+    raise exception 'Önce başvuruyu onaylayın.';
+  end if;
 
   insert into public.payments (business_id, plan_id, merchant_oid, amount, status, paid_at)
   values (
@@ -1788,6 +1912,36 @@ begin
   if not public.is_admin() then raise exception 'Yetkiniz yok.'; end if;
   update public.businesses set is_suspended = p_suspended where id = p_business_id;
   if not found then raise exception 'İşletme bulunamadı.'; end if;
+end;
+$$;
+
+-- İşletme başvurusunu onaylar ya da reddeder (ret sebebi zorunlu, işletme sahibine gösterilir).
+-- Onayda işletmenin hiç aboneliği olmadıysa 7 gün ücretsiz deneme başlar: Pro paketin tüm özellikleri.
+create function public.admin_review_business(p_business_id uuid, p_approve boolean, p_note text default '')
+returns void
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  v_status text;
+begin
+  if not public.is_admin() then raise exception 'Yetkiniz yok.'; end if;
+  select approval_status into v_status from public.businesses where id = p_business_id for update;
+  if not found then raise exception 'İşletme bulunamadı.'; end if;
+  if v_status = 'approved' then raise exception 'İşletme zaten onaylı.'; end if;
+
+  if p_approve then
+    update public.businesses
+    set approval_status = 'approved', approval_note = '', reviewed_at = now(), reviewed_by = auth.uid(),
+        plan_id = case when subscription_ends_at is null then 'pro' else plan_id end,
+        trial_ends_at = case when subscription_ends_at is null then now() + interval '7 days' else trial_ends_at end,
+        subscription_ends_at = coalesce(subscription_ends_at, now() + interval '7 days')
+    where id = p_business_id;
+  else
+    if length(trim(coalesce(p_note, ''))) < 3 then raise exception 'Ret sebebini yazın.'; end if;
+    update public.businesses
+    set approval_status = 'rejected', approval_note = left(trim(p_note), 500), reviewed_at = now(), reviewed_by = auth.uid()
+    where id = p_business_id;
+  end if;
 end;
 $$;
 
@@ -2818,7 +2972,10 @@ create policy "profil: kendini günceller" on public.profiles
 
 -- businesses
 create policy "işletme: yayındakileri herkes okur" on public.businesses
-  for select using ((is_published and not is_suspended and subscription_ends_at > now()) or owner_id = auth.uid());
+  for select using (
+    (approval_status = 'approved' and is_published and not is_suspended and subscription_ends_at > now())
+    or owner_id = auth.uid()
+  );
 create policy "işletme: sahibi oluşturur" on public.businesses
   for insert with check (owner_id = auth.uid());
 create policy "işletme: sahibi günceller" on public.businesses
