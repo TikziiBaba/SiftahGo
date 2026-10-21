@@ -7,6 +7,9 @@ export type Profile = {
   role: Role;
 };
 
+// Başvuru onayı: yönetici onaylayana kadar işletme görünmez; reddedilirse approval_note sebebi yazar.
+export type ApprovalStatus = "pending" | "approved" | "rejected";
+
 export type Business = {
   id: string;
   owner_id: string;
@@ -31,8 +34,15 @@ export type Business = {
   booking_days: number;
   min_notice_minutes: number;
   auto_confirm: boolean;
+  // auto_confirm açıkken yalnızca daha önce randevusu tamamlanmış müşteri otomatik onaylanır
+  auto_confirm_known_only: boolean;
   is_published: boolean;
   is_suspended: boolean;
+  approval_status: ApprovalStatus;
+  approval_note: string;
+  submitted_at: string;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
   timezone: string;
   rating_avg: number;
   rating_count: number;
@@ -169,6 +179,9 @@ export type Appointment = {
   ends_at: string;
   status: AppointmentStatus;
   cancelled_by: "customer" | "business" | null;
+  // İşletmenin iptal/ret açıklaması (müşteriye gider); rejected: onay bekleyen randevu reddedildi
+  cancel_reason: string;
+  rejected: boolean;
   // Randevu alınırken müşterinin son 6 aydaki geçmişi (tüm işletmelerde)
   prior_cancels: number;
   prior_no_shows: number;
@@ -177,6 +190,19 @@ export type Appointment = {
   // Seansı düşülen paket (tamamlanınca)
   package_id: string | null;
   created_at: string;
+};
+
+// customer_card: işletmenin gelen randevunun müşterisi hakkında gördükleri. Hesapsız (elle eklenen)
+// randevuda platform ve reviews boştur.
+export type CustomerCard = {
+  member_since: string | null;
+  here: { completed: number; cancelled: number; no_show: number; last_visit: string | null };
+  platform: { completed: number; cancelled: number; no_show: number; businesses: number } | null;
+  reviews: {
+    count: number;
+    avg: number | null;
+    latest: { business: string; rating: number; comment: string; created_at: string }[];
+  } | null;
 };
 
 // İşletmenin online randevusunu engellediği müşteri

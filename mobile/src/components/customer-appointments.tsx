@@ -9,7 +9,8 @@ import { ReschedulePicker } from '@/components/reschedule-picker';
 import { ReviewSheet } from '@/components/review-sheet';
 import { Sheet } from '@/components/sheet';
 import { useToast } from '@/components/toast';
-import { Button, Card, Empty, ScreenHeader, Segmented, Skeleton, StatusBadge, styles, Text } from '@/components/ui';
+import { Badge, Button, Card, Empty, ScreenHeader, Segmented, Skeleton, StatusBadge, styles, Text } from '@/components/ui';
+import { STATUS } from '@/lib/constants';
 import { errorMessage, formatDate, formatPrice, formatTime, mapsLink, relativeDay, dayOf, shortDay } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import { colors, radius } from '@/lib/theme';
@@ -226,10 +227,19 @@ function AppointmentCard({
             {Number(item.price) > 0 ? ` · ${formatPrice(item.price)}` : ''}
           </Text>
           <View style={{ marginTop: 2 }}>
-            <StatusBadge status={item.status} />
+            {item.rejected ? (
+              <Badge label="Onaylanmadı" icon={STATUS.cancelled.icon} fg={STATUS.cancelled.fg} bg={STATUS.cancelled.bg} />
+            ) : (
+              <StatusBadge status={item.status} />
+            )}
           </View>
         </View>
       </Pressable>
+      {item.status === 'cancelled' && item.cancel_reason ? (
+        <Text variant="caption" tone="secondary">
+          İşletmenin açıklaması: {item.cancel_reason}
+        </Text>
+      ) : null}
       {upcoming ? (
         <View style={{ gap: 8 }}>
           {place || b?.phone ? (

@@ -67,8 +67,9 @@ function RootStack({ fontsReady }: { fontsReady: boolean }) {
   if (!ready) return null;
 
   const isBusiness = profile?.role === 'business';
-  // İşletme hesabı açılmış ama işletme henüz oluşturulmamış.
-  const needsSetup = isBusiness && !business;
+  const approved = business?.approval_status === 'approved';
+  // İşletme hesabı açılmış ama işletme henüz oluşturulmamış ya da başvurusu onaylanmamış.
+  const needsSetup = isBusiness && !approved;
 
   return (
     <Stack
@@ -100,7 +101,7 @@ function RootStack({ fontsReady }: { fontsReady: boolean }) {
         <Stack.Screen name="bildirimler" options={{ title: 'Bildirimler' }} />
       </Stack.Protected>
 
-      <Stack.Protected guard={isBusiness && !!business}>
+      <Stack.Protected guard={isBusiness && approved}>
         <Stack.Screen name="randevu-ekle" options={{ title: 'Randevu ekle', presentation: 'modal' }} />
         <Stack.Screen name="yonetim/hizmetler/index" options={{ title: 'Hizmetler' }} />
         <Stack.Screen name="yonetim/hizmetler/[id]" options={{ title: 'Hizmet', presentation: 'modal' }} />

@@ -4,16 +4,19 @@ import { Alert, Linking, View } from 'react-native';
 
 import { ReschedulePicker } from '@/components/reschedule-picker';
 import { Sheet } from '@/components/sheet';
-import { Banner, Button, Card, Chip, StatusBadge, styles, Text } from '@/components/ui';
-import { STATUS, type IconName } from '@/lib/constants';
-import { dayOf, errorMessage, formatDate, formatPrice, formatTime, isPast, phoneKey, relativeDay, reminderText, whatsappLink } from '@/lib/format';
+import { Badge, Banner, Button, Card, Chip, Field, StatusBadge, styles, SwitchRow, Text } from '@/components/ui';
+import { CANCEL_REASONS, STATUS, type IconName } from '@/lib/constants';
+import { dayOf, errorMessage, formatDate, formatPrice, formatTime, isPast, MONTHS, phoneKey, relativeDay, reminderText, whatsappLink } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
-import type { Appointment, AppointmentStatus, SessionPackage } from '@/lib/types';
+import type { Appointment, AppointmentStatus, CustomerCard, SessionPackage } from '@/lib/types';
 
 export type AgendaRow = Appointment & { staff: { name: string } | null };
 
-/** İşletme sahibi için randevu ayrıntısı: arama, WhatsApp, saat ve durum değiştirme. */
+/**
+ * İşletme sahibi için randevu ayrıntısı: müşteri kartı (geçmiş ve yazdığı yorumlar), arama, WhatsApp, saat ve
+ * durum değiştirme, sebebiyle reddetme/iptal (sebep müşteriye gider).
+ */
 export function AppointmentSheet({
   appointment,
   businessName,
@@ -30,8 +33,15 @@ export function AppointmentSheet({
   const [error, setError] = useState('');
   // Saat seçimi açık olan randevu; başka randevu açılınca kendiliğinden kapanır.
   const [movingId, setMovingId] = useState<string | null>(null);
+  // Ret/iptal formu açık olan randevu; başka randevu açılınca kendiliğinden kapanır.
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
+  const [block, setBlock] = useState(false);
   const a = appointment;
   const moving = !!a && movingId === a.id;
+  const rejecting = !!a && rejectingId === a.id;
+  const [card, setCard] = useState<{ id: string; card: CustomerCard } | null>(null);
+  const customerCard = a && card?.id === a.id ? card.card : null;
   // Müşteri defterindeki not ve seans paketleri (paketinde defter yoksa boş gelir).
   const [extra, setExtra] = useState<{ id: string; note: string; packages: SessionPackage[] } | null>(null);
   const customerNote = a && extra?.id === a.id ? extra.note : '';
@@ -58,6 +68,17 @@ export function AppointmentSheet({
     };
   }, [aId, aBusiness, aKey]);
 
+  useEffect(() => {
+    if (!aId) return;
+    let active = true;
+    supabase.rpc('customer_card', { p_appointment_id: aId }).then(({ data }) => {
+      if (active && data) setCard({ id: aId, card: data as CustomerCard });
+    });
+    return () => {
+      active = false;
+    };
+  }, [aId]);
+
   async function setStatus(status: AppointmentStatus) {
     if (!a) return;
     setBusy(status);
@@ -68,11 +89,24 @@ export function AppointmentSheet({
     onChanged(`${a.customer_name}: ${STATUS[status].label}`);
   }
 
-  function confirmCancel() {
-    Alert.alert('Randevu iptal edilsin mi?', 'Müşteriye e-posta ile bildirilir.', [
-      { text: 'Vazgeç', style: 'cancel' },
-      { text: 'İptal et', style: 'destructive', onPress: () => setStatus('cancelled') },
-    ]);
+  function startReject() {
+    if (!a) return;
+    setReason('');
+    setBlock(false);
+    setRejectingId(a.id);
+  }
+
+  // Sebep müşteriye e-posta ve bildirimle gider; istenirse müşteri de engellenir.
+  async function reject() {
+    if (!a) return;
+    setBusy('cancelled');
+    setError('');
+    let { error } = await supabase.from('appointments').update({ status: 'cancelled', cancel_reason: reason.trim() }).eq('id', a.id);
+    if (!error && block) ({ error } = await supabase.rpc('block_customer', { p_appointment_id: a.id }));
+    setBusy(null);
+    if (error) return setError(errorMessage(error));
+    setRejectingId(null);
+    onChanged(`${a.customer_name}: ${a.status === 'pending' ? 'reddedildi' : 'iptal edildi'}${block ? ', engellendi' : ''}`);
   }
 
   // Müşteriyi engeller: sayfadan online randevu alamaz, bu işletmedeki yaklaşan randevuları iptal olur.
@@ -102,6 +136,7 @@ export function AppointmentSheet({
   function close() {
     setError('');
     setMovingId(null);
+    setRejectingId(null);
     onClose();
   }
 
@@ -136,6 +171,10 @@ export function AppointmentSheet({
               text={`Randevu alındığında son 6 ayda ${a.prior_cancels} randevusunu iptal etmiş, ${a.prior_no_shows} randevusuna gelmemişti (tüm SiftahGo işletmelerinde). Randevudan önce aramanızı öneririz.`}
             />
           )}
+          {customerCard && <CustomerSummary card={customerCard} />}
+          {a.status === 'cancelled' && a.cancel_reason ? (
+            <Banner icon="chatbox-outline" title={a.rejected ? 'Ret sebebi' : 'İptal sebebi'} text={a.cancel_reason} />
+          ) : null}
           <Card style={{ gap: 12, backgroundColor: colors.surface2 }}>
             <Info icon="cut-outline" label="Hizmet" value={a.service_name} />
             {a.staff && <Info icon="person-outline" label="Personel" value={a.staff.name} />}
@@ -178,18 +217,46 @@ export function AppointmentSheet({
             </Text>
           ) : null}
 
-          {a.status === 'pending' && (
-            <View style={{ gap: 8 }}>
-              <Button title="Onayla" icon="checkmark" onPress={() => setStatus('confirmed')} loading={busy === 'confirmed'} />
-              <Button title="Reddet" variant="dangerGhost" onPress={confirmCancel} loading={busy === 'cancelled'} />
+          {active && rejecting && (
+            <View style={{ gap: 10 }}>
+              <Text variant="bodyStrong">{a.status === 'pending' ? 'Reddetme sebebi' : 'İptal sebebi'}</Text>
+              <View style={styles.wrap}>
+                {CANCEL_REASONS.map((r) => (
+                  <Chip key={r} label={r} selected={reason === r} onPress={() => setReason(r)} />
+                ))}
+              </View>
+              <Field placeholder="Müşteriye iletilecek açıklama (isteğe bağlı)" value={reason} onChangeText={setReason} maxLength={300} multiline />
+              {a.customer_id && (
+                <Card style={{ padding: 0 }}>
+                  <SwitchRow
+                    title="Bu müşteriyi engelle"
+                    description="Online randevu alamaz, buradaki diğer yaklaşan randevuları da iptal olur."
+                    value={block}
+                    onValueChange={setBlock}
+                  />
+                </Card>
+              )}
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <Button title="Vazgeç" variant="secondary" style={{ flex: 1 }} onPress={() => setRejectingId(null)} />
+                <Button title={a.status === 'pending' ? 'Reddet' : 'İptal et'} variant="danger" style={{ flex: 1 }} onPress={reject} loading={busy === 'cancelled'} />
+              </View>
+              <Text variant="caption" tone="muted">
+                Müşteriye e-posta ve uygulama bildirimiyle haber verilir.
+              </Text>
             </View>
           )}
-          {a.status === 'confirmed' && (
+          {a.status === 'pending' && !rejecting && (
+            <View style={{ gap: 8 }}>
+              <Button title="Onayla" icon="checkmark" onPress={() => setStatus('confirmed')} loading={busy === 'confirmed'} />
+              <Button title="Reddet" variant="dangerGhost" onPress={startReject} />
+            </View>
+          )}
+          {a.status === 'confirmed' && !rejecting && (
             <View style={{ gap: 8 }}>
               <Button title="Tamamlandı" icon="checkmark-done" onPress={() => setStatus('completed')} loading={busy === 'completed'} />
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 <Button title="Gelmedi" icon="ban-outline" variant="secondary" style={{ flex: 1 }} onPress={() => setStatus('no_show')} loading={busy === 'no_show'} />
-                <Button title="İptal et" variant="dangerGhost" style={{ flex: 1 }} onPress={confirmCancel} loading={busy === 'cancelled'} />
+                <Button title="İptal et" variant="dangerGhost" style={{ flex: 1 }} onPress={startReject} />
               </View>
             </View>
           )}
@@ -207,12 +274,53 @@ export function AppointmentSheet({
               </View>
             </View>
           )}
-          {a.customer_id && (
+          {a.customer_id && !rejecting && (
             <Button title="Müşteriyi engelle" icon="ban-outline" variant="dangerGhost" onPress={confirmBlock} loading={busy === 'block'} />
           )}
         </>
       )}
     </Sheet>
+  );
+}
+
+/** Müşteri kartı (customer_card): üyelik, bu işletmedeki ve tüm SiftahGo'daki geçmiş, yazdığı yorumlar. */
+function CustomerSummary({ card }: { card: CustomerCard }) {
+  const cancels = card.platform?.cancelled ?? card.here.cancelled;
+  const noShows = card.platform?.no_show ?? card.here.no_show;
+  const first = card.here.completed + card.here.cancelled + card.here.no_show + (card.platform?.completed ?? 0) === 0;
+  const since = card.member_since ? new Date(card.member_since) : null;
+  return (
+    <Card style={{ gap: 12, backgroundColor: colors.surface2 }}>
+      <View style={styles.wrap}>
+        <Badge label={since ? `Üye: ${MONTHS[since.getMonth()]} ${since.getFullYear()}` : 'Elle eklenen (hesapsız)'} />
+        {first && <Badge label="İlk kez geliyor" fg={colors.info} bg={colors.infoTint} />}
+      </View>
+      <Info
+        icon="storefront-outline"
+        label="Sizde"
+        value={`${card.here.completed} tamamlanan${card.here.last_visit ? ` · son ${formatDate(dayOf(card.here.last_visit), false)}` : ''}`}
+      />
+      {card.platform && (
+        <Info icon="globe-outline" label="SiftahGo" value={`${card.platform.completed} tamamlanan · ${card.platform.businesses} işletme`} />
+      )}
+      <Info icon="close-circle-outline" label="Geçmiş" value={`${cancels} iptal · ${noShows} gelmedi`} />
+      {card.reviews && (
+        <View style={{ gap: 8 }}>
+          <Text variant="label" tone="secondary">
+            {card.reviews.count > 0 ? `Yazdığı yorumlar · ★ ${Number(card.reviews.avg).toFixed(1)} (${card.reviews.count})` : 'Henüz yorum yazmamış'}
+          </Text>
+          {card.reviews.latest.slice(0, 5).map((r, i) => (
+            <View key={i} style={{ gap: 2 }}>
+              <Text variant="caption" tone="muted" numberOfLines={1}>
+                {r.business} · {'★'.repeat(r.rating)}
+                {'☆'.repeat(5 - r.rating)} · {formatDate(dayOf(r.created_at), false)}
+              </Text>
+              {r.comment ? <Text>{r.comment}</Text> : null}
+            </View>
+          ))}
+        </View>
+      )}
+    </Card>
   );
 }
 

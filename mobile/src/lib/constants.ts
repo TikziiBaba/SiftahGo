@@ -61,6 +61,31 @@ export const STATUS: Record<AppointmentStatus, { label: string; fg: string; bg: 
   no_show: { label: 'Gelmedi', fg: colors.danger, bg: colors.dangerTint, icon: 'ban-outline' },
 };
 
+// İşletmenin reddederken veya iptal ederken seçebileceği hazır açıklamalar (müşteriye gider). Web'dekiyle aynı.
+export const CANCEL_REASONS = [
+  'Bu saat dolu',
+  'Personelimiz o saatte müsait değil',
+  'Bu hizmeti şu an veremiyoruz',
+  'Lütfen randevu için bizi arayın',
+];
+
+// Randevu onay modları (businesses.auto_confirm + auto_confirm_known_only). Sık iptal eden müşteri her modda onaya düşer.
+export const CONFIRM_MODES = [
+  { id: 'auto', label: 'Hepsini otomatik onayla', hint: 'Müşteri randevu alır almaz onaylanır.', auto_confirm: true, auto_confirm_known_only: false },
+  {
+    id: 'known',
+    label: 'Tanıdık müşteriyi otomatik onayla',
+    hint: 'Daha önce sizde randevusu tamamlanmış müşteriler otomatik onaylanır; ilk kez gelenler onayınıza düşer.',
+    auto_confirm: true,
+    auto_confirm_known_only: true,
+  },
+  { id: 'manual', label: 'Hepsini ben onaylayayım', hint: 'Her randevu panelden onaylamanızı bekler.', auto_confirm: false, auto_confirm_known_only: false },
+] as const;
+
+export function confirmMode(b: { auto_confirm: boolean; auto_confirm_known_only: boolean }) {
+  return CONFIRM_MODES.find((m) => m.id === (!b.auto_confirm ? 'manual' : b.auto_confirm_known_only ? 'known' : 'auto'))!;
+}
+
 // Veritabanındaki kısıtla aynı olmalı (supabase/schema.sql).
 export const RESERVED_SLUGS = [
   'panel', 'kesfet', 'giris', 'kayit', 'hesabim', 'api', 'auth', 'admin', 'sifremi-unuttum', 'sifre-yenile',

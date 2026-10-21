@@ -1,16 +1,17 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Location from 'expo-location';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { OptionSheet, SelectField } from '@/components/pickers';
 import { useToast } from '@/components/toast';
 import { Banner, Button, Card, Chip, Field, SectionTitle, styles, SwitchRow, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
-import { CATEGORIES, categoryLabel, CITIES, RESERVED_SLUGS, SITE_DOMAIN } from '@/lib/constants';
+import { CATEGORIES, categoryLabel, CITIES, CONFIRM_MODES, confirmMode, RESERVED_SLUGS, SITE_DOMAIN } from '@/lib/constants';
 import { errorMessage, slugify, slugInput } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
+import { haptic } from '@/lib/haptics';
 import { colors } from '@/lib/theme';
 import type { Business } from '@/lib/types';
 
@@ -52,6 +53,7 @@ function Info({ business }: { business: Business }) {
     booking_days: business.booking_days,
     min_notice_minutes: business.min_notice_minutes,
     auto_confirm: business.auto_confirm,
+    auto_confirm_known_only: business.auto_confirm_known_only,
     is_published: business.is_published,
   });
   const [picker, setPicker] = useState<'category' | 'city' | null>(null);
@@ -181,14 +183,41 @@ function Info({ business }: { business: Business }) {
           ))}
         </View>
 
+        <Text variant="label" tone="secondary" style={{ marginTop: 4 }}>
+          Randevu onayı
+        </Text>
+        <Card style={{ padding: 0 }}>
+          {CONFIRM_MODES.map((m, i) => {
+            const on = confirmMode(form).id === m.id;
+            return (
+              <View key={m.id}>
+                {i > 0 && <View style={{ height: 1, backgroundColor: colors.line }} />}
+                <Pressable
+                  onPress={() => {
+                    haptic.select();
+                    set({ auto_confirm: m.auto_confirm, auto_confirm_known_only: m.auto_confirm_known_only });
+                  }}
+                  accessibilityRole="radio"
+                  aria-checked={on}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 12, minHeight: 58 }}>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text variant="bodyStrong">{m.label}</Text>
+                    <Text variant="caption" tone="muted">
+                      {m.hint}
+                    </Text>
+                  </View>
+                  <Ionicons name={on ? 'radio-button-on' : 'radio-button-off'} size={22} color={on ? colors.brand300 : colors.ink3} />
+                </Pressable>
+              </View>
+            );
+          })}
+        </Card>
+        <Text variant="caption" tone="muted">
+          Sık iptal eden veya randevusuna gelmeyen müşterilerin randevusu her durumda onayınıza düşer. Reddederken yazdığınız sebep müşteriye
+          iletilir.
+        </Text>
+
         <Card style={{ padding: 0, marginTop: 8 }}>
-          <SwitchRow
-            title="Randevuları otomatik onayla"
-            description="Kapalıysa her randevuyu sizin onaylamanız gerekir."
-            value={form.auto_confirm}
-            onValueChange={(auto_confirm) => set({ auto_confirm })}
-          />
-          <View style={{ height: 1, backgroundColor: colors.line }} />
           <SwitchRow
             title="Sayfam yayında"
             description="Kapalıysa işletmeniz aramada görünmez ve randevu alınamaz."
