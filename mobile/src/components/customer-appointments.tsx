@@ -1,10 +1,12 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, FlatList, Linking, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import { FlatList, Linking, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { Glow } from '@/components/brand';
+import { HoldButton } from '@/components/hold-button';
 import { InboxBell } from '@/components/inbox-bell';
+import { RevealCell } from '@/components/motion';
 import { ReschedulePicker } from '@/components/reschedule-picker';
 import { ReviewSheet } from '@/components/review-sheet';
 import { Sheet } from '@/components/sheet';
@@ -73,20 +75,12 @@ export function CustomerAppointments({ userId }: { userId: string }) {
     };
   }, [userId, load]);
 
-  function cancel(row: Row) {
-    Alert.alert('Randevu iptal edilsin mi?', `${row.businesses?.name ?? ''} · ${relativeDay(dayOf(row.starts_at))} ${formatTime(row.starts_at)}`, [
-      { text: 'Vazgeç', style: 'cancel' },
-      {
-        text: 'İptal et',
-        style: 'destructive',
-        onPress: async () => {
-          const { error } = await supabase.rpc('cancel_appointment', { p_id: row.id });
-          if (error) toast(errorMessage(error), 'error');
-          else toast('Randevu iptal edildi.');
-          load();
-        },
-      },
-    ]);
+  // Onay penceresi yok: karttaki düğme basılı tutulunca birkaç saniye geri alınabilir, sonra burası çalışır.
+  async function cancel(row: Row) {
+    const { error } = await supabase.rpc('cancel_appointment', { p_id: row.id });
+    if (error) toast(errorMessage(error), 'error');
+    else toast('Randevu iptal edildi.');
+    load();
   }
 
   const data = lists ? lists[tab] : [];
@@ -137,6 +131,7 @@ export function CustomerAppointments({ userId }: { userId: string }) {
             <Empty icon="time-outline" title="Geçmiş randevu yok" text="Tamamlanan ve iptal edilen randevularınız burada görünür." />
           )
         }
+        CellRendererComponent={RevealCell}
         renderItem={({ item }) => (
           <AppointmentCard
             item={item}
@@ -188,7 +183,7 @@ function AppointmentCard({
   item: Row;
   upcoming: boolean;
   canReview: boolean;
-  onCancel: () => void;
+  onCancel: () => unknown;
   onReschedule: () => void;
   onReview: () => void;
 }) {
@@ -256,7 +251,7 @@ function AppointmentCard({
             {item.service_id ? (
               <Button title="Saati değiştir" icon="time-outline" variant="secondary" size="sm" style={{ flex: 1 }} onPress={onReschedule} />
             ) : null}
-            <Button title="İptal" icon="close" variant="dangerGhost" size="sm" style={{ flex: 1 }} onPress={onCancel} />
+            <HoldButton title="İptal" pending="İptal ediliyor" icon="close" style={{ flex: 1 }} onConfirm={onCancel} />
           </View>
         </View>
       ) : (

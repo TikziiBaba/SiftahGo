@@ -1,28 +1,89 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native';
+import Animated, { FadeIn, FadeOut, LayoutAnimationConfig, LinearTransition } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Glow, LogoMark } from '@/components/brand';
-import { Banner, Button, Field, styles, Text } from '@/components/ui';
+import { EASE_SPRING, Float, GridFlow, Reveal } from '@/components/motion';
+import { Banner, Button, Field, IconButton, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { errorMessage } from '@/lib/format';
 import { googleEnabled, signInWithGoogle } from '@/lib/google';
 import { haptic } from '@/lib/haptics';
 import { colors } from '@/lib/theme';
 
-/** Giriş / kayıt / şifre sıfırlama ekranlarının ortak çerçevesi */
-export function AuthShell({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
+/** Klavye açık mı (web'de klavye olayı yok, hep kapalı sayılır). */
+export function useKeyboardOpen() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const ios = Platform.OS === 'ios';
+    const show = Keyboard.addListener(ios ? 'keyboardWillShow' : 'keyboardDidShow', () => setOpen(true));
+    const hide = Keyboard.addListener(ios ? 'keyboardWillHide' : 'keyboardDidHide', () => setOpen(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  return open;
+}
+
+/**
+ * Giriş / kayıt / şifre sıfırlama ekranlarının ortak çerçevesi. Kaydırılmaz, tek ekrana sığar: form altta,
+ * kalan yer başlığın. Klavye açılınca başlık çekilir, form klavyenin üstünde kalır. heroKey değişince başlık yenilenir.
+ */
+export function AuthShell({
+  title,
+  accent,
+  subtitle,
+  heroKey,
+  onBack,
+  children,
+}: {
+  title: string;
+  accent?: string;
+  subtitle: string;
+  heroKey?: string;
+  onBack?: () => void;
+  children: React.ReactNode;
+}) {
+  const insets = useSafeAreaInsets();
+  const keyboard = useKeyboardOpen();
   return (
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Glow height={380} opacity={0.24} />
-      <ScrollView contentContainerStyle={[styles.content, { gap: 14, paddingTop: 8 }]} keyboardShouldPersistTaps="handled">
-        <View style={{ gap: 10, marginBottom: 8 }}>
-          <LogoMark size={48} />
-          <Text variant="display">{title}</Text>
-          <Text tone="muted">{subtitle}</Text>
-        </View>
-        {children}
-      </ScrollView>
+      <View style={[s.floor, { top: insets.top }]}>
+        <GridFlow height={300} />
+      </View>
+      {/* Işık ızgaranın üstünde: ızgaranın solan üst kenarı ışığı kesmesin. */}
+      <Glow height={420} opacity={0.24} />
+      <View style={[s.frame, { paddingTop: insets.top + 8, paddingBottom: Math.max(insets.bottom, 16) + 4 }]}>
+        {onBack ? <IconButton icon="chevron-back" label="Geri" onPress={onBack} style={[s.back, { top: insets.top + 8 }]} /> : null}
+        {/* Açılışta başlık Reveal ile gelir; solma yalnızca klavye açılıp kapanınca. */}
+        <LayoutAnimationConfig skipEntering>
+          {!keyboard && (
+            <Animated.View entering={FadeIn.duration(250)} exiting={FadeOut.duration(150)} style={s.hero}>
+              <Float>
+                <LogoMark size={52} />
+              </Float>
+              <Reveal key={heroKey} offset={12} style={{ gap: 8 }}>
+                <Text variant="display">
+                  {title}
+                  {accent ? (
+                    <Text variant="display" tone="brand">
+                      {'\n'}
+                      {accent}
+                    </Text>
+                  ) : null}
+                </Text>
+                <Text tone="muted">{subtitle}</Text>
+              </Reveal>
+            </Animated.View>
+          )}
+        </LayoutAnimationConfig>
+        <Animated.View layout={LinearTransition.duration(300).easing(EASE_SPRING)} style={s.form}>
+          {children}
+        </Animated.View>
+      </View>
     </KeyboardAvoidingView>
   );
 }
@@ -88,3 +149,12 @@ export function PasswordField(props: React.ComponentProps<typeof Field>) {
     />
   );
 }
+
+const s = StyleSheet.create({
+  floor: { position: 'absolute', left: 0, right: 0, height: 300 },
+  frame: { flex: 1, paddingHorizontal: 20, justifyContent: 'flex-end', gap: 20 },
+  back: { position: 'absolute', left: 16, zIndex: 1 },
+  // Kısa ekranda önce başlık daralır (taşanı gizlenir), form hep tam görünür.
+  hero: { flex: 1, minHeight: 0, justifyContent: 'flex-end', gap: 16, overflow: 'hidden' },
+  form: { gap: 12 },
+});

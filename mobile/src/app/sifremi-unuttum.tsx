@@ -47,7 +47,11 @@ export default function ForgotPasswordScreen() {
   }
 
   return (
-    <AuthShell title="Şifrenizi mi unuttunuz?" subtitle="Hesabınızın e-posta adresini yazın, size yenileme bağlantısı gönderelim.">
+    <AuthShell
+      title="Şifrenizi mi"
+      accent="unuttunuz?"
+      subtitle="Hesabınızın e-posta adresini yazın, size yenileme bağlantısı gönderelim."
+      onBack={() => router.back()}>
       <Field
         label="E-posta"
         icon="mail-outline"

@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import { FlatList, View } from 'react-native';
 
 import { HeaderButton } from '@/components/header-button';
+import { RevealCell } from '@/components/motion';
 import { Badge, Button, Card, Empty, Skeleton, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { formatDuration, formatPrice } from '@/lib/format';
@@ -53,6 +54,7 @@ function Services({ business }: { business: Business }) {
           )
         }
         ListFooterComponent={services?.length ? <Button title="Hizmet ekle" icon="add" variant="secondary" onPress={add} style={{ marginTop: 4 }} /> : null}
+        CellRendererComponent={RevealCell}
         renderItem={({ item: x }) => (
           <Card
             onPress={() => router.push({ pathname: '/yonetim/hizmetler/[id]', params: { id: x.id } })}

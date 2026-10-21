@@ -3,6 +3,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, Share, StyleSheet, View } from 'react-native';
 
+import { ScrambleText } from '@/components/scramble-text';
 import { Badge, Banner, Button, Card, Field, SectionTitle, Segmented, Skeleton, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { BASE_FEATURES, isSubscribed, isTrial, PLAN_FEATURES, WEB_URL } from '@/lib/constants';
@@ -209,9 +210,7 @@ function Subscription({ business }: { business: Business }) {
               <Text variant="caption" tone="muted">
                 Davet kodunuz
               </Text>
-              <Text variant="title" selectable style={{ letterSpacing: 3 }}>
-                {business.referral_code}
-              </Text>
+              <ScrambleText variant="title" selectable style={{ letterSpacing: 3 }} text={business.referral_code} />
             </View>
             <Button title="Davet bağlantısını paylaş" icon="share-social-outline" onPress={shareInvite} />
             {referrals.map((r) => (

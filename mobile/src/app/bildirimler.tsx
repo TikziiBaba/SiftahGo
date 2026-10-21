@@ -5,6 +5,7 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { FlatList, Linking, StyleSheet, View } from 'react-native';
 
+import { RevealCell } from '@/components/motion';
 import { Banner, Empty, PressableScale, Skeleton, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import type { IconName } from '@/lib/constants';
@@ -92,6 +93,7 @@ export default function InboxScreen() {
           </View>
         )
       }
+      CellRendererComponent={RevealCell}
       renderItem={({ item }) => <Row item={item} />}
     />
   );

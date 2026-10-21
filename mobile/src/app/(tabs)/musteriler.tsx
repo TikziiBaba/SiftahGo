@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import { Alert, FlatList, Linking, Pressable, StyleSheet, View } from 'react-native';
 
 import { Glow } from '@/components/brand';
+import { RevealCell } from '@/components/motion';
 import { PlanGate } from '@/components/plan-gate';
 import { Sheet } from '@/components/sheet';
 import { Avatar, Banner, Button, Card, Chip, Empty, Field, IconButton, ScreenHeader, Skeleton, Stat, styles, Text } from '@/components/ui';
@@ -191,6 +192,7 @@ function Customers({ business }: { business: Business }) {
             />
           )
         }
+        CellRendererComponent={RevealCell}
         renderItem={({ item: c }) => (
           // Arama/WhatsApp düğmeleri ekran okuyucuda ayrı erişilsin diye kart değil satır dokunulabilir.
           <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 }}>

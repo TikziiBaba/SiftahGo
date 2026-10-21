@@ -3,11 +3,11 @@ import * as Location from 'expo-location';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Glow, Wordmark } from '@/components/brand';
 import { Logo } from '@/components/business-logo';
+import { RevealCell } from '@/components/motion';
 import { OptionSheet } from '@/components/pickers';
 import { Avatar, Badge, Button, Card, Chip, Empty, Field, PressableScale, Skeleton, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
@@ -265,12 +265,9 @@ export default function DiscoverScreen() {
             </Empty>
           )
         }
-        renderItem={({ item, index }) => (
-          // Kartlar sırayla belirir; ilk sekizden sonrası beklemez.
-          <Animated.View entering={FadeInDown.delay(Math.min(index, 8) * 40).duration(320)}>
-            <BusinessCard item={item} />
-          </Animated.View>
-        )}
+        // Kartlar sırayla belirir; ilk sekizden sonrası beklemez.
+        CellRendererComponent={RevealCell}
+        renderItem={({ item }) => <BusinessCard item={item} />}
       />
       <OptionSheet
         visible={cityOpen}

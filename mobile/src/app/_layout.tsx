@@ -8,6 +8,7 @@ import { ToastProvider } from '@/components/toast';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { installErrorHandler } from '@/lib/error-log';
 import { InboxProvider } from '@/lib/inbox';
+import { useIntroSeen } from '@/lib/intro';
 import { useNotificationTaps, usePushRegistration } from '@/lib/notifications';
 import { colors, fonts, type } from '@/lib/theme';
 
@@ -53,6 +54,7 @@ export default function RootLayout() {
 
 function RootStack({ fontsReady }: { fontsReady: boolean }) {
   const { session, profile, business, loading } = useAuth();
+  const introSeen = useIntroSeen();
   const ready = fontsReady && !loading;
 
   useEffect(() => {
@@ -81,22 +83,27 @@ function RootStack({ fontsReady }: { fontsReady: boolean }) {
         headerBackButtonDisplayMode: 'minimal',
         contentStyle: { backgroundColor: colors.bg },
       }}>
-      <Stack.Protected guard={needsSetup}>
-        <Stack.Screen name="kurulum" options={{ headerShown: false }} />
-      </Stack.Protected>
-      <Stack.Protected guard={!needsSetup}>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      </Stack.Protected>
-
-      <Stack.Screen name="isletme/[slug]/index" options={{ headerShown: false }} />
-      <Stack.Screen name="isletme/[slug]/randevu" options={{ title: 'Randevu' }} />
-
+      {/* Giriş zorunlu: oturum yokken yalnızca tanıtım (ilk açılışta bir kez) ve giriş ekranları açılır.
+          Koruma değişince ilk uygun ekrana geçilir, bu yüzden sıra önemli. */}
       <Stack.Protected guard={!session}>
-        <Stack.Screen name="giris" options={{ title: '', presentation: 'modal' }} />
-        <Stack.Screen name="kayit" options={{ title: '', presentation: 'modal' }} />
-        <Stack.Screen name="sifremi-unuttum" options={{ title: 'Şifremi unuttum', presentation: 'modal' }} />
+        <Stack.Protected guard={!introSeen}>
+          <Stack.Screen name="tanitim" options={{ headerShown: false, animation: 'fade' }} />
+        </Stack.Protected>
+        <Stack.Screen name="giris" options={{ headerShown: false, animation: 'fade' }} />
+        <Stack.Screen name="kayit" options={{ headerShown: false, animation: 'fade' }} />
+        <Stack.Screen name="sifremi-unuttum" options={{ headerShown: false }} />
       </Stack.Protected>
+
       <Stack.Protected guard={!!session}>
+        <Stack.Protected guard={needsSetup}>
+          <Stack.Screen name="kurulum" options={{ headerShown: false }} />
+        </Stack.Protected>
+        <Stack.Protected guard={!needsSetup}>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        </Stack.Protected>
+
+        <Stack.Screen name="isletme/[slug]/index" options={{ headerShown: false }} />
+        <Stack.Screen name="isletme/[slug]/randevu" options={{ title: 'Randevu' }} />
         <Stack.Screen name="profil" options={{ title: 'Profil' }} />
         <Stack.Screen name="bildirimler" options={{ title: 'Bildirimler' }} />
       </Stack.Protected>

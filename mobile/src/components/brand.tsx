@@ -9,7 +9,7 @@ import { useAccent } from '@/lib/accent';
 import { colors, shadows } from '@/lib/theme';
 
 /** SVG gradyan kimliği; web'de belge genelinde benzersiz olmalı. */
-function useSvgId() {
+export function useSvgId() {
   return `g${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
 }
 

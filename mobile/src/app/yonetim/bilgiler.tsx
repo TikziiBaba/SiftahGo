@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { DynamicButton } from '@/components/dynamic-button';
 import { OptionSheet, SelectField } from '@/components/pickers';
 import { useToast } from '@/components/toast';
 import { Banner, Button, Card, Chip, Field, SectionTitle, styles, SwitchRow, Text } from '@/components/ui';
@@ -58,6 +59,7 @@ function Info({ business }: { business: Business }) {
   });
   const [picker, setPicker] = useState<'category' | 'city' | null>(null);
   const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [locBusy, setLocBusy] = useState(false);
   const [error, setError] = useState('');
   const located = business.latitude != null && business.longitude != null;
@@ -76,10 +78,16 @@ function Info({ business }: { business: Business }) {
       .from('businesses')
       .update({ ...form, slug, name: form.name.trim(), description: form.description.trim() })
       .eq('id', business.id);
-    setBusy(false);
-    if (error) return setError(errorMessage(error));
+    if (error) {
+      setBusy(false);
+      return setError(errorMessage(error));
+    }
     await refresh();
-    toast('Bilgiler kaydedildi.');
+    setBusy(false);
+    // Başarı düğmede görünür ("Kaydedildi"), biraz sonra düğme eski haline döner.
+    haptic.success();
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
   }
 
   // Keşfet "Yakınımda" için telefonun şu anki konumu kaydedilir (clear: konumu kaldırır).
@@ -229,7 +237,13 @@ function Info({ business }: { business: Business }) {
 
       <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: Math.max(insets.bottom, 12) + 4, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.lineStrong, gap: 10 }}>
         {error ? <Banner tone="danger" icon="alert-circle-outline" text={error} /> : null}
-        <Button title="Kaydet" size="lg" onPress={save} loading={busy} />
+        <DynamicButton
+          title={busy ? 'Kaydediliyor' : saved ? 'Kaydedildi' : 'Kaydet'}
+          icon={saved && !busy ? 'checkmark' : undefined}
+          loading={busy}
+          onPress={save}
+          style={{ alignSelf: 'center' }}
+        />
       </View>
 
       <OptionSheet

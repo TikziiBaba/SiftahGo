@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import { FlatList, View } from 'react-native';
 
 import { HeaderButton } from '@/components/header-button';
+import { RevealCell } from '@/components/motion';
 import { Avatar, Badge, Banner, Button, Card, Empty, Skeleton, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { usePlan } from '@/lib/plan';
@@ -87,6 +88,7 @@ function StaffList({ business }: { business: Business }) {
           )
         }
         ListFooterComponent={staffList.length ? <Button title="Personel ekle" icon="add" variant="secondary" onPress={add} style={{ marginTop: 4 }} /> : null}
+        CellRendererComponent={RevealCell}
         renderItem={({ item: x }) => {
           const own = links.filter((l) => l.staff_id === x.id).map((l) => l.service_id);
           const summary = own.length

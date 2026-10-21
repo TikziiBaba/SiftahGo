@@ -2,9 +2,10 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, View } from 'react-native';
-import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AppointmentTicket } from '@/components/appointment-ticket';
 import { Glow } from '@/components/brand';
 import { Logo } from '@/components/business-logo';
 import { Banner, Button, Card, Empty, Field, Loading, styles, Text } from '@/components/ui';
@@ -13,7 +14,7 @@ import { categoryIcon, categoryLabel, type IconName } from '@/lib/constants';
 import { errorMessage, formatDate, formatDuration, formatPrice, formatTime, googleCalendarLink } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 import { supabase } from '@/lib/supabase';
-import { colors, shadows } from '@/lib/theme';
+import { colors } from '@/lib/theme';
 import type { Business, Service } from '@/lib/types';
 
 type Data = { business: Business; service: Service; staffName: string | null };
@@ -95,21 +96,22 @@ export default function BookingScreen() {
         <Stack.Screen options={{ title: '' }} />
         <Glow height={420} opacity={0.28} />
         <ScrollView contentContainerStyle={[styles.content, { paddingTop: 24 }]}>
-          <Animated.View entering={ZoomIn.springify().damping(14)} style={s.check}>
-            <Ionicons name="checkmark" size={46} color={colors.brandInk} />
-          </Animated.View>
-          <Animated.View entering={FadeInDown.delay(150).duration(300)} style={{ gap: 8, marginBottom: 8 }}>
-            <Text variant="display" style={{ textAlign: 'center' }}>
-              Randevunuz alındı!
-            </Text>
-            <Text tone="muted" style={{ textAlign: 'center' }}>
+          <AppointmentTicket
+            businessName={business.name}
+            serviceName={service.name}
+            staffName={data.staffName ?? undefined}
+            startsAt={time}
+            durationMinutes={service.duration_minutes}
+            price={Number(service.price)}
+            place={location}
+            confirmed={booked === 'confirmed'}
+          />
+          <Animated.View entering={FadeInDown.delay(250).duration(300)} style={{ gap: 12, marginTop: 8 }}>
+            <Text tone="muted" style={{ textAlign: 'center', marginBottom: 4 }}>
               {booked === 'confirmed'
                 ? 'Randevunuz onaylandı. Görüşmek üzere!'
                 : 'İşletme onayladığında kesinleşecek. Durumunu Randevularım’dan takip edebilirsiniz.'}
             </Text>
-          </Animated.View>
-          <Animated.View entering={FadeInDown.delay(250).duration(300)} style={{ gap: 12 }}>
-            <Summary data={data} time={time} ends={ends} />
             <Button
               title="Takvime ekle"
               icon="calendar-outline"
@@ -246,17 +248,6 @@ function Row({ icon, label, value }: { icon: IconName; label: string; value: str
 }
 
 const s = StyleSheet.create({
-  check: {
-    alignSelf: 'center',
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: colors.brand,
-    alignItems: 'center',
-    justifyContent: 'center',
-    boxShadow: shadows.brandLg,
-    marginBottom: 8,
-  },
   divider: { height: 1, backgroundColor: colors.line },
   bar: {
     paddingHorizontal: 16,

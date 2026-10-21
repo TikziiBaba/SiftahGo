@@ -5,6 +5,7 @@ import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-nat
 import { AppointmentSheet, FlaggedNote, type AgendaRow } from '@/components/appointment-sheet';
 import { Glow } from '@/components/brand';
 import { InboxBell } from '@/components/inbox-bell';
+import { RevealCell } from '@/components/motion';
 import { CalendarSheet } from '@/components/pickers';
 import { useToast } from '@/components/toast';
 import { Banner, Button, Card, Empty, IconButton, ScreenHeader, SectionTitle, Skeleton, Stat, StatusBadge, styles, Text } from '@/components/ui';
@@ -270,6 +271,7 @@ function Agenda({ business }: { business: Business }) {
             </Empty>
           )
         }
+        CellRendererComponent={RevealCell}
         renderItem={({ item }) => (
           <Pressable
             onPress={() => setSelected(item)}
