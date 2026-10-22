@@ -79,9 +79,22 @@ async function getPublicBusiness(slug: string) {
 // Herkese açık değilse (yayında değil, onay bekliyor, askıda) sahibi ve yönetici kendi oturumuyla görür.
 const getBusiness = cache(async (slug: string) => (await getPublicBusiness(slug)) ?? loadBusiness(await createClient(), slug));
 
+// En yüksek puanlı işletmeler derlemede hazırlanır; diğerleri ilk ziyarette hazırlanıp saklanır (ISR). Bu olmadan adres
+// her istekte çözülür ve sayfa her seferinde sunucuda üretilir. Cache Components en az bir değer ister: hiç işletme
+// yoksa var olmayan bir adres verilir (404 olur).
+export async function generateStaticParams() {
+  const supabase = createSupabase(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data } = await supabase.from("businesses").select("slug").eq("is_published", true).order("rating_score", { ascending: false }).limit(20);
+  return data?.length ? data.map((b) => ({ slug: b.slug as string })) : [{ slug: "isletme-yok" }];
+}
+
+// Yalnızca herkese açık (önbellekteki) veriden: çerez okunursa sayfa önceden hazırlanamaz. Yayında olmayan sayfayı
+// sahibi açtığında genel başlık görünür.
 export async function generateMetadata({ params }: PageProps<"/[slug]">): Promise<Metadata> {
-  const business = (await getBusiness((await params).slug))?.business;
-  if (!business) return { title: "İşletme bulunamadı" };
+  const business = (await getPublicBusiness((await params).slug))?.business;
+  if (!business) return { title: "İşletme sayfası", robots: { index: false } };
   const place = [business.district, business.city].filter(Boolean).join(", ");
   const title = `${business.name} — Online Randevu`;
   // Aramada "şehir + kategori" yazanlara görünmek için açıklama yoksa bunlarla kurulur.
