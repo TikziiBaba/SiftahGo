@@ -39,6 +39,10 @@
   /* "Siftah" sıcak vurgu */
   --color-gold: #f5b544;
 
+  /* Logo (components/wordmark.tsx): "g" ve altın halka. brand-* değil, çünkü dükkân sayfası onları değiştirir. */
+  --color-logo-g: #2dd4bf;
+  --color-logo-coin: #f5b544;
+
   /* Temaya göre değişen anlamsal renkler (açık temada aşağıda koyulaşır).
      tint: zemine göre kaplama rengi (koyuda beyaz, açıkta mürekkep); bg-tint/[0.04] gibi kullanılır.
      accent: marka renkli yazı; ok/warn/bad/info: durum yazıları. */
@@ -79,6 +83,8 @@ html:has(.theme-light),
   --color-ink-3: #63706c;
   --color-tint: #0f1a19;
   --color-gold: #b06f0c;
+  --color-logo-g: #0f766e;
+  --color-logo-coin: #cc8400;
   --color-accent: var(--color-brand-700);
   --color-accent-strong: var(--color-brand-800);
   --color-ok: #047857;

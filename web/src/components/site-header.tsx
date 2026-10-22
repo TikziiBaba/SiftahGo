@@ -3,23 +3,18 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import { ArrowUpRight, CalendarCheck, CalendarSearch, ShieldCheck, Store } from "lucide-react";
+import { ArrowUpRight, CalendarSearch, ShieldCheck, Store } from "lucide-react";
 import { CookieSettingsButton } from "@/components/cookie-consent";
 import { InboxBell } from "@/components/inbox-bell";
+import { Wordmark } from "@/components/wordmark";
 import { accountHome, useAccount } from "@/lib/use-account";
 import { COMPANY, LEGAL_DOCS } from "@/lib/company";
 import { SITE_NAME } from "@/lib/constants";
 
 export function Logo({ size = "md", href = "/" }: { size?: "md" | "lg"; href?: string }) {
   return (
-    <Link href={href} className={`flex items-center gap-2.5 font-semibold tracking-tight text-ink ${size === "lg" ? "text-2xl" : "text-lg"}`}>
-      <span
-        className={`relative grid place-items-center rounded-xl bg-gradient-to-br from-brand-300 via-brand-500 to-brand-800 text-brand-950 shadow-[inset_0_1px_1px_rgb(255_255_255/0.5),0_6px_20px_-6px_rgb(45_212_191/0.6)] ${size === "lg" ? "size-11" : "size-8"}`}
-      >
-        <CalendarCheck className={size === "lg" ? "size-5.5" : "size-4.5"} style={{ strokeWidth: 2 }} />
-        <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-gold shadow-[0_0_10px_rgb(245_181_68/0.9)]" />
-      </span>
-      {SITE_NAME}
+    <Link href={href} className="flex shrink-0 items-center">
+      <Wordmark className={`w-auto ${size === "lg" ? "h-9" : "h-6.5"}`} />
     </Link>
   );
 }

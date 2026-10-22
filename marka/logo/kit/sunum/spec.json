@@ -1,0 +1,41 @@
+{
+  "brand": "SiftahGo",
+  "tagline": "Esnafın randevu defteri",
+  "brief": "Berberden halı sahaya, mahalle esnafı için online randevu ve takvim. Müşteri saatini seçer, esnaf işine bakar. Logo sembol yerine güçlü bir yazı olmalı; samimi, hızlı ve bereketli hissettirmeli.",
+  "adjectives": ["yerel ve samimi", "hızlı", "bereketli", "güvenilir"],
+  "criteria": "Başarı: adı her yerde okunur kılmak, takvim ve tik klişesinden uzak durmak, 16 px'te bile tanınmak, teal ve altın renkleri korumak.",
+  "mockups": ["app-icon", "website", "favicon-tab", "signage", "social", "business-card"],
+  "nav": ["Keşfet", "Esnaf", "Giriş"],
+  "brand_color": "#0f766e",
+  "tile_color": "#0f766e",
+  "greyscale": false,
+  "final": true,
+  "designer": "Sürüm 2.0",
+  "concepts": [
+    {
+      "name": "Altın o",
+      "symbol": "../svg/siftahgo-go-renkli.svg",
+      "lockup": "../svg/siftahgo-yazi-renkli.svg",
+      "stacked": "../svg/siftahgo-yazi-renkli.svg",
+      "symbol_on_tile": "../svg/siftahgo-go-teal-zemin.svg",
+      "lockup_on_tile": "../svg/siftahgo-yazi-teal-zemin.svg",
+      "stacked_on_tile": "../svg/siftahgo-yazi-teal-zemin.svg",
+      "symbol_on_dark": "../svg/siftahgo-go-koyu.svg",
+      "lockup_on_dark": "../svg/siftahgo-yazi-koyu.svg",
+      "stacked_on_dark": "../svg/siftahgo-yazi-koyu.svg",
+      "idea": "Logonun kendisi yazı; go'nun o'su altın bir sikke halkası: git, siftahı yap.",
+      "rationale": [
+        "Ad her yerde okunur; ayrıca bir sembol öğrenmek gerekmez",
+        "Altın halka, eski logodaki altın noktanın sikkeye dönüşmüş hali",
+        "Yuvarlak i noktası ve birleşik ft, yazıyı klavyeyle kopyalanamaz kılar",
+        "Uygulama ikonu 'go': kısa, okunur, 16 px'te bile altın halka seçilir"
+      ]
+    }
+  ],
+  "recommendation": "Altın o: açık zeminde mürekkep, teal ve derin altın; koyu arayüzde kırık beyaz, açık teal ve altın; uygulama ikonunda teal zemin üzerinde beyaz g ve altın halka.",
+  "next_steps": [
+    "Uygulama ve site ikonlarını yeni dosyalarla değiştirmek",
+    "Sitedeki ve uygulamadaki başlık logosunu yeni SVG ile değiştirmek",
+    "Marka tescil araştırması (TÜRKPATENT)"
+  ]
+}
