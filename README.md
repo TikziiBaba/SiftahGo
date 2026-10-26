@@ -54,7 +54,11 @@ gerçek kullanıcılar için Resend SMTP kullanın:
 3. Supabase > **Authentication > Sign In / Providers > Google**: açın, Client ID ve Client Secret'ı yapıştırın.
 4. Supabase > **Authentication > URL Configuration > Redirect URLs**: mobil uygulama için `siftahgo://auth/callback` ekleyin.
 
-Mobil uygulama Google ekranını tarayıcıda açar; Android için ayrıca istemci kimliği veya SHA-1 gerekmez.
+5. Android'de uygulama içi giriş için aynı projede **Create credentials > OAuth client ID** > *Android*: paket adı
+   `com.siftahgo.app`, SHA-1 olarak APK'yı imzalayan anahtarınki (`npx eas-cli credentials -p android`). Web istemcisinin
+   kimliği `mobile/eas.json`'da `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`'dir; Android istemcisinin kimliği bir yere yazılmaz.
+
+Android'de Google hesabı uygulamanın içinde seçilir; Android istemcisi yoksa ya da Play Hizmetleri yoksa giriş tarayıcıda açılır.
 
 ### 2. Web
 
