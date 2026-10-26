@@ -1,13 +1,13 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Glow, LogoMark } from '@/components/brand';
+import { TopBar, useScrollY } from '@/components/top-bar';
 import { Avatar, Badge, Button, Card, Group, ListRow, ScreenHeader, SectionTitle, styles, Text } from '@/components/ui';
 import { signOut, useAuth } from '@/lib/auth';
-import { WEB_URL, type IconName } from '@/lib/constants';
+import { SITE_DOMAIN, type IconName } from '@/lib/constants';
 import { colors } from '@/lib/theme';
 
 const PERKS: { icon: IconName; text: string }[] = [
@@ -18,6 +18,7 @@ const PERKS: { icon: IconName; text: string }[] = [
 
 export default function AccountScreen() {
   const { session, profile, business } = useAuth();
+  const { y, scroll } = useScrollY();
   const version = Constants.expoConfig?.version;
 
   if (!session) {
@@ -75,7 +76,7 @@ export default function AccountScreen() {
   return (
     <View style={styles.screen}>
       <Glow />
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} {...scroll}>
         <ScreenHeader title="Hesap" />
 
         <Card onPress={() => router.push('/profil')} accessibilityLabel="Profil bilgileri" style={{ flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 8 }}>
@@ -100,20 +101,15 @@ export default function AccountScreen() {
         <SectionTitle title="Hesap" />
         <Group>
           <ListRow icon="person-outline" title="Profil bilgileri" subtitle="Ad, telefon ve şifre" onPress={() => router.push('/profil')} />
+          {isBusiness ? (
+            <ListRow icon="calendar-outline" title="Randevularım" subtitle="Başka işletmelerden aldığınız randevular" onPress={() => router.push('/randevularim')} />
+          ) : null}
           {isBusiness && business ? (
             <ListRow
               icon="globe-outline"
               title="İşletme sayfam"
-              subtitle={`${WEB_URL.replace(/^https?:\/\//, '')}/${business.slug}`}
-              onPress={() => WebBrowser.openBrowserAsync(`${WEB_URL}/${business.slug}`)}
-            />
-          ) : null}
-          {isBusiness ? (
-            <ListRow
-              icon="desktop-outline"
-              title="Bilgisayardan yönet"
-              subtitle="Web paneli: raporlar ve yazdırılabilir QR"
-              onPress={() => WebBrowser.openBrowserAsync(`${WEB_URL}/panel`)}
+              subtitle={`${SITE_DOMAIN}/${business.slug}`}
+              onPress={() => router.push({ pathname: '/isletme/[slug]', params: { slug: business.slug } })}
             />
           ) : null}
         </Group>
@@ -123,6 +119,7 @@ export default function AccountScreen() {
         </Group>
         {version ? <Version version={version} /> : null}
       </ScrollView>
+      <TopBar y={y} title="Hesap" />
     </View>
   );
 }

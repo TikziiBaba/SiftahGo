@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Cover } from '@/components/brand';
 import { Logo } from '@/components/business-logo';
 import { CalendarSheet, DayStrip } from '@/components/pickers';
+import { TopBar, useScrollY } from '@/components/top-bar';
 import { Avatar, Badge, Button, Card, Chip, Empty, IconButton, Loading, PressableScale, SectionTitle, Skeleton, styles, Text } from '@/components/ui';
 import { AccentProvider, useAccent } from '@/lib/accent';
 import { useAuth } from '@/lib/auth';
@@ -34,6 +35,7 @@ export default function BusinessScreen() {
   } = useLocalSearchParams<{ slug: string; service?: string; staff?: string; day?: string }>();
   const { session } = useAuth();
   const insets = useSafeAreaInsets();
+  const { y, scroll } = useScrollY();
   const [data, setData] = useState<Data | null | undefined>(undefined);
   const [favorite, setFavorite] = useState(false);
   // Bekleme listesine yazıldığı günler
@@ -237,7 +239,7 @@ export default function BusinessScreen() {
   return (
     <AccentProvider value={accent}>
       <View style={styles.screen}>
-        <ScrollView ref={scrollRef} contentContainerStyle={{ paddingBottom: service ? 150 : 48 }} keyboardShouldPersistTaps="handled">
+        <ScrollView ref={scrollRef} contentContainerStyle={{ paddingBottom: service ? 150 : 48 }} keyboardShouldPersistTaps="handled" {...scroll}>
           <Cover uri={business.cover_url} height={COVER + insets.top} />
           <View style={s.fade} />
 
@@ -476,6 +478,8 @@ export default function BusinessScreen() {
           </View>
         </ScrollView>
 
+        {/* İşletme adı kapağın altından kayıp geri düğmesinin arkasına girince çubukta görünür. */}
+        <TopBar y={y} title={business.name} cover left={68} after={COVER + 8} />
         <BackButton top={insets.top + 8} />
 
         {service && (

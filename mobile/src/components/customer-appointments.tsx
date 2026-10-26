@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { FlatList, Linking, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { Glow } from '@/components/brand';
@@ -11,6 +11,7 @@ import { ReschedulePicker } from '@/components/reschedule-picker';
 import { ReviewSheet } from '@/components/review-sheet';
 import { Sheet } from '@/components/sheet';
 import { useToast } from '@/components/toast';
+import { TopBar, useScrollY } from '@/components/top-bar';
 import { Badge, Button, Card, Empty, ScreenHeader, Segmented, Skeleton, StatusBadge, styles, Text } from '@/components/ui';
 import { STATUS } from '@/lib/constants';
 import { errorMessage, formatDate, formatPrice, formatTime, mapsLink, relativeDay, dayOf, shortDay } from '@/lib/format';
@@ -22,8 +23,11 @@ type Row = Appointment & {
   businesses: { name: string; slug: string; phone: string; address: string; district: string; city: string } | null;
 };
 
-export function CustomerAppointments({ userId }: { userId: string }) {
+/** header: sekmedeki büyük başlık; ayrı ekranda (randevularim.tsx) başlığı yığın çubuğu gösterir. */
+export function CustomerAppointments({ userId, header = true }: { userId: string; header?: boolean }) {
   const toast = useToast();
+  const channelId = useId();
+  const { y, scroll } = useScrollY();
   const [lists, setLists] = useState<{ upcoming: Row[]; past: Row[] } | null>(null);
   const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming');
   const [refreshing, setRefreshing] = useState(false);
@@ -64,16 +68,17 @@ export function CustomerAppointments({ userId }: { userId: string }) {
     }, [load]),
   );
 
-  // İşletme onaylayınca veya iptal edince liste anında güncellenir.
+  // İşletme onaylayınca veya iptal edince liste anında güncellenir. Kanal adı ekran başına ayrı: aynı adla ikinci
+  // kanal kurulamaz (Supabase hata fırlatır), ekran iki kez açık olsa da çakışmasın.
   useEffect(() => {
     const channel = supabase
-      .channel(`customer-appointments-${userId}`)
+      .channel(`customer-appointments-${userId}-${channelId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments', filter: `customer_id=eq.${userId}` }, () => load())
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId, load]);
+  }, [userId, load, channelId]);
 
   // Onay penceresi yok: karttaki düğme basılı tutulunca birkaç saniye geri alınabilir, sonra burası çalışır.
   async function cancel(row: Row) {
@@ -92,6 +97,7 @@ export function CustomerAppointments({ userId }: { userId: string }) {
         data={data}
         keyExtractor={(r) => r.id}
         contentContainerStyle={styles.content}
+        {...scroll}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -106,7 +112,7 @@ export function CustomerAppointments({ userId }: { userId: string }) {
         }
         ListHeaderComponent={
           <View style={{ gap: 16, marginBottom: 4 }}>
-            <ScreenHeader title="Randevularım" right={<InboxBell />} />
+            {header && <ScreenHeader title="Randevularım" right={<InboxBell />} />}
             <Segmented
               value={tab}
               onChange={setTab}
@@ -143,6 +149,7 @@ export function CustomerAppointments({ userId }: { userId: string }) {
           />
         )}
       />
+      {header && <TopBar y={y} title="Randevularım" />}
       <ReviewSheet
         appointment={reviewing}
         onClose={() => setReviewing(null)}

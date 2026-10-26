@@ -2,11 +2,11 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { TimePill, TimeSheet } from '@/components/pickers';
+import { SaveBar } from '@/components/save-bar';
 import { useToast } from '@/components/toast';
-import { Banner, Button, Card, Empty, IconButton, SectionTitle, Skeleton, styles, Text } from '@/components/ui';
+import { Button, Card, Empty, IconButton, SectionTitle, Skeleton, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { WEEKDAYS } from '@/lib/constants';
 import { addDays, dayOf, errorMessage, formatDate, formatTime } from '@/lib/format';
@@ -33,12 +33,10 @@ function rangeText(t: TimeOff) {
 
 function Hours({ business }: { business: Business }) {
   const toast = useToast();
-  const insets = useSafeAreaInsets();
   const [hours, setHours] = useState<WorkingHour[] | null>(null);
   const [timeOff, setTimeOff] = useState<TimeOff[] | null>(null);
   const [staff, setStaff] = useState<Staff[]>([]);
   const [dirty, setDirty] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [editing, setEditing] = useState<{ weekday: number; field: 'open_time' | 'close_time' } | null>(null);
 
@@ -81,15 +79,19 @@ function Hours({ business }: { business: Business }) {
   }
 
   async function save() {
-    if (!hours) return;
+    if (!hours) return false;
     const invalid = hours.find((h) => h.is_open && h.close_time.slice(0, 5) <= h.open_time.slice(0, 5));
-    if (invalid) return setError(`${WEEKDAYS[invalid.weekday - 1]}: kapanış saati açılıştan sonra olmalı.`);
-    setBusy(true);
+    if (invalid) {
+      setError(`${WEEKDAYS[invalid.weekday - 1]}: kapanış saati açılıştan sonra olmalı.`);
+      return false;
+    }
     const { error } = await supabase.from('working_hours').upsert(hours);
-    setBusy(false);
-    if (error) return setError(errorMessage(error));
+    if (error) {
+      setError(errorMessage(error));
+      return false;
+    }
     setDirty(false);
-    toast('Çalışma saatleri kaydedildi.');
+    return true;
   }
 
   function removeTimeOff(t: TimeOff) {
@@ -112,7 +114,7 @@ function Hours({ business }: { business: Business }) {
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={[styles.content, dirty && { paddingBottom: 120 }]}>
+      <ScrollView contentContainerStyle={styles.content}>
         <Text tone="muted">Müşteriler sadece açık olduğunuz saatlerde randevu alabilir.</Text>
         <Card style={{ padding: 0 }}>
           {hours === null ? (
@@ -150,7 +152,6 @@ function Hours({ business }: { business: Business }) {
           )}
         </Card>
         {hours && <Button title="Pazartesi saatlerini hafta içine uygula" icon="copy-outline" variant="ghost" size="sm" onPress={copyMonday} />}
-        {error ? <Banner tone="danger" icon="alert-circle-outline" text={error} /> : null}
 
         <SectionTitle title="İzin ve tatiller" action="Ekle" onAction={() => router.push('/yonetim/izin')} />
         <Text variant="caption" tone="muted">
@@ -183,11 +184,7 @@ function Hours({ business }: { business: Business }) {
         )}
       </ScrollView>
 
-      {dirty && (
-        <View style={[s.bar, { paddingBottom: Math.max(insets.bottom, 12) + 4 }]}>
-          <Button title="Değişiklikleri kaydet" size="lg" onPress={save} loading={busy} />
-        </View>
-      )}
+      <SaveBar dirty={dirty} error={error} onSave={save} />
 
       <TimeSheet
         visible={!!current}
@@ -204,15 +201,4 @@ const s = StyleSheet.create({
   day: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 10, minHeight: 60 },
   dayBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.lineStrong },
   offIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: colors.goldTint, alignItems: 'center', justifyContent: 'center' },
-  bar: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    backgroundColor: colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: colors.lineStrong,
-  },
 });

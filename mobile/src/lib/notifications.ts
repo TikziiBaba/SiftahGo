@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
 
@@ -67,24 +67,34 @@ export function usePushRegistration(userId: string | undefined) {
   }, [userId]);
 }
 
-type Target = { kind?: string; recipient: string; appointmentId?: string; startsAt?: string; slug?: string; day?: string };
+// businessAccount: kullanıcı işletme hesabı; müşteri olarak aldığı randevular sekmede değil ayrı ekranda.
+type Target = { kind?: string; recipient: string; appointmentId?: string; startsAt?: string; slug?: string; day?: string; businessAccount: boolean };
 
 /**
  * Bildirimin ilgili ekranını açar: işletme o günün takvimine (yeni değerlendirmede Yorumlar'a),
  * müşteri randevularına gider. Bekleme listesi haberi işletme sayfasını o gün seçili açar.
  */
-export async function openNotificationTarget({ kind, recipient, appointmentId, startsAt, slug, day }: Target) {
+export async function openNotificationTarget({ kind, recipient, appointmentId, startsAt, slug, day, businessAccount }: Target) {
   if (kind === 'waitlist' && slug) return router.navigate({ pathname: '/isletme/[slug]', params: { slug, ...(day ? { day } : {}) } });
-  if (recipient !== 'business') return router.navigate('/randevular');
+  if (recipient !== 'business') return businessAccount ? router.push('/randevularim') : openTab('/randevular');
   if (kind === 'reviewed') return router.navigate('/yonetim/yorumlar');
   if (!startsAt && appointmentId) {
     const { data } = await supabase.from('appointments').select('starts_at').eq('id', appointmentId).maybeSingle();
     startsAt = data?.starts_at;
   }
-  router.navigate(startsAt ? { pathname: '/takvim', params: { day: dayOf(startsAt) } } : '/takvim');
+  openTab(startsAt ? { pathname: '/takvim', params: { day: dayOf(startsAt) } } : '/takvim');
 }
 
-function handleTap(response: Notifications.NotificationResponse | null) {
+/**
+ * Sekmeye geçmeden önce üstteki ekranlar (ör. Bildirimler) kapanır. Yoksa navigate sekmelerin ikinci bir
+ * kopyasını açar; oradaki Randevularım/Takvim aynı adlı canlı kanalı yeniden kurmaya çalışır ve uygulama çöker.
+ */
+function openTab(href: Href) {
+  if (router.canDismiss()) router.dismissAll();
+  router.navigate(href);
+}
+
+function handleTap(response: Notifications.NotificationResponse | null, businessAccount: boolean) {
   if (!response || response.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) return;
   // Aynı dokunuş bir daha işlenmesin.
   Notifications.clearLastNotificationResponse();
@@ -97,18 +107,19 @@ function handleTap(response: Notifications.NotificationResponse | null) {
       appointmentId: typeof data.appointmentId === 'string' ? data.appointmentId : undefined,
       slug: typeof data.slug === 'string' ? data.slug : undefined,
       day: typeof data.day === 'string' ? data.day : undefined,
+      businessAccount,
     });
   }
 }
 
 /** Telefondaki bildirime dokunulunca (uygulama kapalıyken de) ilgili ekranı açar. */
-export function useNotificationTaps(enabled: boolean) {
+export function useNotificationTaps(enabled: boolean, businessAccount: boolean) {
   useEffect(() => {
     // Web önizlemesinde bildirim modülü yok.
     if (!enabled || Platform.OS === 'web') return;
     // Uygulamayı bir bildirim açtıysa
-    handleTap(Notifications.getLastNotificationResponse());
-    const sub = Notifications.addNotificationResponseReceivedListener(handleTap);
+    handleTap(Notifications.getLastNotificationResponse(), businessAccount);
+    const sub = Notifications.addNotificationResponseReceivedListener((r) => handleTap(r, businessAccount));
     return () => sub.remove();
-  }, [enabled]);
+  }, [enabled, businessAccount]);
 }

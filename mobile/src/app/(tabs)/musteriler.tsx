@@ -7,6 +7,7 @@ import { Glow } from '@/components/brand';
 import { RevealCell } from '@/components/motion';
 import { PlanGate } from '@/components/plan-gate';
 import { Sheet } from '@/components/sheet';
+import { TopBar, useScrollY } from '@/components/top-bar';
 import { Avatar, Banner, Button, Card, Chip, Empty, Field, IconButton, ScreenHeader, Skeleton, Stat, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { errorMessage, formatDate, formatPrice, formatTime, phoneKey, whatsappLink } from '@/lib/format';
@@ -40,6 +41,7 @@ export default function CustomersTab() {
 }
 
 function Customers({ business }: { business: Business }) {
+  const { y, scroll } = useScrollY();
   const [customers, setCustomers] = useState<Customer[] | null>(null);
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
@@ -170,6 +172,7 @@ function Customers({ business }: { business: Business }) {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
+        {...scroll}
         ListHeaderComponent={
           <View style={{ gap: 12, marginBottom: 4 }}>
             <ScreenHeader title="Müşteriler" subtitle={customers ? `${customers.length} kişi · telefon numarasına göre` : undefined} />
@@ -229,6 +232,7 @@ function Customers({ business }: { business: Business }) {
           </Card>
         )}
       />
+      <TopBar y={y} title="Müşteriler" />
 
       <Sheet visible={!!selected} onClose={() => setSelected(null)} title={selected?.name} subtitle={selected?.phone}>
         {selected && (

@@ -122,7 +122,9 @@ export default function BookingScreen() {
               title="Randevularım"
               onPress={() => {
                 router.dismissAll();
-                router.navigate('/randevular');
+                // İşletme sahibinin aldığı randevular sekmede değil ayrı ekranda.
+                if (profile?.role === 'business') router.push('/randevularim');
+                else router.navigate('/randevular');
               }}
             />
             <Button

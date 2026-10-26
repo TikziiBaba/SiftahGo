@@ -1,5 +1,6 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { AppointmentSheet, FlaggedNote, type AgendaRow } from '@/components/appointment-sheet';
@@ -8,15 +9,42 @@ import { InboxBell } from '@/components/inbox-bell';
 import { RevealCell } from '@/components/motion';
 import { CalendarSheet } from '@/components/pickers';
 import { useToast } from '@/components/toast';
+import { TopBar, useScrollY } from '@/components/top-bar';
 import { Banner, Button, Card, Empty, IconButton, ScreenHeader, SectionTitle, Skeleton, Stat, StatusBadge, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { isSubscribed, isTrial, STATUS, WEEKDAYS } from '@/lib/constants';
-import { addDays, dayBounds, dayOf, errorMessage, formatDate, formatPrice, formatTime, isoWeekday, relativeDay, shortDay, todayStr } from '@/lib/format';
+import { addDays, dayBounds, dayOf, errorMessage, formatDate, formatDuration, formatPrice, formatTime, isoWeekday, relativeDay, shortDay, toIso, todayStr } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 import { daysLeft } from '@/lib/plan';
 import { supabase } from '@/lib/supabase';
 import { colors, fonts, radius, shadows } from '@/lib/theme';
-import type { AppointmentStatus, Business } from '@/lib/types';
+import type { AppointmentStatus, Business, WorkingHour } from '@/lib/types';
+
+type Interval = { starts_at: string; ends_at: string };
+// Günün akışındaki satır: randevu ya da boş aralık (from/to: milisaniye)
+type Line = { key: string; at: number; row?: AgendaRow; gap?: { from: number; to: number } };
+
+/**
+ * Çalışma saatleri içinde, iptal edilmemiş randevuların ve tüm işletmenin izinlerinin dışında kalan, en az bir saat
+ * aralığı (slot) süren boşluklar. Bugünse geçmiş saatler atlanır; geçmiş günde boşluk yoktur. Birden çok personelde
+ * yalnızca kimsenin dolu olmadığı zamanlar sayılır.
+ */
+function freeGaps(day: string, active: Interval[], hours: WorkingHour | null, off: Interval[], slot: number) {
+  if (!hours?.is_open) return [];
+  const open = Date.parse(toIso(day, hours.open_time));
+  const close = Date.parse(toIso(day, hours.close_time));
+  const step = slot * 60000;
+  // Şu andan sonraki ilk saat aralığı başı
+  let cursor = Math.max(open, open + Math.ceil((Date.now() - open) / step) * step);
+  const busy = [...active, ...off].map((r) => [Date.parse(r.starts_at), Date.parse(r.ends_at)]).sort((a, b) => a[0] - b[0]);
+  const gaps: { from: number; to: number }[] = [];
+  for (const [start, end] of [...busy, [close, close]]) {
+    const to = Math.min(start, close);
+    if (to - cursor >= step) gaps.push({ from: cursor, to });
+    cursor = Math.max(cursor, end);
+  }
+  return gaps;
+}
 
 export default function CalendarTab() {
   const { business } = useAuth();
@@ -25,6 +53,8 @@ export default function CalendarTab() {
 
 function Agenda({ business }: { business: Business }) {
   const toast = useToast();
+  const channelId = useId();
+  const { y, scroll } = useScrollY();
   // Bildirime dokunulunca randevunun günü açılır (sekme zaten açıksa da).
   const { day: dayParam } = useLocalSearchParams<{ day?: string }>();
   const [day, setDay] = useState(() => dayParam ?? todayStr());
@@ -33,7 +63,9 @@ function Agenda({ business }: { business: Business }) {
     setLastDayParam(dayParam);
     if (dayParam) setDay(dayParam);
   }
-  const [rows, setRows] = useState<{ day: string; list: AgendaRow[] } | null>(null);
+  // hours ve off: o günün çalışma saatleri ve işletme geneli izinler (boş aralıklar için)
+  const [rows, setRows] = useState<{ day: string; list: AgendaRow[]; hours: WorkingHour | null; off: Interval[] } | null>(null);
+  const [showCancelled, setShowCancelled] = useState(false);
   const [pending, setPending] = useState<AgendaRow[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [refreshing, setRefreshing] = useState(false);
@@ -47,7 +79,7 @@ function Agenda({ business }: { business: Business }) {
 
   const load = useCallback(async () => {
     const { from, to } = dayBounds(day);
-    const [a, p, w] = await Promise.all([
+    const [a, p, w, h, off] = await Promise.all([
       supabase.from('appointments').select('*, staff(name)').eq('business_id', business.id).gte('starts_at', from).lt('starts_at', to).order('starts_at'),
       supabase
         .from('appointments')
@@ -65,10 +97,13 @@ function Agenda({ business }: { business: Business }) {
         .in('status', ['pending', 'confirmed', 'completed'])
         .gte('starts_at', dayBounds(weekStart).from)
         .lt('starts_at', dayBounds(addDays(weekStart, 6)).to),
+      supabase.from('working_hours').select('*').eq('business_id', business.id).eq('weekday', isoWeekday(day)).maybeSingle(),
+      // Personele özel izinde diğer personel çalışır; yalnızca tüm işletmenin izni boş sayılmaz.
+      supabase.from('time_off').select('starts_at, ends_at').eq('business_id', business.id).is('staff_id', null).lt('starts_at', to).gt('ends_at', from),
     ]);
     const perDay: Record<string, number> = {};
     for (const r of (w.data ?? []) as { starts_at: string }[]) perDay[dayOf(r.starts_at)] = (perDay[dayOf(r.starts_at)] ?? 0) + 1;
-    setRows({ day, list: (a.data ?? []) as AgendaRow[] });
+    setRows({ day, list: (a.data ?? []) as AgendaRow[], hours: h.data as WorkingHour | null, off: (off.data ?? []) as Interval[] });
     setPending((p.data ?? []) as AgendaRow[]);
     setCounts(perDay);
     setRefreshing(false);
@@ -81,17 +116,17 @@ function Agenda({ business }: { business: Business }) {
     }, [load, subscribed]),
   );
 
-  // Yeni randevu geldiğinde veya değiştiğinde listeyi yenile.
+  // Yeni randevu geldiğinde veya değiştiğinde listeyi yenile. Kanal adı ekran başına ayrı (customer-appointments.tsx).
   useEffect(() => {
     if (!subscribed) return;
     const channel = supabase
-      .channel(`mobile-appointments-${business.id}`)
+      .channel(`mobile-appointments-${business.id}-${channelId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments', filter: `business_id=eq.${business.id}` }, () => load())
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [business.id, load, subscribed]);
+  }, [business.id, load, subscribed, channelId]);
 
   async function quickStatus(id: string, status: AppointmentStatus, name: string) {
     const { error } = await supabase.from('appointments').update({ status }).eq('id', id);
@@ -151,16 +186,61 @@ function Agenda({ business }: { business: Business }) {
   }
 
   const active = (list ?? []).filter((r) => r.status !== 'cancelled');
+  const cancelled = (list ?? []).filter((r) => r.status === 'cancelled');
   const revenue = active.filter((r) => r.status !== 'no_show').reduce((sum, r) => sum + Number(r.price), 0);
   const today = todayStr();
+  // Günün akışı: randevular ve aralarındaki boş zamanlar saat sırasıyla
+  const lines: Line[] =
+    list && rows
+      ? [
+          ...active.map((r) => ({ key: r.id, at: Date.parse(r.starts_at), row: r })),
+          ...freeGaps(day, active, rows.hours, rows.off, business.slot_minutes).map((g) => ({ key: `bos-${g.from}`, at: g.from, gap: g })),
+        ].sort((a, b) => a.at - b.at)
+      : [];
+
+  const appointment = (item: AgendaRow) => (
+    <Pressable
+      onPress={() => setSelected(item)}
+      accessibilityRole="button"
+      accessibilityLabel={`${formatTime(item.starts_at)} ${item.customer_name}, ${STATUS[item.status].label}`}
+      style={({ pressed }) => [s.item, pressed && { opacity: 0.8 }]}>
+      <View style={s.time}>
+        <Text variant="bodyStrong" style={{ fontVariant: ['tabular-nums'] }}>
+          {formatTime(item.starts_at)}
+        </Text>
+        <Text variant="caption" tone="muted" style={{ fontVariant: ['tabular-nums'] }}>
+          {formatTime(item.ends_at)}
+        </Text>
+      </View>
+      <View style={[s.itemCard, { borderLeftColor: STATUS[item.status].fg }, item.status === 'cancelled' && { opacity: 0.5 }]}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text variant="bodyStrong" style={{ flex: 1 }} numberOfLines={1}>
+            {item.customer_name}
+          </Text>
+          <StatusBadge status={item.status} />
+        </View>
+        <Text variant="caption" tone="muted" numberOfLines={1}>
+          {item.service_name}
+          {item.staff ? ` · ${item.staff.name}` : ''} · {formatPrice(item.price)}
+        </Text>
+        <FlaggedNote row={item} />
+        {item.note ? (
+          <Text variant="caption" tone="secondary" numberOfLines={1} style={{ fontStyle: 'italic' }}>
+            “{item.note}”
+          </Text>
+        ) : null}
+      </View>
+    </Pressable>
+  );
 
   return (
     <View style={styles.screen}>
       <Glow />
       <FlatList
-        data={list ?? []}
-        keyExtractor={(r) => r.id}
+        data={lines}
+        keyExtractor={(l) => l.key}
         contentContainerStyle={styles.content}
+        {...scroll}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -256,7 +336,7 @@ function Agenda({ business }: { business: Business }) {
               </>
             )}
 
-            <SectionTitle title={list && list.length ? `Randevular · ${list.length}` : 'Randevular'} />
+            <SectionTitle title={active.length ? `Randevular · ${active.length}` : 'Randevular'} />
           </View>
         }
         ListEmptyComponent={
@@ -271,42 +351,57 @@ function Agenda({ business }: { business: Business }) {
             </Empty>
           )
         }
+        ListFooterComponent={
+          cancelled.length ? (
+            <View style={{ gap: 12, marginTop: 4 }}>
+              <Pressable
+                onPress={() => {
+                  haptic.select();
+                  setShowCancelled(!showCancelled);
+                }}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: showCancelled }}
+                hitSlop={8}
+                style={[styles.rowCenter, { alignSelf: 'flex-start', gap: 6 }]}>
+                <Text variant="label" tone="muted">
+                  İptal edilenler · {cancelled.length}
+                </Text>
+                <Ionicons name={showCancelled ? 'chevron-up' : 'chevron-down'} size={14} color={colors.ink3} />
+              </Pressable>
+              {showCancelled && cancelled.map((r) => <View key={r.id}>{appointment(r)}</View>)}
+            </View>
+          ) : null
+        }
         CellRendererComponent={RevealCell}
-        renderItem={({ item }) => (
-          <Pressable
-            onPress={() => setSelected(item)}
-            accessibilityRole="button"
-            accessibilityLabel={`${formatTime(item.starts_at)} ${item.customer_name}, ${STATUS[item.status].label}`}
-            style={({ pressed }) => [s.item, pressed && { opacity: 0.8 }]}>
-            <View style={s.time}>
-              <Text variant="bodyStrong" style={{ fontVariant: ['tabular-nums'] }}>
-                {formatTime(item.starts_at)}
-              </Text>
-              <Text variant="caption" tone="muted" style={{ fontVariant: ['tabular-nums'] }}>
-                {formatTime(item.ends_at)}
-              </Text>
-            </View>
-            <View style={[s.itemCard, { borderLeftColor: STATUS[item.status].fg }, item.status === 'cancelled' && { opacity: 0.5 }]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Text variant="bodyStrong" style={{ flex: 1 }} numberOfLines={1}>
-                  {item.customer_name}
+        renderItem={({ item }) =>
+          item.row ? (
+            appointment(item.row)
+          ) : item.gap ? (
+            <View style={s.item}>
+              <View style={s.time}>
+                <Text variant="caption" tone="muted" style={{ fontVariant: ['tabular-nums'] }}>
+                  {formatTime(new Date(item.gap.from).toISOString())}
                 </Text>
-                <StatusBadge status={item.status} />
               </View>
-              <Text variant="caption" tone="muted" numberOfLines={1}>
-                {item.service_name}
-                {item.staff ? ` · ${item.staff.name}` : ''} · {formatPrice(item.price)}
-              </Text>
-              <FlaggedNote row={item} />
-              {item.note ? (
-                <Text variant="caption" tone="secondary" numberOfLines={1} style={{ fontStyle: 'italic' }}>
-                  “{item.note}”
+              <Pressable
+                onPress={() => router.push({ pathname: '/randevu-ekle', params: { day } })}
+                accessibilityRole="button"
+                accessibilityLabel={`${formatTime(new Date(item.gap.from).toISOString())} ile ${formatTime(new Date(item.gap.to).toISOString())} arası boş, randevu ekle`}
+                style={({ pressed }) => [s.gap, pressed && { opacity: 0.7 }]}>
+                <Text variant="label" tone="muted" style={{ flex: 1, fontVariant: ['tabular-nums'] }} numberOfLines={1}>
+                  Boş · {formatTime(new Date(item.gap.from).toISOString())}–{formatTime(new Date(item.gap.to).toISOString())} ·{' '}
+                  {formatDuration(Math.round((item.gap.to - item.gap.from) / 60000))}
                 </Text>
-              ) : null}
+                <Ionicons name="add" size={16} color={colors.brand300} />
+                <Text variant="label" tone="brand">
+                  Ekle
+                </Text>
+              </Pressable>
             </View>
-          </Pressable>
-        )}
+          ) : null
+        }
       />
+      <TopBar y={y} title={isRel ? rel : formatDate(day, false)} after={72} />
 
       <AppointmentSheet
         appointment={selected}
@@ -337,6 +432,18 @@ const s = StyleSheet.create({
   pending: { borderColor: colors.warningLine, backgroundColor: colors.warningSoft },
   item: { flexDirection: 'row', gap: 12 },
   time: { width: 52, paddingTop: 12, alignItems: 'flex-end' },
+  gap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.lineStrong,
+  },
   itemCard: {
     flex: 1,
     gap: 4,

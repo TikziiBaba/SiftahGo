@@ -40,16 +40,17 @@ export default function TabLayout() {
         tabBarBadgeStyle: { ...type.badge, backgroundColor: colors.gold, color: colors.brandInk },
         sceneStyle: { backgroundColor: colors.bg },
       }}>
-      {/* Müşteri */}
-      <Tabs.Protected guard={!isBusiness}>
-        <Tabs.Screen name="index" options={{ title: 'Keşfet', tabBarIcon: icon('compass') }} />
-        <Tabs.Screen name="randevular" options={{ title: 'Randevularım', tabBarIcon: icon('calendar'), ...badge }} />
-      </Tabs.Protected>
       {/* İşletme */}
       <Tabs.Protected guard={isBusiness}>
         <Tabs.Screen name="takvim" options={{ title: 'Takvim', tabBarIcon: icon('calendar'), ...badge }} />
         <Tabs.Screen name="musteriler" options={{ title: 'Müşteriler', tabBarIcon: icon('people') }} />
         <Tabs.Screen name="isletmem" options={{ title: 'İşletmem', tabBarIcon: icon('storefront') }} />
+      </Tabs.Protected>
+      {/* İşletme sahibi de Keşfet'ten başka yerlere randevu alır; aldığı randevular Hesap'tan ayrı ekranda açılır. */}
+      <Tabs.Screen name="index" options={{ title: 'Keşfet', tabBarIcon: icon('compass') }} />
+      {/* Müşteri */}
+      <Tabs.Protected guard={!isBusiness}>
+        <Tabs.Screen name="randevular" options={{ title: 'Randevularım', tabBarIcon: icon('calendar'), ...badge }} />
       </Tabs.Protected>
       <Tabs.Screen name="hesap" options={{ title: 'Hesap', tabBarIcon: icon('person-circle') }} />
     </Tabs>

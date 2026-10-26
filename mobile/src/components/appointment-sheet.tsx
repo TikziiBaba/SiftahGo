@@ -114,7 +114,7 @@ export function AppointmentSheet({
     if (!a) return;
     Alert.alert(
       `${a.customer_name} engellensin mi?`,
-      'Online randevu alamaz ve yaklaşan randevuları iptal edilir. Engeli web panelindeki Ayarlar’dan kaldırabilirsiniz.',
+      'Online randevu alamaz ve yaklaşan randevuları iptal edilir. Engeli İşletmem > Engellenen müşteriler’den kaldırabilirsiniz.',
       [
         { text: 'Vazgeç', style: 'cancel' },
         {

@@ -63,7 +63,7 @@ function RootStack({ fontsReady }: { fontsReady: boolean }) {
 
   usePushRegistration(session?.user.id);
   // Bildirime dokununca açılacak ekranlar oturuma bağlı; oturum yüklenmeden yönlendirme yapılmaz.
-  useNotificationTaps(ready && !!session);
+  useNotificationTaps(ready && !!session, profile?.role === 'business');
 
   // Açılış ekranı, yazı tipi ve oturum hazır olana kadar görünür kalır.
   if (!ready) return null;
@@ -106,6 +106,7 @@ function RootStack({ fontsReady }: { fontsReady: boolean }) {
         <Stack.Screen name="isletme/[slug]/randevu" options={{ title: 'Randevu' }} />
         <Stack.Screen name="profil" options={{ title: 'Profil' }} />
         <Stack.Screen name="bildirimler" options={{ title: 'Bildirimler' }} />
+        <Stack.Screen name="randevularim" options={{ title: 'Randevularım' }} />
       </Stack.Protected>
 
       <Stack.Protected guard={isBusiness && approved}>
@@ -117,11 +118,13 @@ function RootStack({ fontsReady }: { fontsReady: boolean }) {
         <Stack.Screen name="yonetim/saatler" options={{ title: 'Çalışma saatleri' }} />
         <Stack.Screen name="yonetim/izin" options={{ title: 'İzin ekle', presentation: 'modal' }} />
         <Stack.Screen name="yonetim/bilgiler" options={{ title: 'İşletme bilgileri' }} />
+        <Stack.Screen name="yonetim/kurallar" options={{ title: 'Randevu kuralları' }} />
         <Stack.Screen name="yonetim/gorseller" options={{ title: 'Görseller' }} />
-        <Stack.Screen name="yonetim/sayfa" options={{ title: 'Sayfa görünümü' }} />
+        <Stack.Screen name="yonetim/sayfa" options={{ title: 'Sayfa tasarımı' }} />
         <Stack.Screen name="yonetim/qr" options={{ title: 'QR kod ve bağlantı' }} />
         <Stack.Screen name="yonetim/raporlar" options={{ title: 'Raporlar' }} />
         <Stack.Screen name="yonetim/yorumlar" options={{ title: 'Yorumlar' }} />
+        <Stack.Screen name="yonetim/engellenenler" options={{ title: 'Engellenen müşteriler' }} />
         <Stack.Screen name="yonetim/abonelik" options={{ title: 'Abonelik' }} />
       </Stack.Protected>
     </Stack>

@@ -1,11 +1,11 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useFocusEffect } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
 
 import { Glow } from '@/components/brand';
 import { Logo } from '@/components/business-logo';
+import { TopBar, useScrollY } from '@/components/top-bar';
 import { Badge, Banner, Button, Card, Group, ListRow, ScreenHeader, SectionTitle, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { isSubscribed, isTrial, SITE_DOMAIN, WEB_URL } from '@/lib/constants';
@@ -21,6 +21,7 @@ export default function BusinessTab() {
 
 function Hub({ business }: { business: Business }) {
   const plan = usePlan(business.plan_id);
+  const { y, scroll } = useScrollY();
   const [counts, setCounts] = useState<{ services: number; staff: number } | null>(null);
   const subscribed = isSubscribed(business);
   const left = daysLeft(business.subscription_ends_at);
@@ -57,7 +58,7 @@ function Hub({ business }: { business: Business }) {
   return (
     <View style={styles.screen}>
       <Glow />
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} {...scroll}>
         <ScreenHeader title="İşletmem" />
 
         <Card style={{ gap: 14, marginTop: 4 }}>
@@ -77,7 +78,14 @@ function Hub({ business }: { business: Business }) {
             </View>
           </View>
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <Button title="Sayfam" icon="open-outline" variant="secondary" size="sm" style={{ flex: 1 }} onPress={() => WebBrowser.openBrowserAsync(link)} />
+            <Button
+              title="Sayfam"
+              icon="eye-outline"
+              variant="secondary"
+              size="sm"
+              style={{ flex: 1 }}
+              onPress={() => router.push({ pathname: '/isletme/[slug]', params: { slug: business.slug } })}
+            />
             <Button
               title="Paylaş"
               icon="share-social-outline"
@@ -150,16 +158,18 @@ function Hub({ business }: { business: Business }) {
             onPress={() => router.push('/yonetim/personel')}
           />
           <ListRow icon="time-outline" title="Çalışma saatleri" subtitle="Haftalık saatler, izin ve tatiller" disabled={locked} onPress={() => router.push('/yonetim/saatler')} />
+          <ListRow icon="options-outline" title="Randevu kuralları" subtitle="Saat aralığı, en erken/en geç ve onay" onPress={() => router.push('/yonetim/kurallar')} />
+          <ListRow icon="ban-outline" title="Engellenen müşteriler" subtitle="Online randevu alamayanlar" onPress={() => router.push('/yonetim/engellenenler')} />
         </Group>
 
         <SectionTitle title="İşletme" />
         <Group>
-          <ListRow icon="storefront-outline" title="İşletme bilgileri" subtitle="Ad, adres, kategori ve randevu kuralları" onPress={() => router.push('/yonetim/bilgiler')} />
-          <ListRow icon="images-outline" title="Görseller" subtitle="Logo, kapak ve galeri" onPress={() => router.push('/yonetim/gorseller')} />
           {/* Veritabanında sayfa özelleştirme alanları yoksa (ek dosya çalıştırılmadıysa) gizli kalır. */}
           {'accent' in business && (
-            <ListRow icon="color-palette-outline" title="Sayfa görünümü" subtitle="Duyuru, kısayollar ve sayfa rengi" onPress={() => router.push('/yonetim/sayfa')} />
+            <ListRow icon="color-palette-outline" title="Sayfa tasarımı" subtitle="Sayfa rengi, duyuru bandı ve kısayollar" onPress={() => router.push('/yonetim/sayfa')} />
           )}
+          <ListRow icon="storefront-outline" title="İşletme bilgileri" subtitle="Ad, adres, kategori ve konum" onPress={() => router.push('/yonetim/bilgiler')} />
+          <ListRow icon="images-outline" title="Görseller" subtitle="Logo, kapak ve galeri" onPress={() => router.push('/yonetim/gorseller')} />
           <ListRow icon="qr-code-outline" title="QR kod ve bağlantı" subtitle="Dükkânınıza asın, sosyal medyada paylaşın" disabled={locked} onPress={() => router.push('/yonetim/qr')} />
           <ListRow
             icon="star-outline"
@@ -188,6 +198,7 @@ function Hub({ business }: { business: Business }) {
           />
         </Group>
       </ScrollView>
+      <TopBar y={y} title="İşletmem" />
     </View>
   );
 }

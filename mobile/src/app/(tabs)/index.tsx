@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { Image } from 'expo-image';
 import * as Location from 'expo-location';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
@@ -9,6 +10,7 @@ import { Glow, Wordmark } from '@/components/brand';
 import { Logo } from '@/components/business-logo';
 import { RevealCell } from '@/components/motion';
 import { OptionSheet } from '@/components/pickers';
+import { TopBar, useScrollY } from '@/components/top-bar';
 import { Avatar, Badge, Button, Card, Chip, Empty, Field, PressableScale, Skeleton, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { CATEGORIES, categoryLabel, CITIES } from '@/lib/constants';
@@ -17,7 +19,7 @@ import { colors } from '@/lib/theme';
 import type { Business } from '@/lib/types';
 
 // distance_km: "Yakınımda" aramasında uzaklık
-type Item = Pick<Business, 'id' | 'slug' | 'name' | 'category' | 'city' | 'district' | 'logo_url' | 'rating_avg' | 'rating_count'> & {
+type Item = Pick<Business, 'id' | 'slug' | 'name' | 'category' | 'city' | 'district' | 'logo_url' | 'cover_url' | 'rating_avg' | 'rating_count'> & {
   distance_km?: number;
 };
 
@@ -35,11 +37,14 @@ function savedCity() {
 export default function DiscoverScreen() {
   const { session, profile } = useAuth();
   const insets = useSafeAreaInsets();
+  const { y, scroll } = useScrollY();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('');
   const [city, setCity] = useState(savedCity);
   const [cityOpen, setCityOpen] = useState(false);
   const [items, setItems] = useState<Item[] | null>(null);
+  // Bugün boş saati olan işletmeler
+  const [openToday, setOpenToday] = useState<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
   const [reload, setReload] = useState(0);
   const [favorites, setFavorites] = useState<Item[]>([]);
@@ -57,7 +62,7 @@ export default function DiscoverScreen() {
       if (!session) return;
       supabase
         .from('favorites')
-        .select('businesses(id, slug, name, category, city, district, logo_url, rating_avg, rating_count)')
+        .select('businesses(id, slug, name, category, city, district, logo_url, cover_url, rating_avg, rating_count)')
         .order('created_at', { ascending: false })
         .then(({ data }) => setFavorites(((data ?? []) as unknown as { businesses: Item | null }[]).flatMap((x) => (x.businesses ? [x.businesses] : []))));
     }, [session]),
@@ -68,7 +73,7 @@ export default function DiscoverScreen() {
     const timer = setTimeout(async () => {
       let q = supabase
         .from('businesses')
-        .select('id, slug, name, category, city, district, logo_url, rating_avg, rating_count')
+        .select('id, slug, name, category, city, district, logo_url, cover_url, rating_avg, rating_count')
         .eq('is_published', true)
         .order('rating_score', { ascending: false })
         .order('created_at', { ascending: false })
@@ -82,14 +87,21 @@ export default function DiscoverScreen() {
         ? await supabase.rpc('nearby_businesses', { p_lat: near.lat, p_lng: near.lng, p_category: category || null, p_query: term || null })
         : await q;
       let rows = (data ?? []) as Item[];
+      let open: Set<string> | null = null;
       if (today && rows.length) {
-        const { data: open } = await supabase.rpc('available_today', { p_ids: rows.map((r) => r.id) });
-        const ids = new Set((open ?? []) as string[]);
-        rows = rows.filter((r) => ids.has(r.id));
+        const { data: ids } = await supabase.rpc('available_today', { p_ids: rows.map((r) => r.id) });
+        const found = new Set((ids ?? []) as string[]);
+        rows = rows.filter((r) => found.has(r.id));
+        open = found;
       }
       if (!active) return;
       setItems(rows);
       setRefreshing(false);
+      // "Bugün müsait" rozeti: listeyi bekletmeden, ilk 20 kart için ayrıca sorulur (her işletmenin boş saati hesaplanır).
+      if (open) return setOpenToday(open);
+      const first = rows.slice(0, 20).map((r) => r.id);
+      const { data: ids } = first.length ? await supabase.rpc('available_today', { p_ids: first }) : { data: [] };
+      if (active) setOpenToday(new Set((ids ?? []) as string[]));
     }, 250);
     return () => {
       active = false;
@@ -132,6 +144,7 @@ export default function DiscoverScreen() {
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 12 }]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
+        {...scroll}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -267,8 +280,9 @@ export default function DiscoverScreen() {
         }
         // Kartlar sırayla belirir; ilk sekizden sonrası beklemez.
         CellRendererComponent={RevealCell}
-        renderItem={({ item }) => <BusinessCard item={item} />}
+        renderItem={({ item }) => <BusinessCard item={item} open={openToday.has(item.id)} />}
       />
+      <TopBar y={y} title="Keşfet" after={100} />
       <OptionSheet
         visible={cityOpen}
         onClose={() => setCityOpen(false)}
@@ -282,7 +296,8 @@ export default function DiscoverScreen() {
   );
 }
 
-function BusinessCard({ item }: { item: Item }) {
+/** Keşfet kartı: kapağı varsa üstte şerit; bugün boş saati varsa "Bugün müsait" rozeti (open). */
+function BusinessCard({ item, open }: { item: Item; open: boolean }) {
   const place = [
     item.distance_km != null ? `${item.distance_km.toLocaleString('tr-TR', { maximumFractionDigits: 1 })} km` : '',
     item.district,
@@ -293,40 +308,45 @@ function BusinessCard({ item }: { item: Item }) {
   return (
     <Card
       onPress={() => router.push({ pathname: '/isletme/[slug]', params: { slug: item.slug } })}
-      accessibilityLabel={item.name}
-      style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14 }}>
-      <Logo business={item} size={56} />
-      <View style={{ flex: 1, gap: 3 }}>
-        <Text variant="heading" numberOfLines={1}>
-          {item.name}
-        </Text>
-        <Text variant="caption" tone="muted" numberOfLines={1}>
-          {categoryLabel(item.category)}
-          {place ? ` · ${place}` : ''}
-        </Text>
-        {item.rating_count > 0 ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
-            <Ionicons name="star" size={13} color={colors.gold} />
-            <Text variant="label" tone="gold">
-              {Number(item.rating_avg).toFixed(1)}
-            </Text>
-            <Text variant="caption" tone="muted">
-              ({item.rating_count})
-            </Text>
+      accessibilityLabel={`${item.name}${open ? ', bugün müsait' : ''}`}
+      style={{ padding: 0, overflow: 'hidden' }}>
+      {item.cover_url ? <Image source={item.cover_url} accessibilityLabel="" style={s.cover} contentFit="cover" transition={150} /> : null}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14 }}>
+        <Logo business={item} size={56} />
+        <View style={{ flex: 1, gap: 3 }}>
+          <Text variant="heading" numberOfLines={1}>
+            {item.name}
+          </Text>
+          <Text variant="caption" tone="muted" numberOfLines={1}>
+            {categoryLabel(item.category)}
+            {place ? ` · ${place}` : ''}
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2, flexWrap: 'wrap' }}>
+            {item.rating_count > 0 ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Ionicons name="star" size={13} color={colors.gold} />
+                <Text variant="label" tone="gold">
+                  {Number(item.rating_avg).toFixed(1)}
+                </Text>
+                <Text variant="caption" tone="muted">
+                  ({item.rating_count})
+                </Text>
+              </View>
+            ) : (
+              <Badge label="Yeni" fg={colors.brand300} bg={colors.brandTint} />
+            )}
+            {open && <Badge label="Bugün müsait" icon="time-outline" fg={colors.success} bg={colors.successTint} />}
           </View>
-        ) : (
-          <View style={{ marginTop: 2 }}>
-            <Badge label="Yeni" fg={colors.brand300} bg={colors.brandTint} />
-          </View>
-        )}
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.ink3} />
       </View>
-      <Ionicons name="chevron-forward" size={18} color={colors.ink3} />
     </Card>
   );
 }
 
 const s = StyleSheet.create({
   top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  cover: { height: 96, width: '100%', backgroundColor: colors.surface2 },
   favorite: { width: 76, alignItems: 'center', gap: 6 },
   city: {
     flexDirection: 'row',

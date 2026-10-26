@@ -6,10 +6,10 @@ import { useCallback, useState } from 'react';
 import { FlatList, Linking, StyleSheet, View } from 'react-native';
 
 import { RevealCell } from '@/components/motion';
-import { Banner, Empty, PressableScale, Skeleton, styles, Text } from '@/components/ui';
+import { Banner, Empty, PressableScale, SectionTitle, Segmented, Skeleton, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import type { IconName } from '@/lib/constants';
-import { dayOf, formatTime, relativeDay, shortDay, todayStr } from '@/lib/format';
+import { addDays, dayOf, formatTime, relativeDay, shortDay, todayStr } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 import { useInbox, type InboxItem } from '@/lib/inbox';
 import { openNotificationTarget, registerPushToken } from '@/lib/notifications';
@@ -35,10 +35,24 @@ function when(iso: string) {
   return `${d.date} ${d.month}`;
 }
 
+/** Listedeki gün başlığı */
+function period(iso: string) {
+  const day = dayOf(iso);
+  const today = todayStr();
+  if (day === today) return 'Bugün';
+  if (day === addDays(today, -1)) return 'Dün';
+  if (day >= addDays(today, -6)) return 'Bu hafta';
+  return 'Daha eski';
+}
+
+type Entry = { key: string; title?: string; item?: InboxItem };
+
 export default function InboxScreen() {
   const { profile } = useAuth();
   const { items, markAllRead } = useInbox();
   const [permission, setPermission] = useState<Notifications.NotificationPermissionsStatus | null>(null);
+  // İşletme hesabında kendi aldığı randevuların bildirimleri ayrı ("Kişisel")
+  const [scope, setScope] = useState<'business' | 'customer'>('business');
 
   useFocusEffect(
     useCallback(() => {
@@ -58,16 +72,29 @@ export default function InboxScreen() {
   }
 
   const isBusiness = profile?.role === 'business';
+  // Seçim yalnızca işletme hesabında ve kişisel bildirim varken görünür.
+  const split = isBusiness && !!items?.some((i) => i.recipient === 'customer');
+  const shown = (items ?? []).filter((i) => !split || i.recipient === scope);
+  const unread = (r: InboxItem['recipient']) => (items ?? []).filter((i) => i.recipient === r && !i.read_at).length;
+  // Bildirimler yeniden eskiye sıralı gelir; gün değiştikçe başlık eklenir.
+  const entries: Entry[] = [];
+  let last = '';
+  for (const item of shown) {
+    const title = period(item.created_at);
+    if (title !== last) entries.push({ key: `baslik-${title}`, title });
+    last = title;
+    entries.push({ key: item.id, item });
+  }
 
   return (
     <FlatList
       style={styles.screen}
       contentContainerStyle={[styles.content, { gap: 8 }]}
-      data={items ?? []}
-      keyExtractor={(i) => i.id}
+      data={entries}
+      keyExtractor={(e) => e.key}
       ListHeaderComponent={
-        permission && !permission.granted ? (
-          <View style={{ marginBottom: 8 }}>
+        <View style={{ gap: 8 }}>
+          {permission && !permission.granted ? (
             <Banner
               tone="warning"
               icon="notifications-off-outline"
@@ -75,15 +102,29 @@ export default function InboxScreen() {
               text={permission.canAskAgain ? 'Telefonunuza bildirim gelmesi için dokunup izin verin.' : 'Telefon ayarlarından SiftahGo bildirimlerini açabilirsiniz.'}
               onPress={enable}
             />
-          </View>
-        ) : null
+          ) : null}
+          {split && (
+            <Segmented
+              value={scope}
+              onChange={setScope}
+              options={[
+                { value: 'business', label: 'İşletme', count: unread('business') },
+                { value: 'customer', label: 'Kişisel', count: unread('customer') },
+              ]}
+            />
+          )}
+        </View>
       }
       ListEmptyComponent={
         items ? (
           <Empty
             icon="notifications-outline"
             title="Henüz bildirim yok"
-            text={isBusiness ? 'Yeni randevular, onay bekleyenler ve iptaller burada görünür.' : 'Randevu onayları, iptaller ve hatırlatmalar burada görünür.'}
+            text={
+              isBusiness && scope === 'business'
+                ? 'Yeni randevular, onay bekleyenler ve iptaller burada görünür.'
+                : 'Randevu onayları, iptaller ve hatırlatmalar burada görünür.'
+            }
           />
         ) : (
           <View style={{ gap: 8 }}>
@@ -94,19 +135,19 @@ export default function InboxScreen() {
         )
       }
       CellRendererComponent={RevealCell}
-      renderItem={({ item }) => <Row item={item} />}
+      renderItem={({ item: e }) => (e.item ? <Row item={e.item} businessAccount={isBusiness} /> : <SectionTitle title={e.title ?? ''} />)}
     />
   );
 }
 
-function Row({ item }: { item: InboxItem }) {
+function Row({ item, businessAccount }: { item: InboxItem; businessAccount: boolean }) {
   const k = KIND[item.kind];
   const unread = !item.read_at;
   return (
     <PressableScale
       onPress={() => {
         haptic.press();
-        openNotificationTarget({ kind: item.kind, recipient: item.recipient, appointmentId: item.appointment_id, startsAt: item.appointments?.starts_at });
+        openNotificationTarget({ kind: item.kind, recipient: item.recipient, appointmentId: item.appointment_id, startsAt: item.appointments?.starts_at, businessAccount });
       }}
       accessibilityRole="button"
       accessibilityLabel={`${unread ? 'Okunmamış. ' : ''}${item.title}. ${item.body}`}
