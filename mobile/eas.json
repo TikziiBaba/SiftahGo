@@ -9,7 +9,8 @@
         "EXPO_PUBLIC_SUPABASE_URL": "https://pbvcftuznlorwaaydxqi.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBidmNmdHV6bmxvcndhYXlkeHFpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0ODA2MTYsImV4cCI6MjEwNzA1NjYxNn0.Ss2AEvedFsY1it1mjVWpaGeffoamF0iCE8WnNwDTdQE",
         "EXPO_PUBLIC_WEB_URL": "https://siftahgo.bekirr.dev",
-        "EXPO_PUBLIC_TURNSTILE_SITE_KEY": "0x4AAAAAAFVBTcbztooua9IQ"
+        "EXPO_PUBLIC_TURNSTILE_SITE_KEY": "0x4AAAAAAFVBTcbztooua9IQ",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "255887121621-n4nlbdrtpapn812do5469v6tqt7fru7n.apps.googleusercontent.com"
       }
     },
     "development": {

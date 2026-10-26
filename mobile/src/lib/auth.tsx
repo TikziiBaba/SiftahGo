@@ -1,6 +1,7 @@
 import type { Session } from '@supabase/supabase-js';
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
+import { signOutGoogle } from './google';
 import { unregisterPushToken } from './notifications';
 import { supabase } from './supabase';
 import type { Business, Profile } from './types';
@@ -51,5 +52,6 @@ export const useAuth = () => useContext(AuthContext);
 /** Çıkış. Önce bu telefon hesabın bildirim listesinden çıkarılır (oturum gerektirir). */
 export async function signOut() {
   await unregisterPushToken().catch(() => {});
+  await signOutGoogle();
   await supabase.auth.signOut();
 }

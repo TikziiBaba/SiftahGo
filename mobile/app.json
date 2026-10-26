@@ -65,7 +65,8 @@
         {
           "locationWhenInUsePermission": "Yakınınızdaki işletmeleri göstermek ve işletmenizin konumunu kaydetmek için konumunuz kullanılır."
         }
-      ]
+      ],
+      "@react-native-google-signin/google-signin"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -1,5 +1,7 @@
+import { GoogleSignin, isCancelledResponse, isErrorWithCode, statusCodes } from '@react-native-google-signin/google-signin';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
+import { Platform } from 'react-native';
 
 import { supabase } from './supabase';
 
@@ -34,11 +36,35 @@ export async function googleEnabled() {
   }
 }
 
+// Supabase'deki Google sağlayıcısının Web istemcisi; Android'deki yerel girişin kimlik jetonu bunun adına alınır
+// (eas.json). Google Cloud'da paket adı ve imza SHA-1'iyle bir Android istemcisi de olmalı, yoksa giriş hata verir.
+const WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+const native = Platform.OS === 'android' && !!WEB_CLIENT_ID;
+if (native) GoogleSignin.configure({ webClientId: WEB_CLIENT_ID });
+
 /**
- * Google hesabıyla giriş veya kayıt (tarayıcıda Google ekranı açılır).
- * true: oturum açıldı, false: kullanıcı vazgeçti. `business`: hesap işletme hesabı olur.
+ * Android'de telefondaki Google hesabı uygulamanın içinde seçilir (tarayıcı açılmaz).
+ * 'cancelled': kullanıcı vazgeçti; null: yerel giriş kullanılamadı, tarayıcıyla denenmeli.
  */
-export async function signInWithGoogle(business = false) {
+async function nativeSignIn(): Promise<'ok' | 'cancelled' | null> {
+  try {
+    await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+    const res = await GoogleSignin.signIn();
+    if (isCancelledResponse(res)) return 'cancelled';
+    if (!res.data.idToken) return null;
+    const { error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: res.data.idToken });
+    if (error) throw error;
+    return 'ok';
+  } catch (e) {
+    if (isErrorWithCode(e) && e.code === statusCodes.SIGN_IN_CANCELLED) return 'cancelled';
+    // Play Hizmetleri yok, Android istemcisi tanımsız (DEVELOPER_ERROR) vb.: tarayıcı akışı dener.
+    console.warn('Yerel Google girişi kullanılamadı', e);
+    return null;
+  }
+}
+
+/** Tarayıcıda Google ekranı açılır; dönüş adresindeki oturumla giriş yapılır. */
+async function browserSignIn() {
   const redirectTo = Linking.createURL(REDIRECT_PATH);
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
@@ -48,9 +74,25 @@ export async function signInWithGoogle(business = false) {
   const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
   if (result.type !== 'success') return false;
   await sessionFromUrl(result.url);
+  return true;
+}
+
+/**
+ * Google hesabıyla giriş veya kayıt: Android'de uygulama içinde, olmazsa tarayıcıda.
+ * true: oturum açıldı, false: kullanıcı vazgeçti. `business`: hesap işletme hesabı olur.
+ */
+export async function signInWithGoogle(business = false) {
+  const result = native ? await nativeSignIn() : null;
+  if (result === 'cancelled') return false;
+  if (result === null && !(await browserSignIn())) return false;
   if (business) {
     const { data: auth } = await supabase.auth.getUser();
     if (auth.user) await supabase.from('profiles').update({ role: 'business' }).eq('id', auth.user.id);
   }
   return true;
+}
+
+/** Çıkışta Google hesabı da unutulur; sonraki girişte hesap yeniden seçilebilir. */
+export async function signOutGoogle() {
+  if (native) await GoogleSignin.signOut().catch(() => {});
 }
