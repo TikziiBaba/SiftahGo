@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Loader2, LocateFixed, X } from "lucide-react";
 import { BusinessCard, type BusinessCardData } from "@/components/business-card";
+import { Reveal } from "@/components/reveal";
 import { loadClient } from "@/lib/supabase/lazy";
 
 type Nearby = BusinessCardData & { distance_km: number };
@@ -81,10 +82,11 @@ export function NearbyResults({
         <div className="card mt-6 p-12 text-center text-ink-3">50 km içinde konumunu paylaşan işletme yok.</div>
       ) : (
         <ul className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {list.map((b) => (
-            <li key={b.id}>
-              <BusinessCard b={b} distanceKm={b.distance_km} />
-            </li>
+          {/* Keşfet'teki listeyle aynı: sırayla belirir, kapak ve logo işletme sayfasına uçar. */}
+          {list.map((b, i) => (
+            <Reveal key={b.id} as="li" onLoad delay={Math.min(i, 8) * 60}>
+              <BusinessCard b={b} distanceKm={b.distance_km} morph />
+            </Reveal>
           ))}
         </ul>
       )}

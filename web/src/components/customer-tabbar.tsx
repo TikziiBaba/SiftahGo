@@ -50,6 +50,8 @@ function TabBar() {
   if (HIDDEN.some((h) => path.startsWith(h)) || path.endsWith("/afis")) return null;
   // Oturum okunana kadar (birkaç yüz ms) yalnızca herkese ortak iki sekme; "Giriş" yanlışlıkla görünmesin.
   const tabs = account ? tabsFor(account.kind) : tabsFor(undefined).slice(0, 2);
+  const params = new URLSearchParams(query.toString());
+  const current = tabs.findIndex((t) => t.active(path, params));
 
   return (
     <>
@@ -57,20 +59,30 @@ function TabBar() {
       <div className="h-24 md:hidden" aria-hidden />
       <nav
         aria-label="Hızlı gezinme"
+        // Sayfa geçişinde çubuk yerinde durur (globals.css).
+        style={{ viewTransitionName: "tabbar" }}
         className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 grid grid-cols-4 rounded-2xl bg-surface/90 p-1.5 shadow-[0_12px_40px_-12px_rgb(15_26_25/0.35)] ring-1 ring-line-strong backdrop-blur-xl md:hidden"
       >
-        {tabs.map((t) => {
-          const on = t.active(path, new URLSearchParams(query.toString()));
+        {/* Seçili sekmenin zemini tek parça; sekme değişince yeni yerine kayar. */}
+        <span
+          aria-hidden
+          className="tab-indicator absolute inset-y-1.5 left-1.5 w-[calc((100%-0.75rem)/4)] rounded-xl bg-brand-400/12"
+          style={{ translate: `${Math.max(current, 0) * 100}% 0`, opacity: current < 0 ? 0 : 1 }}
+        />
+        {tabs.map((t, i) => {
+          const on = i === current;
           return (
             <Link
               key={t.label}
               href={t.href}
+              // Sağdaki sekmeye geçerken sayfa sola, soldakine geçerken sağa kayar.
+              transitionTypes={current < 0 || on ? undefined : [i > current ? "tab-forward" : "tab-back"]}
               aria-current={on ? "page" : undefined}
               className={`relative flex flex-col items-center gap-1 rounded-xl py-2 text-3xs font-medium transition-colors duration-300 ${
-                on ? "bg-brand-400/12 text-accent" : "text-ink-3 active:bg-tint/[0.05]"
+                on ? "text-accent" : "text-ink-3 active:bg-tint/[0.05]"
               }`}
             >
-              <t.icon className="size-5" style={{ strokeWidth: on ? 2 : 1.5 }} />
+              <t.icon className={`size-5 ${on ? "tab-pop" : ""}`} style={{ strokeWidth: on ? 2 : 1.5 }} />
               {t.label}
             </Link>
           );

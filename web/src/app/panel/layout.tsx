@@ -146,6 +146,8 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
   const badgeOf = (item: Item) => (item.badge ? badges[item.badge] : 0);
   const current = ALL.find((i) => i.href === pathname);
   const moreActive = !PRIMARY.includes(pathname);
+  // Alt menüde seçili sütun; ana sekmeler dışındaki bölümler "Daha fazla" (5. sütun) sayılır.
+  const navIndex = moreActive ? PRIMARY.length : PRIMARY.indexOf(pathname);
   const planName = business.plan_id ? PLAN_NAMES[business.plan_id] ?? business.plan_id : "Paketsiz";
 
   return (
@@ -254,21 +256,44 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
         </div>
 
         {/* Telefon: dört ana sekme + "Daha fazla" */}
-        <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur print:hidden md:hidden">
-          {PRIMARY.map((href) => {
+        <nav
+          // Sayfa geçişinde menü yerinde durur (globals.css).
+          style={{ viewTransitionName: "panel-nav" }}
+          className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur print:hidden md:hidden"
+        >
+          {/* Seçili sekmenin zemini tek parça; sekme değişince yeni yerine kayar ("Daha fazla" dahil). */}
+          <span
+            aria-hidden
+            className="tab-indicator absolute left-0 top-1 w-1/5 px-2"
+            style={{ height: "calc(100% - 0.5rem - env(safe-area-inset-bottom))", translate: `${navIndex * 100}% 0` }}
+          >
+            <span className="block size-full rounded-xl bg-brand-400/10" />
+          </span>
+          {PRIMARY.map((href, index) => {
             const item = ALL.find((i) => i.href === href)!;
             const on = pathname === href;
             const n = badgeOf(item);
             return (
-              <Link key={href} href={href} aria-current={on ? "page" : undefined} className={`relative flex flex-col items-center gap-0.5 py-2 text-3xs font-medium ${on ? "text-accent" : "text-ink-3"}`}>
-                <item.icon className="size-5" />
+              <Link
+                key={href}
+                href={href}
+                // Sağdaki sekmeye geçerken sayfa sola, soldakine geçerken sağa kayar.
+                transitionTypes={on ? undefined : [index > navIndex ? "tab-forward" : "tab-back"]}
+                aria-current={on ? "page" : undefined}
+                className={`relative flex flex-col items-center gap-0.5 py-2 text-3xs font-medium transition-colors duration-300 ${on ? "text-accent" : "text-ink-3"}`}
+              >
+                <item.icon className={`size-5 ${on ? "tab-pop" : ""}`} />
                 {item.label}
                 {n > 0 && <span className="absolute right-[22%] top-1 min-w-4 rounded-full bg-amber-400 px-1 text-center text-3xs font-bold text-amber-950">{n}</span>}
               </Link>
             );
           })}
-          <button type="button" onClick={() => setMore(true)} className={`flex flex-col items-center gap-0.5 py-2 text-3xs font-medium ${moreActive ? "text-accent" : "text-ink-3"}`}>
-            <MoreHorizontal className="size-5" />
+          <button
+            type="button"
+            onClick={() => setMore(true)}
+            className={`relative flex flex-col items-center gap-0.5 py-2 text-3xs font-medium transition-colors duration-300 ${moreActive ? "text-accent" : "text-ink-3"}`}
+          >
+            <MoreHorizontal className={`size-5 ${moreActive ? "tab-pop" : ""}`} />
             Daha fazla
           </button>
         </nav>

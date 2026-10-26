@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import Form from "next/form";
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, ViewTransition } from "react";
 import { cacheLife } from "next/cache";
 import { createClient as createSupabase } from "@supabase/supabase-js";
 import { CalendarCheck, Check, Search, Store, X } from "lucide-react";
 import { BusinessCard, type BusinessCardData } from "@/components/business-card";
 import { NearbyResults } from "@/components/nearby-results";
+import { Reveal } from "@/components/reveal";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
 import { CategoryIcon } from "@/lib/category-icons";
 import { CATEGORIES, categoryLabel, CITIES } from "@/lib/constants";
@@ -29,8 +30,17 @@ export default function DiscoverPage({ searchParams }: PageProps<"/kesfet">) {
           İşletme bul, <span className="text-gradient">randevunu al.</span>
         </h1>
         <p className="mt-3 max-w-xl text-ink-2">Kategori ve şehir seçin, size uygun saati hemen ayırtın.</p>
-        <Suspense fallback={<ResultsSkeleton />}>
-          <Results searchParams={searchParams} />
+        {/* Sonuçlar gelince iskelet aşağı kayıp çekilir, içerik yukarı kayarak gelir (globals.css). */}
+        <Suspense
+          fallback={
+            <ViewTransition exit="slide-down" default="none">
+              <ResultsSkeleton />
+            </ViewTransition>
+          }
+        >
+          <ViewTransition enter="slide-up" default="none">
+            <Results searchParams={searchParams} />
+          </ViewTransition>
         </Suspense>
       </main>
       <SiteFooter />
@@ -196,10 +206,11 @@ async function Results({ searchParams }: { searchParams: PageProps<"/kesfet">["s
               </nav>
             </div>
             <ul className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {businesses.map((b) => (
-                <li key={b.id}>
-                  <BusinessCard b={b} />
-                </li>
+              {/* Kartlar sırayla belirir; her işletme bir kez listelendiği için kapak ve logo işletme sayfasına uçar. */}
+              {businesses.map((b, i) => (
+                <Reveal key={b.id} as="li" onLoad delay={Math.min(i, 8) * 60}>
+                  <BusinessCard b={b} morph />
+                </Reveal>
               ))}
             </ul>
           </>

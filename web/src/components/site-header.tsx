@@ -112,10 +112,13 @@ export function SiteHeader({ section = "musteri", minimal = false }: { section?:
   const cta: { href: string; label: string; short?: string } = mine ?? sectionCta;
 
   return (
-    <>
+    // Sarmalayıcı: sayfa geçişinde React kendi adını en üstteki öğelere verir; menü onlardan biri olsaydı kendi
+    // adı (site-header) ezilir ve içerikle birlikte kayardı.
+    <div>
       {/* Sabit menü akışta yer kaplamadığı için boşluk bırakılır. */}
       <div className="h-24" aria-hidden />
-      <header className="fixed inset-x-0 top-4 z-40 flex justify-center px-4">
+      {/* Sayfa geçişinde menü yerinde durur, içerik altından kayar (globals.css). */}
+      <header className="fixed inset-x-0 top-4 z-40 flex justify-center px-4" style={{ viewTransitionName: "site-header" }}>
         <div className="flex w-full max-w-5xl items-center justify-between gap-2 rounded-full bg-surface/80 py-2 pl-4 pr-2 ring-1 ring-line-strong backdrop-blur-xl shadow-[0_10px_40px_-12px_rgb(0_0_0/0.35),inset_0_1px_0_rgb(255_255_255/0.06)]">
           <Logo href={home} />
           <nav className={`hidden items-center gap-1 text-sm ${minimal ? "" : "lg:flex"}`}>
@@ -192,7 +195,7 @@ export function SiteHeader({ section = "musteri", minimal = false }: { section?:
           ))}
         </nav>
       </div>
-    </>
+    </div>
   );
 }
 

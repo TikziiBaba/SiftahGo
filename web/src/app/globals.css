@@ -402,6 +402,126 @@ svg.lucide {
   animation: ticket-in 0.7s var(--ease-spring) both;
 }
 
+/* Alt sekme çubuğu: seçili zemin hafif aşarak yeni sekmeye kayar, ikon kısa bir zıplama yapar
+   (bkz. components/customer-tabbar.tsx, app/panel/layout.tsx). */
+.tab-indicator {
+  transition:
+    translate 0.5s cubic-bezier(0.34, 1.32, 0.64, 1),
+    opacity 0.3s var(--ease-spring);
+}
+@keyframes tab-pop {
+  40% {
+    transform: translateY(-3px) scale(1.18);
+  }
+}
+.tab-pop {
+  animation: tab-pop 0.45s var(--ease-spring);
+}
+
+/* Sayfa geçişleri (bkz. app/(site)/template.tsx, app/panel/template.tsx). Sağdaki sekmeye geçince içerik sola,
+   soldakine geçince sağa kayar; diğer geçişlerde eski sayfa hızla söner, yenisi alttan bulanıklıktan netleşir.
+   Eski içerik çabuk çekilir ki yenisiyle yarışmasın. Desteklemeyen tarayıcıda sayfa animasyonsuz değişir. */
+::view-transition {
+  /* Geçiş sürerken dokunuşlar canlı sayfaya gitsin */
+  pointer-events: none;
+}
+::view-transition-old(.tab-forward) {
+  --vt-slide: -48px;
+  animation:
+    150ms ease-in both vt-fade reverse,
+    400ms var(--ease-spring) both vt-slide reverse;
+}
+::view-transition-new(.tab-forward) {
+  --vt-slide: 48px;
+  animation:
+    220ms ease-out 120ms both vt-fade,
+    450ms var(--ease-spring) both vt-slide;
+}
+::view-transition-old(.tab-back) {
+  --vt-slide: 48px;
+  animation:
+    150ms ease-in both vt-fade reverse,
+    400ms var(--ease-spring) both vt-slide reverse;
+}
+::view-transition-new(.tab-back) {
+  --vt-slide: -48px;
+  animation:
+    220ms ease-out 120ms both vt-fade,
+    450ms var(--ease-spring) both vt-slide;
+}
+::view-transition-old(.page) {
+  animation: 150ms ease-in both vt-fade reverse;
+}
+::view-transition-new(.page) {
+  animation:
+    260ms ease-out 100ms both vt-fade,
+    450ms var(--ease-spring) both vt-rise;
+}
+/* Yükleme: iskelet aşağı kayıp çekilir, içerik yukarı kayarak gelir (Keşfet sonuçları, işletme sayfası). */
+::view-transition-old(.slide-down) {
+  animation:
+    150ms ease-out both vt-fade reverse,
+    150ms ease-out both vt-drop;
+}
+::view-transition-new(.slide-up) {
+  animation:
+    220ms ease-in 150ms both vt-fade,
+    400ms var(--ease-spring) both vt-rise;
+}
+@keyframes vt-fade {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
+}
+@keyframes vt-slide {
+  from {
+    translate: var(--vt-slide) 0;
+  }
+}
+@keyframes vt-rise {
+  from {
+    translate: 0 14px;
+  }
+}
+@keyframes vt-drop {
+  to {
+    translate: 0 14px;
+  }
+}
+
+/* Başlık ve alt çubuklar geçişte yerinde durur; kayan içerik onların üstünden geçmez. */
+::view-transition-group(site-header),
+::view-transition-group(tabbar),
+::view-transition-group(panel-nav) {
+  animation: none;
+  z-index: 100;
+}
+::view-transition-old(site-header),
+::view-transition-old(tabbar),
+::view-transition-old(panel-nav) {
+  display: none;
+}
+::view-transition-new(site-header),
+::view-transition-new(tabbar),
+::view-transition-new(panel-nav) {
+  animation: none;
+}
+
+/* Keşfet kartının kapağı ve logosu işletme sayfasındaki yerlerine uçar (bkz. components/business-card.tsx). */
+::view-transition-group(.morph) {
+  animation-duration: 450ms;
+  animation-timing-function: var(--ease-spring);
+}
+::view-transition-image-pair(.morph) {
+  animation-name: vt-via-blur;
+}
+@keyframes vt-via-blur {
+  30% {
+    filter: blur(3px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .reveal,
   .reveal-load,
@@ -410,8 +530,19 @@ svg.lucide {
   .animate-grid-flow,
   .dyn-in,
   .receipt-print,
-  .ticket-in {
+  .ticket-in,
+  .tab-pop {
     animation: none;
+  }
+  .tab-indicator {
+    transition: none;
+  }
+  /* Sayfa geçişleri anında olur (tarayıcının varsayılanı). */
+  ::view-transition-old(*),
+  ::view-transition-new(*),
+  ::view-transition-group(*) {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
   }
   /* Animasyon bitişi beklenmez; eski yazı hemen kalkar. */
   .dyn-out {

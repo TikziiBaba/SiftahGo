@@ -2,13 +2,14 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { cacheLife } from "next/cache";
 import { connection } from "next/server";
-import { cache, Suspense } from "react";
+import { cache, Suspense, ViewTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { createClient as createSupabase, type SupabaseClient } from "@supabase/supabase-js";
 import { ChevronRight, Clock, Globe, MapPin, Megaphone, Phone, Sparkles, Star } from "lucide-react";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
 import { BookingWidget } from "@/components/booking-widget";
+import { Morph } from "@/components/business-card";
 import { ShopShortcuts } from "@/components/shop-shortcuts";
 import { TrackRecent } from "@/components/track-recent";
 import { createClient } from "@/lib/supabase/server";
@@ -123,9 +124,18 @@ export default function BusinessPage({ params }: PageProps<"/[slug]">) {
   return (
     <>
       <SiteHeader minimal />
-      {/* Yer tutucu ekran boyunda: içerik gelince alt bilgi görünür alanda kaymasın. */}
-      <Suspense fallback={<div className="mx-auto min-h-[100dvh] w-full max-w-6xl animate-pulse px-4 py-8" />}>
-        <BusinessView params={params} />
+      {/* Yer tutucu ekran boyunda: içerik gelince alt bilgi görünür alanda kaymasın. Gelince yer tutucu aşağı
+          kayıp çekilir, sayfa yukarı kayarak gelir (globals.css). */}
+      <Suspense
+        fallback={
+          <ViewTransition exit="slide-down" default="none">
+            <div className="mx-auto min-h-[100dvh] w-full max-w-6xl animate-pulse px-4 py-8" />
+          </ViewTransition>
+        }
+      >
+        <ViewTransition enter="slide-up" default="none">
+          <BusinessView params={params} />
+        </ViewTransition>
       </Suspense>
       <SiteFooter />
     </>
@@ -204,30 +214,35 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
       />
-      <div className="relative mx-auto h-48 max-w-6xl overflow-hidden md:h-72 md:w-[calc(100%-2rem)] md:rounded-3xl">
-        {business.cover_url ? (
-          // Sayfanın en büyük öğesi: önceden yüklenir.
-          <Image src={business.cover_url} alt="" fill preload sizes="(min-width: 1152px) 1152px, 100vw" className="object-cover" />
-        ) : (
-          <div className="size-full bg-gradient-to-br from-brand-400 via-brand-600 to-brand-800">
-            <div className="absolute -left-24 -top-24 size-96 rounded-full bg-brand-400/25 blur-3xl" />
-            <div className="absolute inset-0 bg-[radial-gradient(rgb(255_255_255/0.07)_1px,transparent_1px)] bg-[size:22px_22px]" />
-          </div>
-        )}
-        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/25 to-transparent" />
-      </div>
+      {/* Keşfet kartındaki kapak ve logo buraya uçar (business-card.tsx Morph). */}
+      <Morph id={business.id} part="kapak">
+        <div className="relative mx-auto h-48 max-w-6xl overflow-hidden md:h-72 md:w-[calc(100%-2rem)] md:rounded-3xl">
+          {business.cover_url ? (
+            // Sayfanın en büyük öğesi: önceden yüklenir.
+            <Image src={business.cover_url} alt="" fill preload sizes="(min-width: 1152px) 1152px, 100vw" className="object-cover" />
+          ) : (
+            <div className="size-full bg-gradient-to-br from-brand-400 via-brand-600 to-brand-800">
+              <div className="absolute -left-24 -top-24 size-96 rounded-full bg-brand-400/25 blur-3xl" />
+              <div className="absolute inset-0 bg-[radial-gradient(rgb(255_255_255/0.07)_1px,transparent_1px)] bg-[size:22px_22px]" />
+            </div>
+          )}
+          <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/25 to-transparent" />
+        </div>
+      </Morph>
 
       {/* Kapağın üstüne binen başlık: konumlandırılmış kapağın altında kalmaması için z-10. */}
       <div className="relative z-10 mx-auto -mt-12 max-w-6xl px-4 md:px-8">
         {/* Logo kapağa biner; ad ve bilgiler kapağın altında kalır (açık zeminde okunur). */}
         <div className="flex items-start gap-4">
-          <div className="size-24 shrink-0 overflow-hidden rounded-3xl bg-gradient-to-br from-brand-300 to-brand-600 shadow-xl ring-4 ring-bg md:size-28">
-            {business.logo_url ? (
-              <Image src={business.logo_url} alt={business.name} width={112} height={112} loading="eager" className="size-full object-cover" />
-            ) : (
-              <span className="grid size-full place-items-center text-4xl font-bold text-brand-950">{business.name.charAt(0).toLocaleUpperCase("tr")}</span>
-            )}
-          </div>
+          <Morph id={business.id} part="logo">
+            <div className="size-24 shrink-0 overflow-hidden rounded-3xl bg-gradient-to-br from-brand-300 to-brand-600 shadow-xl ring-4 ring-bg md:size-28">
+              {business.logo_url ? (
+                <Image src={business.logo_url} alt={business.name} width={112} height={112} loading="eager" className="size-full object-cover" />
+              ) : (
+                <span className="grid size-full place-items-center text-4xl font-bold text-brand-950">{business.name.charAt(0).toLocaleUpperCase("tr")}</span>
+              )}
+            </div>
+          </Morph>
           <div className="min-w-0 pt-14 md:pt-16">
             <h1 className="text-balance text-2xl font-bold tracking-tight md:text-4xl">{business.name}</h1>
             <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-ink-3 md:text-base">
