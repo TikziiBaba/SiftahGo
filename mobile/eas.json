@@ -16,10 +16,12 @@
     "development": {
       "extends": "base",
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "channel": "development"
     },
     "preview": {
       "extends": "base",
+      "channel": "preview",
       "distribution": "internal",
       "autoIncrement": true,
       "android": {
@@ -28,6 +30,7 @@
     },
     "production": {
       "extends": "base",
+      "channel": "production",
       "autoIncrement": true
     }
   },

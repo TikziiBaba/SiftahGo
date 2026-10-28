@@ -146,6 +146,22 @@ APK GitHub Releases'ta yayınlanır; `NEXT_PUBLIC_ANDROID_APK_URL` her zaman en 
 gh release create v1.0.1 siftahgo.apk --title "SiftahGo 1.0.1" --notes "..."
 ```
 
+#### Uygulama içi güncelleme (EAS Update)
+
+Yalnızca JS/TS kodu ve görseller değiştiyse yeni APK gerekmez. Uygulama açılışta güncellemeyi indirir,
+bir sonraki açılışta uygular:
+
+```bash
+cd mobile
+npm run update -- "Randevu ekranındaki yazım hatası"              # preview kanalı (siteden indirilen APK)
+npm run update -- "Randevu ekranındaki yazım hatası" production   # Play Store / App Store derlemeleri
+```
+
+Betik `EXPO_PUBLIC_*` değerlerini `eas.json`'dan alır, `.env.local`'daki geliştirme adresleri güncellemeye girmez.
+Güncelleme yalnızca aynı `version`'a (`app.json`, `runtimeVersion: appVersion`) sahip derlemelere gider.
+Yerel kod değiştiyse (yeni yerel paket, `app.json`'da izin/ikon/eklenti, SDK yükseltmesi) `version`'ı artırıp
+yeni APK derleyin; ilk güncellemeleri alabilen sürüm 1.3.2'dir.
+
 ### 4. Yönetim paneli
 
 `/admin`: platform özeti, işletme başvuruları (onay/ret), işletmeler (paket tanımlama/süre uzatma, aboneliği bitirme,
