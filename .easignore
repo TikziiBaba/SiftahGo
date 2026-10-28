@@ -1,0 +1,31 @@
+# EAS derlemesine yalnızca mobile/ gider (dosya varken .gitignore'lar okunmaz).
+/*
+!/mobile
+
+# mobile/.gitignore'dan
+node_modules/
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+.metro-health-check*
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.DS_Store
+*.pem
+.env*
+!.env.example
+*.tsbuildinfo
+example
+ios/
+android/
+# Firebase istemci dosyası: EAS'ta GOOGLE_SERVICES_JSON dosya değişkeni olarak durur
+google-services.json
