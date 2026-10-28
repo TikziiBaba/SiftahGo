@@ -149,13 +149,19 @@ gh release create v1.0.1 siftahgo.apk --title "SiftahGo 1.0.1" --notes "..."
 #### Uygulama içi güncelleme (EAS Update)
 
 Yalnızca JS/TS kodu ve görseller değiştiyse yeni APK gerekmez. Uygulama açılışta güncellemeyi indirir,
-bir sonraki açılışta uygular:
+bir sonraki açılışta uygular ve "Uygulama güncellendi" penceresinde yenilikleri bir kez gösterir.
+
+Önce `mobile/src/lib/changelog.json`'a bir önceki kaydın `id`'sinden büyük `id` ile yeni kayıt ekleyin
+(`items`: kullanıcının okuyacağı maddeler). Güncelleme mesajı da bu kayıttan alınır:
 
 ```bash
 cd mobile
-npm run update -- "Randevu ekranındaki yazım hatası"              # preview kanalı (siteden indirilen APK)
-npm run update -- "Randevu ekranındaki yazım hatası" production   # Play Store / App Store derlemeleri
+npm run update                # preview kanalı (siteden indirilen APK)
+npm run update -- production  # Play Store / App Store derlemeleri
 ```
+
+Yeni APK'yı ilk kez açan kullanıcıya liste gösterilmez (yenilikler sürüm notunda); yalnızca uygulama içi
+güncellemeden sonra çıkar.
 
 Betik `EXPO_PUBLIC_*` değerlerini `eas.json`'dan alır, `.env.local`'daki geliştirme adresleri güncellemeye girmez.
 Güncelleme yalnızca aynı `version`'a (`app.json`, `runtimeVersion: appVersion`) sahip derlemelere gider.

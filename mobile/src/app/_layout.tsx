@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 
 import { ToastProvider } from '@/components/toast';
+import { WhatsNew } from '@/components/whats-new';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { installErrorHandler } from '@/lib/error-log';
 import { InboxProvider } from '@/lib/inbox';
@@ -74,59 +75,62 @@ function RootStack({ fontsReady }: { fontsReady: boolean }) {
   const needsSetup = isBusiness && !approved;
 
   return (
-    <Stack
-      screenOptions={{
-        headerStyle: { backgroundColor: colors.bg },
-        headerTintColor: colors.ink,
-        headerTitleStyle: { fontFamily: type.heading.fontFamily, fontSize: type.heading.fontSize },
-        headerShadowVisible: false,
-        headerBackButtonDisplayMode: 'minimal',
-        contentStyle: { backgroundColor: colors.bg },
-      }}>
-      {/* Giriş zorunlu: oturum yokken yalnızca tanıtım (ilk açılışta bir kez) ve giriş ekranları açılır.
-          Koruma değişince ilk uygun ekrana geçilir, bu yüzden sıra önemli. */}
-      <Stack.Protected guard={!session}>
-        <Stack.Protected guard={!introSeen}>
-          <Stack.Screen name="tanitim" options={{ headerShown: false, animation: 'fade' }} />
-        </Stack.Protected>
-        <Stack.Screen name="giris" options={{ headerShown: false, animation: 'fade' }} />
-        <Stack.Screen name="kayit" options={{ headerShown: false, animation: 'fade' }} />
-        <Stack.Screen name="sifremi-unuttum" options={{ headerShown: false }} />
-      </Stack.Protected>
-
-      <Stack.Protected guard={!!session}>
-        <Stack.Protected guard={needsSetup}>
-          <Stack.Screen name="kurulum" options={{ headerShown: false }} />
-        </Stack.Protected>
-        <Stack.Protected guard={!needsSetup}>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+    <>
+      <WhatsNew />
+      <Stack
+        screenOptions={{
+          headerStyle: { backgroundColor: colors.bg },
+          headerTintColor: colors.ink,
+          headerTitleStyle: { fontFamily: type.heading.fontFamily, fontSize: type.heading.fontSize },
+          headerShadowVisible: false,
+          headerBackButtonDisplayMode: 'minimal',
+          contentStyle: { backgroundColor: colors.bg },
+        }}>
+        {/* Giriş zorunlu: oturum yokken yalnızca tanıtım (ilk açılışta bir kez) ve giriş ekranları açılır.
+            Koruma değişince ilk uygun ekrana geçilir, bu yüzden sıra önemli. */}
+        <Stack.Protected guard={!session}>
+          <Stack.Protected guard={!introSeen}>
+            <Stack.Screen name="tanitim" options={{ headerShown: false, animation: 'fade' }} />
+          </Stack.Protected>
+          <Stack.Screen name="giris" options={{ headerShown: false, animation: 'fade' }} />
+          <Stack.Screen name="kayit" options={{ headerShown: false, animation: 'fade' }} />
+          <Stack.Screen name="sifremi-unuttum" options={{ headerShown: false }} />
         </Stack.Protected>
 
-        <Stack.Screen name="isletme/[slug]/index" options={{ headerShown: false }} />
-        <Stack.Screen name="isletme/[slug]/randevu" options={{ title: 'Randevu' }} />
-        <Stack.Screen name="profil" options={{ title: 'Profil' }} />
-        <Stack.Screen name="bildirimler" options={{ title: 'Bildirimler' }} />
-        <Stack.Screen name="randevularim" options={{ title: 'Randevularım' }} />
-      </Stack.Protected>
+        <Stack.Protected guard={!!session}>
+          <Stack.Protected guard={needsSetup}>
+            <Stack.Screen name="kurulum" options={{ headerShown: false }} />
+          </Stack.Protected>
+          <Stack.Protected guard={!needsSetup}>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          </Stack.Protected>
 
-      <Stack.Protected guard={isBusiness && approved}>
-        <Stack.Screen name="randevu-ekle" options={{ title: 'Randevu ekle', presentation: 'modal' }} />
-        <Stack.Screen name="yonetim/hizmetler/index" options={{ title: 'Hizmetler' }} />
-        <Stack.Screen name="yonetim/hizmetler/[id]" options={{ title: 'Hizmet', presentation: 'modal' }} />
-        <Stack.Screen name="yonetim/personel/index" options={{ title: 'Personel' }} />
-        <Stack.Screen name="yonetim/personel/[id]" options={{ title: 'Personel', presentation: 'modal' }} />
-        <Stack.Screen name="yonetim/saatler" options={{ title: 'Çalışma saatleri' }} />
-        <Stack.Screen name="yonetim/izin" options={{ title: 'İzin ekle', presentation: 'modal' }} />
-        <Stack.Screen name="yonetim/bilgiler" options={{ title: 'İşletme bilgileri' }} />
-        <Stack.Screen name="yonetim/kurallar" options={{ title: 'Randevu kuralları' }} />
-        <Stack.Screen name="yonetim/gorseller" options={{ title: 'Görseller' }} />
-        <Stack.Screen name="yonetim/sayfa" options={{ title: 'Sayfa tasarımı' }} />
-        <Stack.Screen name="yonetim/qr" options={{ title: 'QR kod ve bağlantı' }} />
-        <Stack.Screen name="yonetim/raporlar" options={{ title: 'Raporlar' }} />
-        <Stack.Screen name="yonetim/yorumlar" options={{ title: 'Yorumlar' }} />
-        <Stack.Screen name="yonetim/engellenenler" options={{ title: 'Engellenen müşteriler' }} />
-        <Stack.Screen name="yonetim/abonelik" options={{ title: 'Abonelik' }} />
-      </Stack.Protected>
-    </Stack>
+          <Stack.Screen name="isletme/[slug]/index" options={{ headerShown: false }} />
+          <Stack.Screen name="isletme/[slug]/randevu" options={{ title: 'Randevu' }} />
+          <Stack.Screen name="profil" options={{ title: 'Profil' }} />
+          <Stack.Screen name="bildirimler" options={{ title: 'Bildirimler' }} />
+          <Stack.Screen name="randevularim" options={{ title: 'Randevularım' }} />
+        </Stack.Protected>
+
+        <Stack.Protected guard={isBusiness && approved}>
+          <Stack.Screen name="randevu-ekle" options={{ title: 'Randevu ekle', presentation: 'modal' }} />
+          <Stack.Screen name="yonetim/hizmetler/index" options={{ title: 'Hizmetler' }} />
+          <Stack.Screen name="yonetim/hizmetler/[id]" options={{ title: 'Hizmet', presentation: 'modal' }} />
+          <Stack.Screen name="yonetim/personel/index" options={{ title: 'Personel' }} />
+          <Stack.Screen name="yonetim/personel/[id]" options={{ title: 'Personel', presentation: 'modal' }} />
+          <Stack.Screen name="yonetim/saatler" options={{ title: 'Çalışma saatleri' }} />
+          <Stack.Screen name="yonetim/izin" options={{ title: 'İzin ekle', presentation: 'modal' }} />
+          <Stack.Screen name="yonetim/bilgiler" options={{ title: 'İşletme bilgileri' }} />
+          <Stack.Screen name="yonetim/kurallar" options={{ title: 'Randevu kuralları' }} />
+          <Stack.Screen name="yonetim/gorseller" options={{ title: 'Görseller' }} />
+          <Stack.Screen name="yonetim/sayfa" options={{ title: 'Sayfa tasarımı' }} />
+          <Stack.Screen name="yonetim/qr" options={{ title: 'QR kod ve bağlantı' }} />
+          <Stack.Screen name="yonetim/raporlar" options={{ title: 'Raporlar' }} />
+          <Stack.Screen name="yonetim/yorumlar" options={{ title: 'Yorumlar' }} />
+          <Stack.Screen name="yonetim/engellenenler" options={{ title: 'Engellenen müşteriler' }} />
+          <Stack.Screen name="yonetim/abonelik" options={{ title: 'Abonelik' }} />
+        </Stack.Protected>
+      </Stack>
+    </>
   );
 }
