@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { AppointmentStatus } from "./types";
+import type { AppointmentStatus, SuspensionReason } from "./types";
 
 export const SITE_NAME = "SiftahGo";
 export const SITE_URL = (process.env.NEXT_PUBLIC_APP_URL || "https://siftahgo.com").replace(/\/$/, "");
@@ -59,6 +59,15 @@ export const CANCEL_REASONS = [
   "Bu hizmeti şu an veremiyoruz",
   "Lütfen randevu için bizi arayın",
 ];
+
+// Askı sebepleri (business_suspensions.reason). Mobildekiyle aynı.
+export const SUSPENSION_REASONS: Record<SuspensionReason, string> = {
+  kural_ihlali: "Kural ihlali",
+  odeme: "Ödeme sorunu",
+  sikayet: "Müşteri şikâyeti",
+  sahip_talebi: "İşletme sahibinin talebi",
+  diger: "Diğer",
+};
 
 // Randevu onay modları (businesses.auto_confirm + auto_confirm_known_only). Sık iptal eden müşteri her modda onaya düşer.
 export const CONFIRM_MODES = [

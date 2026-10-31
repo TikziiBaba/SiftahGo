@@ -8,11 +8,12 @@ import { Logo } from '@/components/business-logo';
 import { TopBar, useScrollY } from '@/components/top-bar';
 import { Badge, Banner, Button, Card, Group, ListRow, ScreenHeader, SectionTitle, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
-import { isSubscribed, isTrial, SITE_DOMAIN, WEB_URL } from '@/lib/constants';
+import { isSubscribed, isTrial, SITE_DOMAIN, SUSPENSION_REASONS, WEB_URL } from '@/lib/constants';
+import { formatDate } from '@/lib/format';
 import { daysLeft, usePlan } from '@/lib/plan';
 import { supabase } from '@/lib/supabase';
 import { colors, radius } from '@/lib/theme';
-import type { Business } from '@/lib/types';
+import type { Business, BusinessSuspension } from '@/lib/types';
 
 export default function BusinessTab() {
   const { business } = useAuth();
@@ -23,6 +24,7 @@ function Hub({ business }: { business: Business }) {
   const plan = usePlan(business.plan_id);
   const { y, scroll } = useScrollY();
   const [counts, setCounts] = useState<{ services: number; staff: number } | null>(null);
+  const [suspension, setSuspension] = useState<BusinessSuspension | null>(null);
   const subscribed = isSubscribed(business);
   const left = daysLeft(business.subscription_ends_at);
   const trial = isTrial(business);
@@ -36,7 +38,16 @@ function Hub({ business }: { business: Business }) {
         supabase.from('services').select('id', { count: 'exact', head: true }).eq('business_id', business.id),
         supabase.from('staff').select('id', { count: 'exact', head: true }).eq('business_id', business.id).eq('is_active', true),
       ]).then(([s, st]) => setCounts({ services: s.count ?? 0, staff: st.count ?? 0 }));
-    }, [business.id]),
+      if (business.is_suspended) {
+        supabase
+          .from('business_suspensions')
+          .select('*')
+          .eq('business_id', business.id)
+          .is('lifted_at', null)
+          .maybeSingle()
+          .then(({ data }) => setSuspension(data as BusinessSuspension | null));
+      }
+    }, [business.id, business.is_suspended]),
   );
 
   const status = business.is_suspended
@@ -128,7 +139,19 @@ function Hub({ business }: { business: Business }) {
         )}
 
         {business.is_suspended ? (
-          <Banner tone="danger" icon="alert-circle-outline" text="İşletmeniz yönetici tarafından yayından kaldırıldı. Bilgi için bizimle iletişime geçin." />
+          <Banner
+            tone="danger"
+            icon="alert-circle-outline"
+            title={suspension ? `Askıda: ${SUSPENSION_REASONS[suspension.reason]}` : 'İşletmeniz askıda'}
+            text={[
+              suspension?.note,
+              suspension?.until && `Askı ${formatDate(suspension.until, false)} tarihinde kalkar.`,
+              suspension?.pause_subscription && 'Askıda geçen süre aboneliğinize eklenir.',
+              'Sayfanız görünmüyor, randevu alınamıyor. Bilgi için bizimle iletişime geçin.',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+          />
         ) : !subscribed ? (
           <Banner
             tone="warning"
@@ -196,6 +219,7 @@ function Hub({ business }: { business: Business }) {
             subtitle={trial ? `Ücretsiz deneme · ${left} gün kaldı` : subscribed ? `${plan?.name ?? 'Paket'} · ${left} gün kaldı` : 'Paket seçin'}
             onPress={() => router.push('/yonetim/abonelik')}
           />
+          <ListRow icon="snow-outline" title="Dondurma talebi" subtitle="Bir süre hizmet veremeyecekseniz" onPress={() => router.push('/yonetim/dondurma')} />
         </Group>
       </ScrollView>
       <TopBar y={y} title="İşletmem" />

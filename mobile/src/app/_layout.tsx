@@ -129,6 +129,7 @@ function RootStack({ fontsReady }: { fontsReady: boolean }) {
           <Stack.Screen name="yonetim/yorumlar" options={{ title: 'Yorumlar' }} />
           <Stack.Screen name="yonetim/engellenenler" options={{ title: 'Engellenen müşteriler' }} />
           <Stack.Screen name="yonetim/abonelik" options={{ title: 'Abonelik' }} />
+          <Stack.Screen name="yonetim/dondurma" options={{ title: 'Dondurma talebi' }} />
         </Stack.Protected>
       </Stack>
     </>

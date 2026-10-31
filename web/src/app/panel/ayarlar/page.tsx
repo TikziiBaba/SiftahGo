@@ -6,6 +6,7 @@ import { BlockedCustomers } from "@/components/blocked-customers";
 import { BusinessLocation } from "@/components/business-location";
 import { DropZone } from "@/components/drop-zone";
 import { DynamicButton } from "@/components/dynamic-button";
+import { FreezeRequestSection } from "@/components/freeze-request";
 import { ImageButton } from "@/components/image-button";
 import { PageAppearance } from "@/components/page-appearance";
 import { useBusiness } from "@/components/panel-context";
@@ -272,6 +273,8 @@ export default function SettingsPage() {
       {"latitude" in business && <BusinessLocation />}
 
       <BlockedCustomers businessId={business.id} />
+
+      <FreezeRequestSection businessId={business.id} suspended={business.is_suspended} />
     </div>
   );
 }

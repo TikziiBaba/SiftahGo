@@ -5,7 +5,6 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
-  Ban,
   CalendarPlus,
   CircleSlash,
   ExternalLink,
@@ -14,10 +13,10 @@ import {
   MessageCircle,
   Pencil,
   Phone,
-  PlayCircle,
   Star,
 } from "lucide-react";
 import { BusinessEdit } from "@/components/admin/business-edit";
+import { SuspensionHistory, SuspensionPanel } from "@/components/admin/suspension";
 import { HoldButton } from "@/components/hold-button";
 import {
   businessState,
@@ -38,7 +37,7 @@ import { categoryLabel, confirmMode, STATUS } from "@/lib/constants";
 import { addDays, dayOf, errorMessage, formatDate, formatDuration, formatPrice, intlPhone, isoWeekday, todayStr } from "@/lib/format";
 import type { AppointmentStatus } from "@/lib/types";
 import type { AdminUser } from "@/lib/admin-types";
-import type { Appointment, Business, Payment, Plan, Review, Service, Staff } from "@/lib/types";
+import type { Appointment, Business, BusinessSuspension, FreezeRequest, Payment, Plan, Review, Service, Staff } from "@/lib/types";
 
 type Data = {
   business: Business & { created_at: string };
@@ -49,6 +48,9 @@ type Data = {
   appointments: Appointment[];
   payments: Payment[];
   reviews: Review[];
+  suspensions: BusinessSuspension[];
+  freezeRequest: FreezeRequest | null;
+  adminNames: Map<string, string>;
   now: number;
 };
 
@@ -62,7 +64,7 @@ export default function AdminBusinessDetail() {
 
   const load = useCallback(async () => {
     const supabase = createClient();
-    const [b, p, st, sv, a, pay, r] = await Promise.all([
+    const [b, p, st, sv, a, pay, r, sus, fr] = await Promise.all([
       supabase.from("businesses").select("*").eq("id", id).maybeSingle(),
       supabase.from("plans").select("*").order("sort_order"),
       supabase.from("staff").select("*").eq("business_id", id).order("sort_order").order("created_at"),
@@ -70,9 +72,14 @@ export default function AdminBusinessDetail() {
       supabase.from("appointments").select("*").eq("business_id", id).order("starts_at", { ascending: false }).limit(2000),
       supabase.from("payments").select("*").eq("business_id", id).order("created_at", { ascending: false }),
       supabase.from("reviews").select("*").eq("business_id", id).order("created_at", { ascending: false }).limit(50),
+      supabase.from("business_suspensions").select("*").eq("business_id", id).order("created_at", { ascending: false }),
+      supabase.from("freeze_requests").select("*").eq("business_id", id).eq("status", "pending").maybeSingle(),
     ]);
     if (b.error) return setError(errorMessage(b.error));
     if (!b.data) return setData(null);
+    const suspensions = (sus.data ?? []) as BusinessSuspension[];
+    const adminIds = [...new Set(suspensions.flatMap((s) => [s.created_by, s.lifted_by]).filter((x): x is string => !!x))];
+    const names = adminIds.length ? await supabase.from("profiles").select("id, full_name").in("id", adminIds) : { data: [] };
     // Sahip tek kullanıcı olarak istenir; yeni imza (p_id) canlıda yoksa tüm liste çekilir.
     let u = await supabase.rpc("admin_users", { p_id: b.data.owner_id });
     if (u.error) u = await supabase.rpc("admin_users");
@@ -85,6 +92,9 @@ export default function AdminBusinessDetail() {
       appointments: (a.data ?? []) as Appointment[],
       payments: (pay.data ?? []) as Payment[],
       reviews: (r.data ?? []) as Review[],
+      suspensions,
+      freezeRequest: (fr.data as FreezeRequest | null) ?? null,
+      adminNames: new Map((names.data ?? []).map((x) => [x.id as string, x.full_name as string])),
       now: Date.now(),
     });
   }, [id]);
@@ -208,6 +218,8 @@ export default function AdminBusinessDetail() {
               <Info label="Sahibin ayarı">{b.is_published ? "Yayında" : "Gizli"}</Info>
             </dl>
           </Section>
+
+          <SuspensionHistory rows={data.suspensions} names={data.adminNames} />
 
           <Section title="Bilgiler">
             <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
@@ -350,7 +362,7 @@ export default function AdminBusinessDetail() {
 
         <div className="space-y-4">
           {b.approval_status === "approved" ? (
-            <Actions data={data} onDone={load} />
+            <Actions data={data} upcoming={stats.upcoming} onDone={load} />
           ) : (
             <Section title="Başvuru" className="ring-1 ring-gold/20">
               <p className="mt-2 text-sm text-ink-3">
@@ -396,7 +408,7 @@ export default function AdminBusinessDetail() {
   );
 }
 
-function Actions({ data, onDone }: { data: Data; onDone: () => Promise<void> }) {
+function Actions({ data, upcoming, onDone }: { data: Data; upcoming: number; onDone: () => Promise<void> }) {
   const { business: b, plans } = data;
   const [planId, setPlanId] = useState(b.plan_id ?? plans[0]?.id ?? "");
   const [days, setDays] = useState(30);
@@ -427,12 +439,6 @@ function Actions({ data, onDone }: { data: Data; onDone: () => Promise<void> }) 
       `${plans.find((p) => p.id === planId)?.name} paketi ${days} gün tanımlandı.`,
     );
   const end = () => run("end", () => supabase.rpc("admin_end_subscription", { p_business_id: b.id }), "Abonelik bitirildi.");
-  const suspend = () =>
-    run(
-      "suspend",
-      () => supabase.rpc("admin_set_suspended", { p_business_id: b.id, p_suspended: !b.is_suspended }),
-      b.is_suspended ? "Askıdan çıkarıldı." : "İşletme askıya alındı.",
-    );
 
   return (
     <Section title="Yönetici işlemleri" className="ring-1 ring-gold/20">
@@ -491,19 +497,13 @@ function Actions({ data, onDone }: { data: Data; onDone: () => Promise<void> }) 
             <CircleSlash className="size-4 text-amber-300" /> Aboneliği şimdi bitir
           </HoldButton>
         )}
-        <HoldButton
-          pending={b.is_suspended ? "Askıdan çıkarılıyor" : "Askıya alınıyor"}
-          disabled={!!busy}
-          onConfirm={suspend}
-          className={`btn w-full justify-start ${b.is_suspended ? "btn-secondary" : "bg-rose-500/10 text-bad ring-1 ring-rose-400/20 hover:bg-rose-500/20"}`}
-        >
-          {b.is_suspended ? <PlayCircle className="size-4 text-emerald-300" /> : <Ban className="size-4" />}
-          {b.is_suspended ? "Askıdan çıkar (yayına aç)" : "Askıya al (yayından kaldır)"}
-        </HoldButton>
-        <p className="text-xs text-ink-3">
-          Onaylamak için basılı tutun. Abonelik bitince ya da askıda sayfa yayından düşer ve randevu almaz; askıyı sahibi
-          kaldıramaz.
-        </p>
+        <SuspensionPanel
+          business={b}
+          upcoming={upcoming}
+          current={data.suspensions.find((s) => !s.lifted_at) ?? null}
+          request={data.freezeRequest}
+          onDone={onDone}
+        />
       </div>
     </Section>
   );

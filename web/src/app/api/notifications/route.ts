@@ -18,6 +18,9 @@ export async function GET(request: Request) {
   const supabase = createAdminClient();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
 
+  const { error: liftError } = await supabase.rpc("lift_due_suspensions");
+  if (liftError) console.error("Süresi dolan askılar kaldırılamadı", liftError.message);
+
   const { data: reminders, error: queueError } = await supabase.rpc("queue_due_reminders");
   if (queueError) console.error("Hatırlatmalar kuyruğa eklenemedi", queueError.message);
   const { data: reviewRequests, error: reviewError } = await supabase.rpc("queue_review_requests");

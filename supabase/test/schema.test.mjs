@@ -1014,5 +1014,102 @@ await expectError(() => as(X, `select * from create_payment('baslangic')`), /Ço
 await db.query(`delete from businesses where id = $1`, [bizX]);
 await db.query(`delete from auth.users where id = $1`, [X]);
 
+// --- Detaylı askı ve dondurma talebi
+const suspBiz = async () => (await db.query(`select is_suspended, subscription_ends_at, trial_ends_at from businesses where id = $1`, [biz])).rows[0];
+const suspDay = new Date(Date.now() + 40 * 864e5);
+const suspAt = async (hour) => (await db.query(
+  `insert into appointments (business_id, service_id, staff_id, customer_id, customer_email, service_name, customer_name, customer_phone, starts_at, ends_at, status)
+   values ($1, $2, $3, $4, 'c@x.com', 'Saç', 'Cem', '05551112233', $5, $5::timestamptz + interval '30 minutes', 'confirmed') returning id`,
+  [biz, svc30, staff[0].id, C, new Date(suspDay.getTime() + hour * 36e5).toISOString()])).rows[0].id;
+const a1 = await suspAt(0);
+const a2 = await suspAt(2);
+await db.query(`update waitlist set notify_status = null where business_id = $1`, [biz]);
+await db.query(`insert into waitlist (business_id, customer_id, day) values ($1, $2, $3) on conflict do nothing`, [biz, G, suspDay.toISOString().slice(0, 10)]);
+
+for (const [uid, label] of [[A, 'işletme sahibi'], [C, 'müşteri'], [null, 'girişsiz']]) {
+  await expectError(() => as(uid, `select admin_suspend_business($1, 'diger')`, [biz]), /Yetkiniz yok/, `${label} askıya alamaz`);
+  await expectError(() => as(uid, `select admin_lift_suspension($1)`, [biz]), /Yetkiniz yok/, `${label} askıyı kaldıramaz`);
+  await expectError(() => as(uid, `select admin_reject_freeze_request(gen_random_uuid(), 'Olmaz')`), /Yetkiniz yok/, `${label} talep reddedemez`);
+}
+await expectError(() => as(A, `select lift_due_suspensions()`), /permission denied/, 'zamanlanmış askı kaldırma istemciye kapalı');
+await expectError(() => as(A, `select lift_suspension($1, null)`, [biz]), /permission denied/, 'iç askı kaldırma istemciye kapalı');
+await expectError(() => as(ADM, `select admin_suspend_business($1, 'yok')`, [biz]), /sebebini/, 'geçersiz sebep reddedildi');
+await expectError(() => as(ADM, `select admin_suspend_business($1, 'diger', '', now() - interval '1 hour')`, [biz]), /ileride/, 'geçmiş bitiş tarihi reddedildi');
+
+// Dondurma talebi: sahibi açar, başkası göremez, sahibi kendini askıya alamaz.
+await expectError(() => as(C, `select request_freeze('Tatil', current_date, current_date + 3)`), /onaylı bir işletmeniz/, 'işletmesi olmayan talep açamaz');
+await expectError(() => as(A, `select request_freeze('x', current_date, current_date + 3)`), /3 ile 500/, 'sebepsiz talep reddedildi');
+await expectError(() => as(A, `select request_freeze('Tadilat var', current_date + 3, current_date)`), /tarih aralığı/, 'ters tarih aralığı reddedildi');
+await expectError(() => as(A, `select request_freeze('Tadilat var', current_date - 3, current_date)`), /tarih aralığı/, 'geçmiş tarihli talep reddedildi');
+const req = (await as(A, `select request_freeze('Tadilat var', current_date, current_date + 7) id`)).rows[0].id;
+await expectError(() => as(A, `select request_freeze('Tadilat var', current_date, current_date + 7)`), /Açık bir talebiniz/, 'ikinci açık talep reddedildi');
+ok((await as(A, `select id from freeze_requests`)).rows.length === 1 && (await as(C, `select id from freeze_requests`)).rows.length === 0
+  && (await as(null, `select id from freeze_requests`)).rows.length === 0 && (await as(ADM, `select id from freeze_requests`)).rows.length === 1,
+  'talebi yalnızca sahibi ve yönetici görür');
+await expectError(() => as(A, `insert into freeze_requests (business_id, reason, starts_on, ends_on, status) values ($1, 'Kendim onaylarım', current_date, current_date, 'approved')`, [biz]),
+  /row-level security/, 'talep tablosuna doğrudan yazılamaz');
+ok((await as(A, `update freeze_requests set status = 'approved' returning id`)).rows.length === 0, 'sahibi talebini kendisi onaylayamaz');
+await as(ADM, `select admin_reject_freeze_request($1, 'Yoğun dönem, sonra tekrar yazın')`, [req]);
+const rejReq = (await as(A, `select status, admin_note from freeze_requests where id = $1`, [req])).rows[0];
+ok(rejReq.status === 'rejected' && rejReq.admin_note.startsWith('Yoğun'), 'reddedilen talebin sebebini sahibi görür');
+await expectError(() => as(ADM, `select admin_reject_freeze_request($1, 'Tekrar')`, [req]), /açık değil/, 'kapanmış talep yeniden reddedilemez');
+
+// Talep uygulanır, randevular iptal edilir: müşteriye haber gider, bekleme listesine gitmez.
+const req2 = (await as(A, `select request_freeze('Tadilat var', current_date, current_date + 7) id`)).rows[0].id;
+await db.query(`delete from notifications where appointment_id = any($1)`, [[a1, a2]]);
+const beforeSusp = await suspBiz();
+const cancelled = (await as(ADM, `select admin_suspend_business($1, 'sahip_talebi', ' Tadilat ', now() + interval '7 days', true, $2) n`, [biz, req2])).rows[0].n;
+ok(cancelled >= 2 && (await suspBiz()).is_suspended, `askıya alındı, ${cancelled} randevu iptal edildi`);
+ok((await as(null, `select id from businesses where id = $1`, [biz])).rows.length === 0, 'askıdaki işletme herkese kapalı');
+const appts = (await db.query(`select status, cancelled_by, cancel_reason from appointments where id = any($1)`, [[a1, a2]])).rows;
+ok(appts.every((x) => x.status === 'cancelled' && x.cancelled_by === 'business' && x.cancel_reason.length > 0), 'randevular işletme adına, açıklamayla iptal edildi');
+const suspNotes = (await db.query(`select recipient from notifications where appointment_id = $1 and kind = 'cancelled'`, [a1])).rows;
+ok(suspNotes.length === 1 && suspNotes[0].recipient === 'customer', 'yöneticinin iptal haberi müşteriye gider');
+ok((await db.query(`select notify_status from waitlist where business_id = $1 and customer_id = $2`, [biz, G])).rows[0].notify_status === null, 'askıda bekleme listesine haber gitmez');
+ok((await as(ADM, `select status from freeze_requests where id = $1`, [req2])).rows[0].status === 'approved', 'uygulanan talep onaylandı');
+await expectError(() => as(ADM, `select admin_suspend_business($1, 'diger')`, [biz]), /zaten askıda/, 'askıdaki işletme yeniden askıya alınamaz');
+await expectError(() => as(A, `select request_freeze('Tadilat var', current_date, current_date + 7)`), /zaten askıda/, 'askıdayken talep açılamaz');
+
+const open = (await as(A, `select reason, note, until, appointments_cancelled, lifted_at from business_suspensions where lifted_at is null`)).rows;
+ok(open.length === 1 && open[0].reason === 'sahip_talebi' && open[0].note === 'Tadilat' && open[0].until && open[0].appointments_cancelled === cancelled, 'sahibi askı sebebini ve süresini görür');
+ok((await as(C, `select id from business_suspensions`)).rows.length === 0 && (await as(null, `select id from business_suspensions`)).rows.length === 0, 'başkası askı geçmişini göremez');
+await expectError(() => as(A, `insert into business_suspensions (business_id, reason) values ($1, 'diger')`, [biz]), /row-level security/, 'askı tablosuna doğrudan yazılamaz');
+ok((await as(A, `update business_suspensions set until = now() returning id`)).rows.length === 0, 'sahibi askıyı kısaltamaz');
+
+// Süre dolunca kalkar; askıda geçen süre aboneliğe eklenir, deneme denemede kalır.
+await db.query(`update business_suspensions set created_at = now() - interval '3 days', until = now() - interval '1 minute' where business_id = $1 and lifted_at is null`, [biz]);
+ok((await db.query(`select lift_due_suspensions() n`)).rows[0].n === 1, 'süresi dolan askı kendiliğinden kalktı');
+const afterAuto = await suspBiz();
+const added = (afterAuto.subscription_ends_at - beforeSusp.subscription_ends_at) / 864e5;
+ok(!afterAuto.is_suspended && added > 2.99 && added < 3.01, `askıda geçen süre aboneliğe eklendi: ${added.toFixed(2)} gün`);
+const hist = (await as(ADM, `select lifted_at, lifted_by from business_suspensions where business_id = $1 and reason = 'sahip_talebi'`, [biz])).rows[0];
+ok(hist.lifted_at && hist.lifted_by === null, 'geçmişte kendiliğinden kalktığı görünür');
+ok((await db.query(`select lift_due_suspensions() n`)).rows[0].n === 0, 'kalkmış askı yeniden işlenmez');
+
+// Yönetici kaldırır; randevulara dokunmadan askı; bitirilen abonelik uzamaz.
+const a3 = await suspAt(4);
+ok((await as(ADM, `select admin_suspend_business($1, 'odeme') n`, [biz])).rows[0].n === 0
+  && (await db.query(`select status from appointments where id = $1`, [a3])).rows[0].status === 'confirmed', 'randevular kalsın seçilince dokunulmaz');
+await expectError(() => as(A, `select request_freeze('Tadilat', current_date, current_date)`), /zaten askıda/, 'askıdayken talep yok');
+await as(ADM, `select admin_lift_suspension($1)`, [biz]);
+const lifted = (await as(ADM, `select lifted_by from business_suspensions where business_id = $1 order by created_at desc limit 1`, [biz])).rows[0];
+ok(lifted.lifted_by === ADM && !(await suspBiz()).is_suspended, 'yönetici askıyı kaldırdı, kim kaldırdı kayıtlı');
+await expectError(() => as(ADM, `select admin_lift_suspension($1)`, [biz]), /askıda değil/, 'askıda olmayan işletme için kaldırma reddedildi');
+await as(ADM, `select admin_suspend_business($1, 'odeme')`, [biz]);
+await db.query(`update business_suspensions set created_at = now() - interval '3 days' where business_id = $1 and lifted_at is null`, [biz]);
+await as(ADM, `select admin_end_subscription($1)`, [biz]);
+await as(ADM, `select admin_lift_suspension($1)`, [biz]);
+ok((await suspBiz()).subscription_ends_at <= new Date(), 'yöneticinin bitirdiği abonelik askı kalkınca uzamaz');
+// Eski ekranın düğmesi çalışmaya devam eder ve geçmişe yazılır.
+const oldCount = (await as(ADM, `select count(*)::int c from business_suspensions where business_id = $1`, [biz])).rows[0].c;
+await as(ADM, `select admin_set_suspended($1, true)`, [biz]);
+await as(ADM, `select admin_set_suspended($1, true)`, [biz]);
+await as(ADM, `select admin_set_suspended($1, false)`, [biz]);
+ok((await as(ADM, `select count(*)::int c from business_suspensions where business_id = $1`, [biz])).rows[0].c === oldCount + 1 && !(await suspBiz()).is_suspended, 'eski askı düğmesi geçmişe yazar');
+
+// Sahip işletmesini (randevu ve ödeme kayıtlarıyla) kalıcı silemez.
+ok((await as(A, `delete from businesses where id = $1 returning id`, [biz])).rows.length === 0
+  && (await db.query(`select id from businesses where id = $1`, [biz])).rows.length === 1, 'işletme sahibi işletmesini API\'den silemez');
+
 console.log(failures ? `\n${failures} TEST BAŞARISIZ` : '\nTÜM TESTLER GEÇTİ');
 process.exit(failures ? 1 : 0);

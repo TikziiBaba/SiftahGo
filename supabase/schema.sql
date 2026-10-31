@@ -17,6 +17,8 @@ drop table if exists
   public.favorites,
   public.customer_notes,
   public.staff_hours,
+  public.freeze_requests,
+  public.business_suspensions,
   public.appointment_reminders,
   public.blocked_customers,
   public.phone_verifications,
@@ -65,7 +67,8 @@ begin
         'use_package_session', 'available_today', 'nearby_businesses', 'apply_referral', 'my_referrals',
         'log_error', 'protect_appointment_columns', 'admin_dashboard', 'admin_activity', 'delete_my_account',
         'admin_review_business', 'needs_confirmation', 'customer_card', 'is_upload_url', 'is_upload_urls',
-        'protect_profile_columns'
+        'protect_profile_columns', 'admin_suspend_business', 'admin_lift_suspension', 'lift_suspension',
+        'lift_due_suspensions', 'request_freeze', 'admin_reject_freeze_request'
       )
   loop
     execute 'drop function if exists ' || r.sig || ' cascade';
@@ -498,6 +501,44 @@ create table public.waitlist (
   unique (business_id, customer_id, day)
 );
 create index waitlist_pending_idx on public.waitlist (created_at) where notify_status = 'pending';
+
+-- Askı geçmişi (admin_suspend_business yazar). lifted_at boşsa askı sürüyor; lifted_at dolu, lifted_by boşsa süre
+-- dolunca kendiliğinden kalktı (lift_due_suspensions). Sahip kendi işletmesininkini görür, not dahil.
+create table public.business_suspensions (
+  id                     uuid primary key default gen_random_uuid(),
+  business_id            uuid not null references public.businesses (id) on delete cascade,
+  reason                 text not null check (reason in ('kural_ihlali', 'odeme', 'sikayet', 'sahip_talebi', 'diger')),
+  note                   text not null default '' check (length(note) <= 500),
+  until                  timestamptz,
+  appointments_cancelled int not null default 0,
+  -- Askıda geçen süre kalkınca aboneliğe eklenir. Askıya alınırken abonelik sürmüyorsa ya da yönetici aboneliği
+  -- bitirdiyse (admin_end_subscription) false.
+  pause_subscription     boolean not null default false,
+  created_by             uuid references public.profiles (id) on delete set null,
+  created_at             timestamptz not null default now(),
+  lifted_at              timestamptz,
+  lifted_by              uuid references public.profiles (id) on delete set null
+);
+create unique index business_suspensions_open_idx on public.business_suspensions (business_id) where lifted_at is null;
+create index business_suspensions_business_idx on public.business_suspensions (business_id, created_at desc);
+
+-- İşletme sahibinin dondurma talebi (request_freeze yazar). Sahip askıya alamaz; yönetici talebi uygular
+-- (admin_suspend_business, p_request_id) ya da gerekçeyle reddeder.
+create table public.freeze_requests (
+  id          uuid primary key default gen_random_uuid(),
+  business_id uuid not null references public.businesses (id) on delete cascade,
+  reason      text not null check (length(trim(reason)) between 3 and 500),
+  starts_on   date not null,
+  ends_on     date not null,
+  status      text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
+  admin_note  text not null default '' check (length(admin_note) <= 500),
+  reviewed_at timestamptz,
+  reviewed_by uuid references public.profiles (id) on delete set null,
+  created_at  timestamptz not null default now(),
+  check (ends_on >= starts_on)
+);
+create unique index freeze_requests_pending_idx on public.freeze_requests (business_id) where status = 'pending';
+create index freeze_requests_business_idx on public.freeze_requests (business_id, created_at desc);
 
 -- ---------------------------------------------------------------------
 -- 2) Yardımcı fonksiyonlar ve tetikleyiciler
@@ -1577,8 +1618,8 @@ begin
     v_to := case when v_by_owner then 'customer' else 'both' end;
   elsif old.status in ('pending', 'confirmed') and new.status = 'cancelled' then
     v_kind := 'cancelled';
-    -- İptal edene değil, karşı tarafa haber verilir.
-    v_to := case when v_by_owner then 'customer' else 'business' end;
+    -- İptal edene değil, karşı tarafa haber verilir. Yöneticinin iptali de işletme adına sayılır (askı).
+    v_to := case when v_by_owner or new.cancelled_by = 'business' then 'customer' else 'business' end;
   elsif old.status in ('pending', 'confirmed') and new.status in ('pending', 'confirmed')
         and new.starts_at <> old.starts_at then
     v_kind := 'rescheduled';
@@ -1919,6 +1960,49 @@ revoke execute on function public.finish_push(uuid, text) from public, anon, aut
 revoke execute on function public.drop_push_tokens(text[]) from public, anon, authenticated;
 revoke execute on function public.finish_notification(uuid, text) from public, anon, authenticated;
 
+-- Süre dolmuş askıyı kaldırmak ve askıda geçen süreyi aboneliğe eklemek yalnızca aşağıdaki işlemlerin işi.
+create function public.lift_suspension(p_business_id uuid, p_by uuid)
+returns void
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  s public.business_suspensions;
+begin
+  update public.business_suspensions set lifted_at = now(), lifted_by = p_by
+  where business_id = p_business_id and lifted_at is null
+  returning * into s;
+  update public.businesses b
+  set is_suspended = false,
+      subscription_ends_at = case when s.pause_subscription then b.subscription_ends_at + (now() - s.created_at) else b.subscription_ends_at end,
+      -- Denemedeki işletme denemede kalsın (subscription_ends_at = trial_ends_at).
+      trial_ends_at = case when s.pause_subscription and b.subscription_ends_at = b.trial_ends_at
+                           then b.trial_ends_at + (now() - s.created_at) else b.trial_ends_at end
+  where b.id = p_business_id;
+end;
+$$;
+
+-- Zamanlanmış görev (/api/notifications) dakikada bir çağırır.
+create function public.lift_due_suspensions()
+returns int
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  v_id uuid;
+  v_n  int := 0;
+begin
+  for v_id in
+    select business_id from public.business_suspensions where lifted_at is null and until <= now()
+  loop
+    perform public.lift_suspension(v_id, null);
+    v_n := v_n + 1;
+  end loop;
+  return v_n;
+end;
+$$;
+
+revoke execute on function public.lift_suspension(uuid, uuid) from public, anon, authenticated;
+revoke execute on function public.lift_due_suspensions() from public, anon, authenticated;
+
 -- ---------------------------------------------------------------------
 -- Yönetici (admin) işlemleri. Her fonksiyon önce is_admin() kontrol eder.
 -- ---------------------------------------------------------------------
@@ -1969,18 +2053,138 @@ begin
   if not public.is_admin() then raise exception 'Yetkiniz yok.'; end if;
   update public.businesses set subscription_ends_at = now()
   where id = p_business_id and subscription_ends_at > now();
+  -- Bitirilen abonelik askı kalkınca geri uzamasın.
+  update public.business_suspensions set pause_subscription = false
+  where business_id = p_business_id and lifted_at is null;
 end;
 $$;
 
--- İşletmeyi askıya alır / askıdan çıkarır. Askıdaki işletme görünmez ve randevu almaz.
-create function public.admin_set_suspended(p_business_id uuid, p_suspended boolean)
+-- İşletmeyi sebebiyle askıya alır. Askıdaki işletme görünmez ve randevu almaz; p_until gelince askı kendiliğinden
+-- kalkar. p_cancel_appointments: yaklaşan randevular iptal edilir, müşteriye haber gider. p_request_id: uygulanan
+-- dondurma talebi. İptal edilen randevu sayısını döner.
+create function public.admin_suspend_business(
+  p_business_id         uuid,
+  p_reason              text,
+  p_note                text default '',
+  p_until               timestamptz default null,
+  p_cancel_appointments boolean default false,
+  p_request_id          uuid default null
+)
+returns int
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  b       public.businesses;
+  v_count int := 0;
+begin
+  if not public.is_admin() then raise exception 'Yetkiniz yok.'; end if;
+  select * into b from public.businesses where id = p_business_id for update;
+  if not found then raise exception 'İşletme bulunamadı.'; end if;
+  if b.is_suspended then raise exception 'İşletme zaten askıda.'; end if;
+  if p_reason is null or p_reason not in ('kural_ihlali', 'odeme', 'sikayet', 'sahip_talebi', 'diger') then
+    raise exception 'Askı sebebini seçin.';
+  end if;
+  if length(coalesce(p_note, '')) > 500 then raise exception 'Not en fazla 500 karakter olabilir.'; end if;
+  if p_until is not null and p_until <= now() then raise exception 'Bitiş tarihi ileride olmalı.'; end if;
+
+  if p_request_id is not null then
+    update public.freeze_requests set status = 'approved', reviewed_at = now(), reviewed_by = auth.uid()
+    where id = p_request_id and business_id = p_business_id and status = 'pending';
+    if not found then raise exception 'Bu talep artık açık değil.'; end if;
+  end if;
+
+  -- Önce askı: iptaller bekleme listesine "yer açıldı" haberi göndermesin (waitlist_on_free_slot).
+  update public.businesses set is_suspended = true where id = p_business_id;
+  if p_cancel_appointments then
+    update public.appointments
+    set status = 'cancelled', cancel_reason = 'İşletme şu an hizmet vermiyor. Yeni randevu için daha sonra tekrar deneyin.'
+    where business_id = p_business_id and status in ('pending', 'confirmed') and starts_at > now();
+    get diagnostics v_count = row_count;
+  end if;
+
+  insert into public.business_suspensions (business_id, reason, note, until, appointments_cancelled, pause_subscription, created_by)
+  values (p_business_id, p_reason, trim(coalesce(p_note, '')), p_until, v_count,
+          coalesce(b.subscription_ends_at > now(), false), auth.uid());
+  return v_count;
+end;
+$$;
+
+-- Askıyı kaldırır; askıda geçen süre aboneliğe eklenir. İptal edilmiş randevular geri gelmez.
+create function public.admin_lift_suspension(p_business_id uuid)
 returns void
 language plpgsql volatile security definer set search_path = ''
 as $$
 begin
   if not public.is_admin() then raise exception 'Yetkiniz yok.'; end if;
-  update public.businesses set is_suspended = p_suspended where id = p_business_id;
+  if not exists (select 1 from public.businesses where id = p_business_id and is_suspended) then
+    raise exception 'İşletme askıda değil.';
+  end if;
+  perform public.lift_suspension(p_business_id, auth.uid());
+end;
+$$;
+
+-- Eski ekranın aç/kapa düğmesi: yeni web yayınlanana kadar çalışsın diye duruyor.
+create function public.admin_set_suspended(p_business_id uuid, p_suspended boolean)
+returns void
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  v_current boolean;
+begin
+  if not public.is_admin() then raise exception 'Yetkiniz yok.'; end if;
+  select is_suspended into v_current from public.businesses where id = p_business_id;
   if not found then raise exception 'İşletme bulunamadı.'; end if;
+  if v_current = p_suspended then return; end if;
+  if p_suspended then
+    perform public.admin_suspend_business(p_business_id, 'diger');
+  else
+    perform public.admin_lift_suspension(p_business_id);
+  end if;
+end;
+$$;
+
+-- İşletme sahibi dondurma talebi açar; yönetici uygular ya da gerekçeyle reddeder. Açık talep tek olabilir.
+create function public.request_freeze(p_reason text, p_starts_on date, p_ends_on date)
+returns uuid
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  b    public.businesses;
+  v_id uuid;
+begin
+  select * into b from public.businesses where owner_id = auth.uid();
+  if not found or b.approval_status <> 'approved' then raise exception 'Talep için onaylı bir işletmeniz olmalı.'; end if;
+  if b.is_suspended then raise exception 'İşletmeniz zaten askıda.'; end if;
+  if length(trim(coalesce(p_reason, ''))) not between 3 and 500 then
+    raise exception 'Sebep 3 ile 500 karakter arasında olmalı.';
+  end if;
+  if p_starts_on is null or p_ends_on is null or p_ends_on < p_starts_on
+     or p_starts_on < (now() at time zone b.timezone)::date then
+    raise exception 'Geçerli bir tarih aralığı seçin.';
+  end if;
+  if exists (select 1 from public.freeze_requests where business_id = b.id and status = 'pending') then
+    raise exception 'Açık bir talebiniz var.';
+  end if;
+  insert into public.freeze_requests (business_id, reason, starts_on, ends_on)
+  values (b.id, trim(p_reason), p_starts_on, p_ends_on)
+  returning id into v_id;
+  return v_id;
+end;
+$$;
+
+create function public.admin_reject_freeze_request(p_id uuid, p_note text)
+returns void
+language plpgsql volatile security definer set search_path = ''
+as $$
+begin
+  if not public.is_admin() then raise exception 'Yetkiniz yok.'; end if;
+  if length(trim(coalesce(p_note, ''))) not between 3 and 500 then
+    raise exception 'Ret sebebini yazın.';
+  end if;
+  update public.freeze_requests
+  set status = 'rejected', admin_note = trim(p_note), reviewed_at = now(), reviewed_by = auth.uid()
+  where id = p_id and status = 'pending';
+  if not found then raise exception 'Bu talep artık açık değil.'; end if;
 end;
 $$;
 
@@ -2793,6 +2997,7 @@ begin
     set notify_status = 'pending'
     from public.businesses b
     where b.id = old.business_id
+      and not b.is_suspended
       and w.business_id = old.business_id
       and w.day = (old.starts_at at time zone b.timezone)::date
       and w.customer_id is distinct from old.customer_id
@@ -3050,8 +3255,18 @@ create policy "işletme: sahibi oluşturur" on public.businesses
   for insert with check (owner_id = (select auth.uid()));
 create policy "işletme: sahibi günceller" on public.businesses
   for update using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()));
-create policy "işletme: sahibi siler" on public.businesses
-  for delete using (owner_id = (select auth.uid()));
+
+-- Askı geçmişi ve dondurma talepleri: sahibi kendininkini, yönetici hepsini okur; yazma admin_*/request_freeze ile.
+alter table public.business_suspensions enable row level security;
+alter table public.freeze_requests      enable row level security;
+create policy "askı: sahibi okur" on public.business_suspensions
+  for select using (public.is_business_owner(business_id));
+create policy "admin: askıları okur" on public.business_suspensions
+  for select using ((select public.is_admin()));
+create policy "dondurma talebi: sahibi okur" on public.freeze_requests
+  for select using (public.is_business_owner(business_id));
+create policy "admin: dondurma taleplerini okur" on public.freeze_requests
+  for select using ((select public.is_admin()));
 
 -- services
 create policy "hizmet: herkes okur" on public.services

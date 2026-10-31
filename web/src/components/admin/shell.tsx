@@ -17,6 +17,7 @@ import {
   MoreHorizontal,
   Package,
   Search,
+  Snowflake,
   ShieldAlert,
   ShieldCheck,
   Store,
@@ -28,7 +29,7 @@ import { CommandPalette } from "@/components/admin/command";
 import { Logo } from "@/components/site-header";
 import { createClient } from "@/lib/supabase/client";
 
-type Item = { href: string; label: string; icon: LucideIcon; badge?: "errors" | "applications" };
+type Item = { href: string; label: string; icon: LucideIcon; badge?: "errors" | "applications" | "freezes" };
 
 const GROUPS: { title: string; items: Item[] }[] = [
   {
@@ -42,6 +43,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
     title: "Kayıtlar",
     items: [
       { href: "/admin/basvurular", label: "Başvurular", icon: ClipboardCheck, badge: "applications" },
+      { href: "/admin/dondurma", label: "Dondurma talepleri", icon: Snowflake, badge: "freezes" },
       { href: "/admin/isletmeler", label: "İşletmeler", icon: Store },
       { href: "/admin/kullanicilar", label: "Kullanıcılar", icon: Users },
       { href: "/admin/randevular", label: "Randevular", icon: CalendarDays },
@@ -70,6 +72,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<{ email: string; admin: boolean } | null>(null);
   const [errors, setErrors] = useState(0);
   const [applications, setApplications] = useState(0);
+  const [freezes, setFreezes] = useState(0);
   const [search, setSearch] = useState(false);
   const [more, setMore] = useState(false);
 
@@ -100,6 +103,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       .select("id", { count: "exact", head: true })
       .eq("approval_status", "pending")
       .then(({ count }) => setApplications(count ?? 0));
+    supabase
+      .from("freeze_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending")
+      .then(({ count }) => setFreezes(count ?? 0));
   }, [isAdmin, pathname]);
 
   async function logout() {
@@ -158,7 +166,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               <div className="flex flex-col gap-0.5">
                 {g.items.map((item) => {
                   const on = isActive(pathname, item.href);
-                  const n = item.badge === "errors" ? errors : item.badge === "applications" ? applications : 0;
+                  const n = item.badge === "errors" ? errors : item.badge === "applications" ? applications : item.badge === "freezes" ? freezes : 0;
                   return (
                     <Link
                       key={item.href}
@@ -170,7 +178,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                       <item.icon className="size-4.5" /> <span className="flex-1">{item.label}</span>
                       {n > 0 && (
                         <span
-                          className={`min-w-5 rounded-full px-1.5 text-center text-2xs font-semibold tabular-nums ${item.badge === "applications" ? "bg-amber-400 text-amber-950" : "bg-rose-500 text-white"}`}
+                          className={`min-w-5 rounded-full px-1.5 text-center text-2xs font-semibold tabular-nums ${item.badge === "errors" ? "bg-rose-500 text-white" : "bg-amber-400 text-amber-950"}`}
                         >
                           {n}
                         </span>
@@ -226,8 +234,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         })}
         <button type="button" onClick={() => setMore(true)} className="relative flex flex-col items-center gap-0.5 py-2 text-3xs font-medium text-ink-3">
           <MoreHorizontal className="size-5" /> Daha fazla
-          {(errors > 0 || applications > 0) && (
-            <span className={`absolute right-[22%] top-1 size-2 rounded-full ${applications > 0 ? "bg-amber-400" : "bg-rose-500"}`} />
+          {(errors > 0 || applications > 0 || freezes > 0) && (
+            <span className={`absolute right-[22%] top-1 size-2 rounded-full ${applications > 0 || freezes > 0 ? "bg-amber-400" : "bg-rose-500"}`} />
           )}
         </button>
       </nav>

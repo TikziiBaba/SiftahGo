@@ -26,8 +26,9 @@ import { InboxBell } from "@/components/inbox-bell";
 import { Logo } from "@/components/site-header";
 import { BusinessContext, SetupContext } from "@/components/panel-context";
 import { createClient } from "@/lib/supabase/client";
-import { isSubscribed, isTrial } from "@/lib/constants";
-import type { Business } from "@/lib/types";
+import { isSubscribed, isTrial, SUSPENSION_REASONS } from "@/lib/constants";
+import { formatDate } from "@/lib/format";
+import type { Business, BusinessSuspension } from "@/lib/types";
 
 type Item = { href: string; label: string; icon: LucideIcon; badge?: "pending" | "reviews" };
 
@@ -76,6 +77,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
   const [sub, setSub] = useState({ subscribed: false, trial: false, daysLeft: 0 });
   const [badges, setBadges] = useState({ pending: 0, reviews: 0 });
   const [more, setMore] = useState(false);
+  const [suspension, setSuspension] = useState<BusinessSuspension | null>(null);
 
   const refresh = useCallback(async () => {
     const supabase = createClient();
@@ -101,6 +103,18 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
 
   // Menü rozetleri: onay bekleyen yaklaşan randevular ve cevaplanmamış yorumlar. Sayfa değişince tazelenir.
   const businessId = business?.id;
+  // Askıdaysa sebebi ve süresi üst bantta gösterilir.
+  const suspended = business?.is_suspended;
+  useEffect(() => {
+    if (!businessId || !suspended) return;
+    createClient()
+      .from("business_suspensions")
+      .select("*")
+      .eq("business_id", businessId)
+      .is("lifted_at", null)
+      .maybeSingle()
+      .then(({ data }) => setSuspension(data as BusinessSuspension | null));
+  }, [businessId, suspended]);
   useEffect(() => {
     if (!businessId) return;
     const supabase = createClient();
@@ -233,7 +247,11 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
           </header>
           {business.is_suspended && (
             <p className="border-b border-rose-400/20 bg-rose-500/10 px-4 py-2 text-center text-sm text-rose-200 print:hidden">
-              İşletmeniz yönetici tarafından yayından kaldırıldı; sayfanız görünmüyor ve randevu alınamıyor. Bilgi için bizimle iletişime geçin.
+              İşletmeniz askıya alındı{suspension && `: ${SUSPENSION_REASONS[suspension.reason]}`}; sayfanız görünmüyor ve randevu alınamıyor.
+              {suspension?.note && ` ${suspension.note}`}
+              {suspension?.until && ` Askı ${formatDate(suspension.until, { weekday: undefined, year: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} tarihinde kalkar.`}
+              {suspension?.pause_subscription && " Askıda geçen süre aboneliğinize eklenir."}
+              {" "}Bilgi için bizimle iletişime geçin.
             </p>
           )}
           {trial && pathname !== "/panel/abonelik" && (

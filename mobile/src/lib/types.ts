@@ -59,6 +59,36 @@ export type Business = {
   referral_rewarded_at: string | null;
 };
 
+export type SuspensionReason = "kural_ihlali" | "odeme" | "sikayet" | "sahip_talebi" | "diger";
+
+// Askı kaydı. lifted_at boşsa sürüyor; lifted_at dolu, lifted_by boşsa süre dolunca kendiliğinden kalktı.
+export type BusinessSuspension = {
+  id: string;
+  business_id: string;
+  reason: SuspensionReason;
+  note: string;
+  until: string | null;
+  appointments_cancelled: number;
+  pause_subscription: boolean;
+  created_by: string | null;
+  created_at: string;
+  lifted_at: string | null;
+  lifted_by: string | null;
+};
+
+export type FreezeRequest = {
+  id: string;
+  business_id: string;
+  reason: string;
+  starts_on: string;
+  ends_on: string;
+  status: "pending" | "approved" | "rejected";
+  admin_note: string;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  created_at: string;
+};
+
 export type Service = {
   id: string;
   business_id: string;
