@@ -65,16 +65,30 @@ async function loadBusiness(supabase: SupabaseClient, slug: string): Promise<Bus
   };
 }
 
-// Yayındaki işletmenin sayfası herkes için aynı: çerezsiz istemciyle okunur ve önbellekte tutulur (dakikada bir
-// tazelenir). Böylece sayfa veritabanına gitmeden, hazır HTML olarak açılır. Boş saatler ve randevu tarayıcıda canlı
-// sorulur.
+const publicClient = () =>
+  createSupabase(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+// Yayındaki işletmenin sayfası herkes için aynı: çerezsiz istemciyle okunur, dakikada bir tazelenir. Yalnızca istek
+// anında (BusinessView, connection) çağrılmalı: hazır sayfada çağrılırsa veri sayfaya gömülür ve süresine bakılmadan
+// oradan okunur, hizmetler sayfa yeniden üretilene kadar eski kalır. Boş saatler ve randevu tarayıcıda canlı sorulur.
 async function getPublicBusiness(slug: string) {
   "use cache";
   cacheLife("minutes");
-  const supabase = createSupabase(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  return loadBusiness(supabase, slug);
+  return loadBusiness(publicClient(), slug);
+}
+
+// Hazır sayfanın başlığı için: yukarıdaki kayıtla karışmasın diye ayrı.
+async function getBusinessMeta(slug: string) {
+  "use cache";
+  cacheLife("minutes");
+  const { data } = await publicClient()
+    .from("businesses")
+    .select("slug, name, category, description, district, city, cover_url, logo_url")
+    .eq("slug", slug)
+    .maybeSingle();
+  return data as Pick<Business, "slug" | "name" | "category" | "description" | "district" | "city" | "cover_url" | "logo_url"> | null;
 }
 
 // Herkese açık değilse (yayında değil, onay bekliyor, askıda) sahibi ve yönetici kendi oturumuyla görür.
@@ -94,7 +108,7 @@ export async function generateStaticParams() {
 // Yalnızca herkese açık (önbellekteki) veriden: çerez okunursa sayfa önceden hazırlanamaz. Yayında olmayan sayfayı
 // sahibi açtığında genel başlık görünür.
 export async function generateMetadata({ params }: PageProps<"/[slug]">): Promise<Metadata> {
-  const business = (await getPublicBusiness((await params).slug))?.business;
+  const business = await getBusinessMeta((await params).slug);
   if (!business) return { title: "İşletme sayfası", robots: { index: false } };
   const place = [business.district, business.city].filter(Boolean).join(", ");
   const title = `${business.name} — Online Randevu`;
@@ -143,6 +157,8 @@ export default function BusinessPage({ params }: PageProps<"/[slug]">) {
 }
 
 async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"] }) {
+  // Hizmetler, saatler ve yorumlar hazır sayfaya gömülmesin (getPublicBusiness).
+  await connection();
   const data = await getBusiness((await params).slug);
   if (!data) notFound();
 
