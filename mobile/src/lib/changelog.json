@@ -5,5 +5,13 @@
     "items": [
       "Uygulama artık küçük güncellemeleri kendisi alıyor; yeni bir şey geldiğinde açılışta bu ekranda yazar."
     ]
+  },
+  {
+    "id": 2,
+    "date": "2026-11-01",
+    "items": [
+      "İşletmeniz askıya alınırsa sebebini ve bitiş tarihini İşletmem ekranında görürsünüz.",
+      "Bir süre hizmet veremeyecekseniz İşletmem ekranından dondurma talebi açabilirsiniz."
+    ]
   }
 ]
