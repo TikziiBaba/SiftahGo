@@ -2,8 +2,8 @@ import type { CSSProperties } from "react";
 import type { AppointmentStatus, SuspensionReason } from "./types";
 
 export const SITE_NAME = "SiftahGo";
-export const SITE_URL = (process.env.NEXT_PUBLIC_APP_URL || "https://siftahgo.com").replace(/\/$/, "");
-/** Sayfa adreslerinde gösterilen alan adı (örn. siftahgo.com/usta-berber); sitenin gerçek adresinden gelir. */
+export const SITE_URL = (process.env.NEXT_PUBLIC_APP_URL || "https://siftahgo.app").replace(/\/$/, "");
+/** Sayfa adreslerinde gösterilen alan adı (örn. siftahgo.app/usta-berber); sitenin gerçek adresinden gelir. */
 export const SITE_DOMAIN = SITE_URL.replace(/^https?:\/\//, "");
 
 export const CATEGORIES = [

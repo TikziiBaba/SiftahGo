@@ -92,7 +92,7 @@ formunda isteğe bağlı yazar. E-postalar veritabanındaki `notifications` kuyr
 kuyruğu boşaltır.
 
 1. [resend.com](https://resend.com)'da alan adınızı doğrulayın ve bir API anahtarı oluşturun.
-2. Ortam değişkenleri: `RESEND_API_KEY`, `EMAIL_FROM` (örn. `SiftahGo <bildirim@siftahgo.com>`),
+2. Ortam değişkenleri: `RESEND_API_KEY`, `EMAIL_FROM` (örn. `SiftahGo <bildirim@siftahgo.app>`),
    `CRON_SECRET` (uzun, rastgele bir metin), `NEXT_PUBLIC_APP_URL`.
 3. Supabase > Database > Extensions'tan **pg_cron** ve **pg_net**'i açın, SQL Editor'de şunu çalıştırın
    (adresi ve anahtarı kendi değerlerinizle değiştirin). Kuyruk dakikada bir boşaltılır:

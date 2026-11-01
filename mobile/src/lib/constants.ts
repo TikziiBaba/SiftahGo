@@ -3,8 +3,8 @@ import type Ionicons from '@expo/vector-icons/Ionicons';
 import { colors } from './theme';
 import type { AppointmentStatus, SuspensionReason } from './types';
 
-export const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://siftahgo.com';
-/** Sayfa adreslerinde gösterilen alan adı (örn. siftahgo.com/usta-berber) */
+export const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://siftahgo.app';
+/** Sayfa adreslerinde gösterilen alan adı (örn. siftahgo.app/usta-berber) */
 export const SITE_DOMAIN = WEB_URL.replace(/^https?:\/\//, '').replace(/\/$/, '');
 
 export type IconName = React.ComponentProps<typeof Ionicons>['name'];

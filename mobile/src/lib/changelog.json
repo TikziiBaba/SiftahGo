@@ -13,5 +13,12 @@
       "İşletmeniz askıya alınırsa sebebini ve bitiş tarihini İşletmem ekranında görürsünüz.",
       "Bir süre hizmet veremeyecekseniz İşletmem ekranından dondurma talebi açabilirsiniz."
     ]
+  },
+  {
+    "id": 3,
+    "date": "2026-11-01",
+    "items": [
+      "Yeni adresimiz siftahgo.app: paylaştığınız bağlantılar ve QR kodlar artık bu adresi kullanıyor."
+    ]
   }
 ]

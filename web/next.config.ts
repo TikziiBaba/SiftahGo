@@ -53,6 +53,18 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },
+  // Eski alan adı yeni adrese gider. /api hariç: eski APK'lar ve PayTR bildirimi oraya POST atıyor, başka alan adına
+  // yönlendirilen istekte Authorization başlığı düşer.
+  async redirects() {
+    return [
+      {
+        source: "/:path((?!api/).*)",
+        has: [{ type: "host", value: "siftahgo.bekirr.dev" }],
+        destination: "https://siftahgo.app/:path",
+        permanent: true,
+      },
+    ];
+  },
   turbopack: {
     rules: {
       "*.css": {
