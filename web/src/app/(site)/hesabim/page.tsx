@@ -10,6 +10,7 @@ import {
   Compass,
   Heart,
   History,
+  LifeBuoy,
   Loader2,
   LogOut,
   MapPin,
@@ -25,6 +26,7 @@ import { CookieSettingsButton } from "@/components/cookie-consent";
 import { HoldButton } from "@/components/hold-button";
 import { RescheduleDialog } from "@/components/reschedule-dialog";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
+import { SupportCenter } from "@/components/support-center";
 import { createClient } from "@/lib/supabase/client";
 import { STATUS } from "@/lib/constants";
 import { errorMessage, formatDate, formatPrice, formatTime, untilText } from "@/lib/format";
@@ -32,12 +34,13 @@ import type { Appointment, Business, Profile } from "@/lib/types";
 
 type Row = Appointment & { businesses: { name: string; slug: string; phone: string; address: string; district: string; city: string } | null };
 type Favorite = Pick<Business, "slug" | "name" | "district" | "city" | "logo_url" | "category">;
-type Tab = "yaklasan" | "gecmis" | "favoriler" | "profil";
+type Tab = "yaklasan" | "gecmis" | "favoriler" | "destek" | "profil";
 
 const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
   { id: "yaklasan", label: "Yaklaşan", icon: CalendarCheck },
   { id: "gecmis", label: "Geçmiş", icon: History },
   { id: "favoriler", label: "Favoriler", icon: Heart },
+  { id: "destek", label: "Destek", icon: LifeBuoy },
   { id: "profil", label: "Profil", icon: UserRound },
 ];
 
@@ -75,6 +78,8 @@ function AccountView() {
   const [email, setEmail] = useState("");
   const [lists, setLists] = useState<{ upcoming: Row[]; past: Row[] } | null>(null);
   const [favorites, setFavorites] = useState<Favorite[] | null>(null);
+  // Ekibin yanıtladığı destek talepleri (sekme rozeti)
+  const [answered, setAnswered] = useState(0);
   // Değerlendirilebilecek randevular: tamamlanan veya saati geçmiş onaylı, henüz değerlendirilmemiş.
   const [reviewable, setReviewable] = useState<Set<string>>(new Set());
   const [error, setError] = useState("");
@@ -89,7 +94,7 @@ function AccountView() {
     } = await supabase.auth.getSession();
     if (!auth) return router.replace("/giris?next=/hesabim");
     setEmail(auth.user.email ?? "");
-    const [p, a, r, f] = await Promise.all([
+    const [p, a, r, f, s] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", auth.user.id).maybeSingle(),
       supabase
         .from("appointments")
@@ -103,8 +108,10 @@ function AccountView() {
         .select("businesses(slug, name, district, city, logo_url, category)")
         .eq("customer_id", auth.user.id)
         .order("created_at", { ascending: false }),
+      supabase.from("support_tickets").select("id", { count: "exact", head: true }).eq("user_id", auth.user.id).eq("status", "answered"),
     ]);
     setProfile(p.data as Profile | null);
+    setAnswered(s.count ?? 0);
     // Yayından kalkan işletme gelmez (businesses boş).
     setFavorites(((f.data ?? []) as unknown as { businesses: Favorite | null }[]).flatMap((x) => (x.businesses ? [x.businesses] : [])));
     const reviewed = new Set((r.data ?? []).map((x: { appointment_id: string }) => x.appointment_id));
@@ -148,7 +155,7 @@ function AccountView() {
   const next = upcoming[0];
   const done = past.filter((r) => r.status === "completed").length;
   const firstName = profile?.full_name?.split(" ")[0] ?? "";
-  const counts: Record<Tab, number | null> = { yaklasan: upcoming.length, gecmis: past.length, favoriler: favorites?.length ?? 0, profil: null };
+  const counts: Record<Tab, number | null> = { yaklasan: upcoming.length, gecmis: past.length, favoriler: favorites?.length ?? 0, destek: answered || null, profil: null };
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-4 pb-16 pt-4">
@@ -296,6 +303,8 @@ function AccountView() {
               ))}
             </ul>
           ))}
+
+        {tab === "destek" && <SupportCenter />}
 
         {tab === "profil" && profile && <ProfilePanel profile={profile} email={email} onSaved={load} onLogout={logout} />}
         {tab === "profil" && !profile && <ListSkeleton />}

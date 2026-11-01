@@ -1111,5 +1111,91 @@ ok((await as(ADM, `select count(*)::int c from business_suspensions where busine
 ok((await as(A, `delete from businesses where id = $1 returning id`, [biz])).rows.length === 0
   && (await db.query(`select id from businesses where id = $1`, [biz])).rows.length === 1, 'işletme sahibi işletmesini API\'den silemez');
 
+// --- destek talepleri
+const openTicket = async (uid, subject = 'Yardım lazım', category = 'teknik') =>
+  (await as(uid, `select open_support_ticket($1, $2, 'Sayfa açılmıyor') id`, [category, subject])).rows[0].id;
+await expectError(() => as(null, `select open_support_ticket('teknik', 'Yardım lazım', 'Sayfa açılmıyor')`), /Giriş yapmalısınız/, 'girişsiz destek talebi açılamaz');
+await expectError(() => as(C, `select open_support_ticket('teknik', 'x', 'Sayfa açılmıyor')`), /Konu/, 'çok kısa konu reddedildi');
+await expectError(() => as(C, `select open_support_ticket('teknik', 'Yardım lazım', ' ')`), /Mesaj/, 'boş mesaj reddedildi');
+await expectError(() => as(C, `select open_support_ticket('yok', 'Yardım lazım', 'Sayfa açılmıyor')`), /check constraint/, 'olmayan kategori reddedildi');
+
+const tC = await openTicket(C, 'Randevum\nGörünmüyor', 'randevu');
+const tA = await openTicket(A);
+const ticket = async (id) => (await db.query(`select * from support_tickets where id = $1`, [id])).rows[0];
+const custT = await ticket(tC);
+ok(custT.audience === 'customer' && custT.business_id === null && custT.status === 'waiting' && custT.subject === 'Randevum Görünmüyor', 'müşterinin talebi yanıt bekliyor, konu tek satır');
+const ownerT = await ticket(tA);
+ok(ownerT.audience === 'business' && ownerT.business_id === biz, 'işletme sahibinin talebi işletmesine bağlı');
+const H = '00000000-0000-0000-0000-0000000000b7'; // başvurusu onay bekleyen işletme sahibi
+await db.exec(`insert into auth.users values ('${H}', 'h@x.com', '{"full_name":"Hale","role":"business"}');`);
+const hBiz = (await as(H, `insert into businesses (owner_id, slug, name) values ($1, 'hale-kuafor', 'Hale') returning id`, [H])).rows[0].id;
+const hT = await ticket(await openTicket(H));
+ok(hT.audience === 'customer' && hT.business_id === hBiz, 'onay bekleyen başvuru sahibi hesabından yazar (paneli kapalı), işletmesi görünür');
+
+// RLS: herkes yalnızca kendi talebini görür
+const ids = async (uid, table = 'support_tickets') => (await as(uid, `select id from ${table}`)).rows.map((r) => r.id);
+ok((await ids(C)).join() === tC && (await ids(A)).join() === tA, 'kullanıcı yalnızca kendi talebini görür');
+ok((await ids(null)).length === 0 && (await ids(null, 'support_messages')).length === 0, 'girişsiz kullanıcı talep ve mesaj göremez');
+ok((await ids(ADM)).length === 3 && (await ids(ADM, 'support_messages')).length === 3, 'yönetici tüm talepleri ve mesajları görür');
+ok((await as(C, `select id from support_messages where ticket_id = $1`, [tA])).rows.length === 0, 'başkasının mesajı okunamaz');
+ok((await as(C, `select ticket_id from support_messages`)).rows.every((r) => r.ticket_id === tC), 'müşteri yalnızca kendi mesajlarını görür');
+ok((await as(A, `select id from support_tickets where id = $1`, [tC])).rows.length === 0, 'işletme sahibi müşterinin talebini göremez');
+ok((await as(ADM, `select message_id from support_emails`)).rows.length === 0 && (await as(C, `select message_id from support_emails`)).rows.length === 0, 'e-posta kuyruğu istemciden okunamaz');
+
+// Yazma yalnızca RPC ile
+await expectError(() => as(C, `insert into support_tickets (user_id, audience, category, subject) values ($1, 'customer', 'diger', 'Elle talep')`, [C]), /row-level security/, 'talep elle eklenemez');
+await expectError(() => as(C, `insert into support_messages (ticket_id, from_admin, body) values ($1, true, 'Sahte yanıt')`, [tC]), /row-level security/, 'kullanıcı sahte yönetici yanıtı ekleyemez');
+ok((await as(C, `update support_tickets set status = 'closed' where id = $1 returning id`, [tC])).rows.length === 0, 'talep durumu elle değiştirilemez');
+ok((await as(C, `delete from support_tickets where id = $1 returning id`, [tC])).rows.length === 0, 'talep elle silinemez');
+await expectError(() => as(C, `select reply_support_ticket($1, 'Araya giriyorum')`, [tA]), /bulunamadı/, 'başkasının talebine yazılamaz');
+await expectError(() => as(ADM, `select reply_support_ticket($1, 'Yönetici değil sahibi yazar')`, [tA]), /bulunamadı/, 'yönetici kullanıcı yoluyla yanıtlayamaz');
+
+// Yönetici yanıtı ve kapatma
+await expectError(() => as(C, `select admin_reply_support_ticket($1, 'Yanıtım')`, [tC]), /Yetkiniz yok/, 'kullanıcı yönetici yanıtı veremez');
+await expectError(() => as(C, `select admin_close_support_ticket($1)`, [tC]), /Yetkiniz yok/, 'kullanıcı talebi kapatamaz');
+await as(ADM, `select admin_reply_support_ticket($1, 'Baktık, düzeldi')`, [tC]);
+ok((await ticket(tC)).status === 'answered', 'yönetici yanıtlayınca durum yanıtlandı');
+await as(C, `select reply_support_ticket($1, 'Hâlâ görünmüyor')`, [tC]);
+ok((await ticket(tC)).status === 'waiting', 'kullanıcı yazınca yine yanıt bekliyor');
+await as(ADM, `select admin_close_support_ticket($1)`, [tC]);
+const closedT = await ticket(tC);
+ok(closedT.status === 'closed' && closedT.closed_at, 'yönetici talebi kapattı');
+await expectError(() => as(ADM, `select admin_close_support_ticket($1)`, [tC]), /kapalı/, 'kapalı talep tekrar kapatılamaz');
+await as(C, `select reply_support_ticket($1, 'Yine bozuldu')`, [tC]);
+const reopened = await ticket(tC);
+ok(reopened.status === 'waiting' && reopened.closed_at === null, 'kapalı talebe yazınca yeniden açılır');
+await as(ADM, `select admin_reply_support_ticket($1, 'Şimdi tamam', true)`, [tC]);
+ok((await ticket(tC)).status === 'closed', 'yanıtla ve kapat çalışır');
+const msgs = (await as(C, `select from_admin, body from support_messages where ticket_id = $1 order by created_at`, [tC])).rows;
+ok(msgs.length === 5 && msgs[1].from_admin && !msgs[2].from_admin, `konuşma sırayla saklanır: ${msgs.length} mesaj`);
+
+// E-posta kuyruğu: kullanıcı mesajı yöneticiye, yanıt kullanıcıya; kapatma tek başına e-posta göndermez
+await expectError(() => as(C, `select * from claim_support_emails(10)`), /permission denied/, 'destek kuyruğu istemciden alınamaz');
+await expectError(() => as(ADM, `select finish_support_email($1, null)`, [tC]), /permission denied/, 'destek e-postası istemciden bitirilemez');
+const queued = (await db.query(`select * from claim_support_emails(50)`)).rows;
+ok(queued.length === 7, `her mesaj için bir e-posta: ${queued.length}`);
+ok((await db.query(`select * from claim_support_emails(50)`)).rows.length === 0, 'alınan e-posta kilitlenir, ikinci istek almaz');
+const firstMail = queued.find((q) => q.ticket_id === tC);
+ok(firstMail.is_first && !firstMail.from_admin && firstMail.user_email === 'c@x.com' && firstMail.subject === 'Randevum Görünmüyor', 'ilk mesajın e-postası talep bilgileriyle gelir');
+const adminMail = queued.find((q) => q.ticket_id === tC && q.from_admin);
+ok(!adminMail.is_first && adminMail.body === 'Baktık, düzeldi', 'yönetici yanıtının e-postası kullanıcıya gidecek şekilde gelir');
+ok(queued.find((q) => q.ticket_id === tA).business_name === 'Ahmet Berber', 'işletme adı e-postada görünür');
+await db.query(`select finish_support_email($1, null)`, [firstMail.id]);
+await db.query(`select finish_support_email($1, 'hata')`, [adminMail.id]);
+const mail = async (id) => (await db.query(`select status, sent_at, last_error from support_emails where message_id = $1`, [id])).rows[0];
+ok((await mail(firstMail.id)).status === 'sent' && (await mail(firstMail.id)).sent_at, 'gönderilen e-posta işaretlendi');
+ok((await mail(adminMail.id)).status === 'pending' && (await mail(adminMail.id)).last_error === 'hata', 'başarısız e-posta tekrar denenir');
+
+// Kötüye kullanım sınırları
+for (let i = 0; i < 4; i++) await openTicket(G);
+const gOpen = await openTicket(G);
+await expectError(() => as(G, `select open_support_ticket('diger', 'Altıncı talep', 'Bir talep daha')`), /5 açık talebiniz/, 'en fazla 5 açık talep');
+for (let i = 0; i < 15; i++) await as(G, `select reply_support_ticket($1, 'Mesaj numarası ${i}')`, [gOpen]);
+await expectError(() => as(G, `select reply_support_ticket($1, 'Bir mesaj daha')`, [gOpen]), /Çok sık/, 'saatte en fazla 20 mesaj');
+
+// Hesap silinince talepler de gider
+await db.query(`delete from auth.users where id = $1`, [H]);
+ok((await db.query(`select id from support_tickets where user_id = $1`, [H])).rows.length === 0, 'hesap silinince destek talepleri silinir');
+
 console.log(failures ? `\n${failures} TEST BAŞARISIZ` : '\nTÜM TESTLER GEÇTİ');
 process.exit(failures ? 1 : 0);

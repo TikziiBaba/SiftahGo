@@ -10,6 +10,7 @@ import {
   Contact,
   CreditCard,
   ExternalLink,
+  LifeBuoy,
   Loader2,
   LogOut,
   MoreHorizontal,
@@ -30,7 +31,7 @@ import { isSubscribed, isTrial, SUSPENSION_REASONS } from "@/lib/constants";
 import { formatDate } from "@/lib/format";
 import type { Business, BusinessSuspension } from "@/lib/types";
 
-type Item = { href: string; label: string; icon: LucideIcon; badge?: "pending" | "reviews" };
+type Item = { href: string; label: string; icon: LucideIcon; badge?: "pending" | "reviews" | "support" };
 
 // Menü işe göre gruplu: günlük işler üstte, ayarlar altta.
 const GROUPS: { title: string; items: Item[] }[] = [
@@ -58,14 +59,20 @@ const GROUPS: { title: string; items: Item[] }[] = [
       { href: "/panel/qr", label: "QR kod", icon: QrCode },
     ],
   },
-  { title: "Hesap", items: [{ href: "/panel/abonelik", label: "Abonelik", icon: CreditCard }] },
+  {
+    title: "Hesap",
+    items: [
+      { href: "/panel/abonelik", label: "Abonelik", icon: CreditCard },
+      { href: "/panel/destek", label: "Destek", icon: LifeBuoy, badge: "support" },
+    ],
+  },
 ];
 const ALL = GROUPS.flatMap((g) => g.items);
 // Telefonda alt çubukta duran dört sekme; kalanlar "Daha fazla" sayfasında.
 const PRIMARY = ["/panel", "/panel/musteriler", "/panel/raporlar", "/panel/yorumlar"];
 
 // Aboneliği olmayan işletmenin açabileceği sayfalar.
-const OPEN_WITHOUT_PLAN = ["/panel/abonelik", "/panel/ayarlar"];
+const OPEN_WITHOUT_PLAN = ["/panel/abonelik", "/panel/ayarlar", "/panel/destek"];
 
 const PLAN_NAMES: Record<string, string> = { baslangic: "Başlangıç", esnaf: "Esnaf", pro: "Pro" };
 
@@ -75,7 +82,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
   const [business, setBusiness] = useState<Business | null | undefined>(undefined);
   // Abonelik durumu veri yüklenirken hesaplanır (render sırasında saat okunmaz).
   const [sub, setSub] = useState({ subscribed: false, trial: false, daysLeft: 0 });
-  const [badges, setBadges] = useState({ pending: 0, reviews: 0 });
+  const [badges, setBadges] = useState({ pending: 0, reviews: 0, support: 0 });
   const [more, setMore] = useState(false);
   const [suspension, setSuspension] = useState<BusinessSuspension | null>(null);
 
@@ -101,7 +108,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
     refresh();
   }, [refresh]);
 
-  // Menü rozetleri: onay bekleyen yaklaşan randevular ve cevaplanmamış yorumlar. Sayfa değişince tazelenir.
+  // Menü rozetleri: onay bekleyen yaklaşan randevular, cevaplanmamış yorumlar ve yanıtlanan destek talepleri. Sayfa değişince tazelenir.
   const businessId = business?.id;
   // Askıdaysa sebebi ve süresi üst bantta gösterilir.
   const suspended = business?.is_suspended;
@@ -126,7 +133,8 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
         .eq("status", "pending")
         .gte("starts_at", new Date().toISOString()),
       supabase.from("reviews").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("reply", ""),
-    ]).then(([p, r]) => setBadges({ pending: p.count ?? 0, reviews: r.count ?? 0 }));
+      supabase.from("support_tickets").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "answered"),
+    ]).then(([p, r, s]) => setBadges({ pending: p.count ?? 0, reviews: r.count ?? 0, support: s.count ?? 0 }));
   }, [businessId, pathname]);
 
   // İşletmesi olmayan ya da başvurusu onaylanmamış hesap yalnızca kurulum (başvuru) sayfasını görür.

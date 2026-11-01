@@ -29,8 +29,12 @@ export default function ContactPage() {
         <li><strong>Web:</strong> {SITE_DOMAIN}</li>
       </ul>
       <p>
-        Soru, şikâyet, iade ve kişisel veri başvurularınızı e-postayla iletebilirsiniz. Randevuyla ilgili konularda (saat, fiyat, hizmet) önce
-        randevu aldığınız işletmeyle iletişime geçmenizi öneririz; işletmenin telefonu kendi sayfasında yazılıdır.
+        Hesabınız varsa en hızlı yol <Link href="/hesabim?sekme=destek">destek talebi açmaktır</Link>: yanıtımızı hem hesabınızda hem
+        e-postanızda görürsünüz. İşletme sahipleri aynı talepleri panelin Destek bölümünden de takip edebilir.
+      </p>
+      <p>
+        Hesabınız yoksa soru, şikâyet, iade ve kişisel veri başvurularınızı e-postayla iletebilirsiniz. Randevuyla ilgili konularda (saat, fiyat,
+        hizmet) önce randevu aldığınız işletmeyle iletişime geçmenizi öneririz; işletmenin telefonu kendi sayfasında yazılıdır.
       </p>
 
       <h2>Güvenli ödeme</h2>

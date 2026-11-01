@@ -46,6 +46,10 @@ export default function PrivacyPage() {
         <li>İşlem güvenliği kayıtları: IP adresi, tarayıcı ve cihaz bilgisi, giriş zamanları.</li>
         <li>Uygulamada bildirim izni verdiyseniz cihazınızın bildirim adresi (push token).</li>
         <li>
+          <strong>Destek talepleri:</strong> talebin konusu, mesajlarınız ve yanıtlarımız. Yalnızca siz ve {SITE_NAME} ekibi görür; randevu aldığınız
+          işletmeyle paylaşılmaz. Hesabınızı silince talepleriniz de silinir.
+        </li>
+        <li>
           <strong>Konum:</strong> Keşfet’te “Yakınımda” ile aradığınızda cihazınızın konumu yalnızca o aramada işletmeleri uzaklığa göre sıralamak
           için kullanılır ve saklanmaz. İşletme sahibinin kaydettiği işletme konumu ise “Yakınımda” aramasında kullanılır.
         </li>

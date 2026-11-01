@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { AppointmentStatus, SuspensionReason } from "./types";
+import type { AppointmentStatus, SupportCategory, SupportStatus, SuspensionReason } from "./types";
 
 export const SITE_NAME = "SiftahGo";
 export const SITE_URL = (process.env.NEXT_PUBLIC_APP_URL || "https://siftahgo.app").replace(/\/$/, "");
@@ -67,6 +67,22 @@ export const SUSPENSION_REASONS: Record<SuspensionReason, string> = {
   sikayet: "Müşteri şikâyeti",
   sahip_talebi: "İşletme sahibinin talebi",
   diger: "Diğer",
+};
+
+// Destek talebi konuları (support_tickets.category kısıtıyla aynı).
+export const SUPPORT_CATEGORIES: Record<SupportCategory, string> = {
+  randevu: "Randevu",
+  odeme: "Ödeme ve abonelik",
+  hesap: "Hesap",
+  teknik: "Teknik sorun",
+  sikayet: "Şikâyet",
+  diger: "Diğer",
+};
+
+export const SUPPORT_STATUS: Record<SupportStatus, { label: string; className: string }> = {
+  waiting: { label: "Yanıt bekliyor", className: "bg-amber-400/10 text-warn ring-1 ring-amber-400/20" },
+  answered: { label: "Yanıtlandı", className: "bg-emerald-400/10 text-ok ring-1 ring-emerald-400/20" },
+  closed: { label: "Kapalı", className: "bg-tint/5 text-ink-3 ring-1 ring-line" },
 };
 
 // Randevu onay modları (businesses.auto_confirm + auto_confirm_known_only). Sık iptal eden müşteri her modda onaya düşer.

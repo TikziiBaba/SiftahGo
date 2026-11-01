@@ -51,6 +51,7 @@ const MEMBER_LINKS = [
   { href: "/kesfet?bugun=1", label: "Bugün Müsait" },
   { href: "/hesabim", label: "Randevularım" },
   { href: "/hesabim?sekme=favoriler", label: "Favorilerim" },
+  { href: "/hesabim?sekme=destek", label: "Destek" },
 ];
 
 type NavLink = { href: string; label: string };

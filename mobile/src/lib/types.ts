@@ -89,6 +89,30 @@ export type FreezeRequest = {
   created_at: string;
 };
 
+export type SupportCategory = "randevu" | "odeme" | "hesap" | "teknik" | "sikayet" | "diger";
+export type SupportStatus = "waiting" | "answered" | "closed";
+
+export type SupportTicket = {
+  id: string;
+  user_id: string;
+  business_id: string | null;
+  audience: "customer" | "business";
+  category: SupportCategory;
+  subject: string;
+  status: SupportStatus;
+  created_at: string;
+  last_message_at: string;
+  closed_at: string | null;
+};
+
+export type SupportMessage = {
+  id: string;
+  ticket_id: string;
+  from_admin: boolean;
+  body: string;
+  created_at: string;
+};
+
 export type Service = {
   id: string;
   business_id: string;

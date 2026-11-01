@@ -1,13 +1,13 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
-import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Linking, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Glow, LogoMark } from '@/components/brand';
 import { TopBar, useScrollY } from '@/components/top-bar';
 import { Avatar, Badge, Button, Card, Group, ListRow, ScreenHeader, SectionTitle, styles, Text } from '@/components/ui';
 import { signOut, useAuth } from '@/lib/auth';
-import { SITE_DOMAIN, type IconName } from '@/lib/constants';
+import { SITE_DOMAIN, WEB_URL, type IconName } from '@/lib/constants';
 import { colors } from '@/lib/theme';
 
 const PERKS: { icon: IconName; text: string }[] = [
@@ -112,6 +112,12 @@ export default function AccountScreen() {
               onPress={() => router.push({ pathname: '/isletme/[slug]', params: { slug: business.slug } })}
             />
           ) : null}
+          <ListRow
+            icon="help-buoy-outline"
+            title="Destek"
+            subtitle="Talep açın, yanıtınız e-postanıza gelsin"
+            onPress={() => Linking.openURL(`${WEB_URL}${business?.approval_status === 'approved' ? '/panel/destek' : '/hesabim?sekme=destek'}`)}
+          />
         </Group>
 
         <Group style={{ marginTop: 12 }}>

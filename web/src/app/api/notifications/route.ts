@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
+import { COMPANY } from "@/lib/company";
 import { emailConfigured, sendEmail } from "@/lib/email";
-import { buildEmail, buildWaitlistEmail, type QueuedNotification } from "@/lib/notification-email";
+import { buildEmail, buildSupportEmail, buildWaitlistEmail, type QueuedNotification, type QueuedSupportEmail } from "@/lib/notification-email";
 import { sendQueuedPushes, sendWaitlistPushes, type WaitlistNotice } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -78,10 +79,29 @@ export async function GET(request: Request) {
     }
   }
 
+  // Destek talepleri: kullanıcının mesajı destek adresine, ekibin yanıtı kullanıcıya.
+  const { data: supportData, error: supportError } = await supabase.rpc("claim_support_emails", { p_limit: 10 });
+  if (supportError) console.error("Destek e-postaları alınamadı", supportError.message);
+  const support = (supportData ?? []) as QueuedSupportEmail[];
+  for (const s of support) {
+    if (sent + failed > 0) await new Promise((r) => setTimeout(r, 600));
+    let sendError: string | null = null;
+    try {
+      await sendEmail(`support-${s.id}`, buildSupportEmail(s, appUrl, COMPANY.email));
+      sent++;
+    } catch (e) {
+      sendError = e instanceof Error ? e.message : String(e);
+      console.error("Destek e-postası gönderilemedi", s.id, sendError);
+      failed++;
+    }
+    await supabase.rpc("finish_support_email", { p_id: s.id, p_error: sendError });
+  }
+
   return Response.json({
     reminders: reminders ?? 0,
     reviewRequests: reviewRequests ?? 0,
     waitlist: waitlist.length,
+    support: support.length,
     sent,
     failed,
     push,

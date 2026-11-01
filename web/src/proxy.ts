@@ -31,7 +31,8 @@ export async function proxy(request: NextRequest) {
   if (!data?.claims && isPrivate) {
     const url = request.nextUrl.clone();
     url.pathname = "/giris";
-    url.search = `?next=${encodeURIComponent(path)}`;
+    // Sorgu da korunur: e-postadaki destek bağlantısı girişten sonra aynı talebi açar.
+    url.search = `?next=${encodeURIComponent(path + request.nextUrl.search)}`;
     return NextResponse.redirect(url);
   }
 

@@ -1,6 +1,7 @@
+import { SUPPORT_CATEGORIES } from "@/lib/constants";
 import { formatDate, formatPrice, formatTime } from "@/lib/format";
 import type { WaitlistNotice } from "@/lib/push";
-import type { AppointmentStatus } from "@/lib/types";
+import type { AppointmentStatus, SupportCategory, SupportStatus } from "@/lib/types";
 
 /** claim_notifications satırı */
 export type QueuedNotification = {
@@ -196,12 +197,64 @@ export function buildWaitlistEmail(n: WaitlistNotice & { email: string }, appUrl
   });
 }
 
+/** claim_support_emails satırı */
+export type QueuedSupportEmail = {
+  id: string;
+  ticket_id: string;
+  from_admin: boolean;
+  is_first: boolean;
+  user_email: string;
+  user_name: string;
+  audience: "customer" | "business";
+  business_name: string | null;
+  category: SupportCategory;
+  subject: string;
+  body: string;
+  ticket_status: SupportStatus;
+};
+
+/** Kullanıcı yazdıysa destek ekibine (`supportEmail`), ekip yazdıysa kullanıcıya. */
+export function buildSupportEmail(n: QueuedSupportEmail, appUrl: string, supportEmail: string) {
+  if (n.from_admin) {
+    const href = n.audience === "business" ? `${appUrl}/panel/destek?talep=${n.ticket_id}` : `${appUrl}/hesabim?sekme=destek&talep=${n.ticket_id}`;
+    return render(n.user_email, {
+      subject: `Destek talebiniz yanıtlandı: ${n.subject}`,
+      title: "Destek talebiniz yanıtlandı",
+      intro:
+        n.ticket_status === "closed"
+          ? "Yanıtımız aşağıda. Talebiniz kapatıldı; sorun devam ederse talebinizden yazın, yeniden açılır."
+          : "Yanıtımız aşağıda.",
+      rows: [
+        ["Konu", n.subject],
+        ["Yanıt", n.body],
+      ],
+      action: { label: "Talebi aç ve yanıtla", href },
+      footer: "Bu e-postaya yanıt vermeyin, gelen kutusuna düşmez. Lütfen talebinizden yazın.",
+    });
+  }
+  return render(supportEmail, {
+    subject: `${n.is_first ? "Yeni destek talebi" : "Destek talebine yanıt"}: ${n.subject}`,
+    title: n.is_first ? "Yeni destek talebi" : "Destek talebine yanıt",
+    intro: `${n.user_name || "Kullanıcı"} ${n.is_first ? "yeni bir talep açtı" : "talebine yazdı"}.`,
+    rows: [
+      ["Kimden", `${n.user_name || "Kullanıcı"} (${n.user_email})`],
+      ["Tür", n.audience === "business" ? "İşletme" : "Müşteri"],
+      ...(n.business_name ? [["İşletme", n.business_name] as [string, string]] : []),
+      ["Kategori", SUPPORT_CATEGORIES[n.category]],
+      ["Konu", n.subject],
+      ["Mesaj", n.body],
+    ],
+    action: { label: "Yönetim panelinde aç", href: `${appUrl}/admin/destek/${n.ticket_id}` },
+    footer: "Yanıtı yönetim panelinden yazın; kullanıcıya e-postayla ulaşır.",
+  });
+}
+
 function render(to: string, c: Content) {
   const rows = c.rows
     .map(
       ([k, v]) =>
         `<tr><td style="padding:6px 12px 6px 0;color:#6b7280;white-space:nowrap;vertical-align:top">${esc(k)}</td>` +
-        `<td style="padding:6px 0;color:#111827;font-weight:600">${esc(v)}</td></tr>`,
+        `<td style="padding:6px 0;color:#111827;font-weight:600;white-space:pre-wrap">${esc(v)}</td></tr>`,
     )
     .join("");
   const button = c.action
