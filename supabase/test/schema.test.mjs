@@ -32,7 +32,7 @@ await db.exec(`grant all on all tables in schema public to anon, authenticated;`
 ok((await db.query(`select count(*)::int c from public.profiles`)).rows[0].c === 1, 'eski kullanıcıya profil oluşturuldu');
 
 // Sitenin R2'ye yüklediği görsellerin adresi (is_upload_url).
-const UP = 'https://pub-2085cc7ac85a468292c6576a0f6ea8af.r2.dev/businesses/00000000-0000-0000-0000-000000000000';
+const UP = 'https://cdn.siftahgo.app/businesses/00000000-0000-0000-0000-000000000000';
 const A = '00000000-0000-0000-0000-00000000000a'; // işletme sahibi
 const C = '00000000-0000-0000-0000-00000000000c'; // müşteri
 const G = '00000000-0000-0000-0000-00000000000f'; // telefonsuz, başka adla randevu alan müşteri (eski "misafir")

@@ -91,7 +91,7 @@ returns boolean
 language sql immutable set search_path = ''
 as $$
   select coalesce(
-    p_url ~ '^https://pub-2085cc7ac85a468292c6576a0f6ea8af\.r2\.dev/businesses/[0-9a-f-]{36}/(logo|cover|gallery)/[A-Za-z0-9._-]+$',
+    p_url ~ '^https://cdn\.siftahgo\.app/businesses/[0-9a-f-]{36}/(logo|cover|gallery)/[A-Za-z0-9._-]+$',
     false
   );
 $$;
