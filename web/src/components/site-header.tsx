@@ -253,6 +253,7 @@ export function SiteFooter() {
         <FooterCol
           title="Destek"
           links={[
+            ["Destek talebi", "/hesabim?sekme=destek"],
             ["Sık sorulanlar", "/esnaf#sss"],
             ["Şifremi unuttum", "/sifremi-unuttum"],
           ]}
