@@ -5,11 +5,11 @@ export const COMPANY = {
   name: "Bekir Kaplan",
   address: "Diriliş Mah. 21. Sok., Sivas / Türkiye",
   phone: "0545 645 84 16",
-  email: "destek@neardrop.bekirr.dev",
+  email: "destek@siftahgo.app",
 };
 
 /** Yasal metinlerin son güncellenme tarihi. Metin değişince güncelleyin. */
-export const LEGAL_UPDATED = "20 Ekim 2026";
+export const LEGAL_UPDATED = "1 Kasım 2026";
 
 export const LEGAL_DOCS = [
   { href: "/yasal/gizlilik", label: "Gizlilik politikası" },
