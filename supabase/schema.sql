@@ -2402,7 +2402,7 @@ revoke execute on function public.claim_support_emails(int) from public, anon, a
 revoke execute on function public.finish_support_email(uuid, text) from public, anon, authenticated;
 
 -- İşletme başvurusunu onaylar ya da reddeder (ret sebebi zorunlu, işletme sahibine gösterilir).
--- Onayda işletmenin hiç aboneliği olmadıysa 7 gün ücretsiz deneme başlar: Pro paketin tüm özellikleri.
+-- Onayda işletmenin hiç aboneliği olmadıysa 2 ay ücretsiz deneme başlar: Pro paketin tüm özellikleri.
 create function public.admin_review_business(p_business_id uuid, p_approve boolean, p_note text default '')
 returns void
 language plpgsql volatile security definer set search_path = ''
@@ -2419,8 +2419,8 @@ begin
     update public.businesses
     set approval_status = 'approved', approval_note = '', reviewed_at = now(), reviewed_by = auth.uid(),
         plan_id = case when subscription_ends_at is null then 'pro' else plan_id end,
-        trial_ends_at = case when subscription_ends_at is null then now() + interval '7 days' else trial_ends_at end,
-        subscription_ends_at = coalesce(subscription_ends_at, now() + interval '7 days')
+        trial_ends_at = case when subscription_ends_at is null then now() + interval '2 months' else trial_ends_at end,
+        subscription_ends_at = coalesce(subscription_ends_at, now() + interval '2 months')
     where id = p_business_id;
   else
     if length(trim(coalesce(p_note, ''))) < 3 then raise exception 'Ret sebebini yazın.'; end if;

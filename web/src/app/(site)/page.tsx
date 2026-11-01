@@ -525,7 +525,7 @@ function ForBusinesses() {
               <span className="text-gradient">Müşterileriniz buradan randevu alsın.</span>
             </h2>
             <p className="mt-4 max-w-xl text-lg text-ink-2">
-              Online randevu, çakışmasız takvim, müşteri defteri ve hatırlatmalar. İlk 7 gün ücretsiz, taahhüt yok.
+              Online randevu, çakışmasız takvim, müşteri defteri ve hatırlatmalar. İlk 2 ay ücretsiz, taahhüt yok.
             </p>
           </div>
           <div className="relative flex flex-wrap gap-3 md:flex-col">

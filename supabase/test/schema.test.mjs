@@ -719,7 +719,7 @@ ok(admPay.length === 1 && admPay[0].amount === '1500.00' && admPay[0].status ===
 const B = '00000000-0000-0000-0000-00000000000b';
 await db.exec(`insert into auth.users values ('${B}', 'b@x.com', '{"full_name":"Berna"}')`);
 const bizB = (await as(B, `insert into businesses (owner_id, slug, name) values ($1, 'berna-kuafor', 'Berna Kuaför') returning id`, [B])).rows[0].id;
-// Başvuru önce sebebiyle reddedilir; sahibi düzeltip yeniden başvurur, onaylanınca 7 gün Pro denemeye girer.
+// Başvuru önce sebebiyle reddedilir; sahibi düzeltip yeniden başvurur, onaylanınca 2 ay Pro denemeye girer.
 await expectError(() => as(ADM, `select admin_review_business($1, false, ' ')`, [bizB]), /Ret sebebini/, 'sebepsiz ret reddedildi');
 await expectError(() => as(ADM, `select admin_grant_subscription($1, 'pro', 30)`, [bizB]), /Önce başvuruyu onaylayın/, 'onaysız işletmeye paket verilemez');
 await as(ADM, `select admin_review_business($1, false, '  Adres eksik. ')`, [bizB]);
@@ -734,8 +734,8 @@ ok((await db.query(`select approval_status s from businesses where id = $1`, [bi
 await as(ADM, `select admin_review_business($1, true)`, [bizB]);
 const appr = (await db.query(`select approval_status, approval_note, plan_id, subscription_ends_at, trial_ends_at from businesses where id = $1`, [bizB])).rows[0];
 const trialDays = (appr.subscription_ends_at - Date.now()) / 864e5;
-ok(appr.approval_status === 'approved' && appr.approval_note === '' && appr.plan_id === 'pro' && trialDays > 6.9 && trialDays < 7.1
-  && appr.trial_ends_at.getTime() === appr.subscription_ends_at.getTime(), `onaylanan işletmeye 7 gün Pro deneme: ${trialDays.toFixed(2)} gün`);
+ok(appr.approval_status === 'approved' && appr.approval_note === '' && appr.plan_id === 'pro' && trialDays > 58.9 && trialDays < 62.1
+  && appr.trial_ends_at.getTime() === appr.subscription_ends_at.getTime(), `onaylanan işletmeye 2 ay Pro deneme: ${trialDays.toFixed(2)} gün`);
 ok((await as(null, `select id from businesses where id = $1`, [bizB])).rows.length === 1, 'onaylanan, denemedeki işletme yayında');
 await expectError(() => as(ADM, `select admin_review_business($1, false, 'Geç kalan ret')`, [bizB]), /zaten onaylı/, 'onaylı işletme reddedilemez');
 const stats = (await as(ADM, `select admin_stats() s`)).rows[0].s;

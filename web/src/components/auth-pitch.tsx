@@ -12,7 +12,7 @@ const PITCH = {
       </>
     ),
     text: "Müşteriniz bağlantıdan saatini seçer, siz işinize bakarsınız.",
-    perks: ["7 gün ücretsiz", "1 dakikada kurulum", "Taahhüt yok"],
+    perks: ["İlk 2 ay ücretsiz", "1 dakikada kurulum", "Taahhüt yok"],
   },
   musteri: {
     title: (

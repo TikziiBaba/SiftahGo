@@ -176,7 +176,7 @@ askıya alma), kullanıcılar, ödemeler, randevular ve paket fiyatları. Yönet
 `insert into public.admins (email) values ('ornek@alan.com');`
 
 Yeni işletme "onay bekliyor" açılır: sahibi onaylanana kadar yalnızca bekleme ekranını görür, işletme sitede görünmez,
-randevu ve ödeme almaz. Yetkili `/admin/basvurular`'da adres ve telefonu kontrol edip onaylar (7 günlük Pro deneme o an
+randevu ve ödeme almaz. Yetkili `/admin/basvurular`'da adres ve telefonu kontrol edip onaylar (2 aylık Pro deneme o an
 başlar) ya da sebebini yazarak reddeder; reddedilen işletme bilgilerini düzeltip yeniden başvurur.
 
 Askıya alınan işletme sitede ve uygulamada görünmez, randevu almaz; sahibi bunu ayarlardan geri açamaz.

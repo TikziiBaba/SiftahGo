@@ -101,7 +101,7 @@ function ApplicationForm({ business, done }: { business: Business | null; done: 
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">{business ? "Başvurunuzu düzeltin" : "İşletmenizi oluşturalım"}</h1>
         <p className="mt-1 text-sm text-ink-3">
-          Bilgileriniz yetkililerimizce kontrol edildikten sonra sayfanız yayına açılır ve 7 günlük ücretsiz Pro denemeniz başlar.
+          Bilgileriniz yetkililerimizce kontrol edildikten sonra sayfanız yayına açılır ve 2 aylık ücretsiz Pro denemeniz başlar.
         </p>
       </div>
       {business?.approval_status === "rejected" && (
@@ -202,7 +202,7 @@ function Waiting({ business: b, refresh }: { business: Business; refresh: () => 
       <h1 className="mt-5 text-2xl font-semibold tracking-tight">Başvurunuz inceleniyor</h1>
       <p className="mt-2 text-sm text-ink-3">
         Yetkililerimiz bilgilerinizi kontrol ediyor; gerekirse sizi işletme telefonunuzdan arayabiliriz. Onaylanınca sayfanız
-        yayına açılır ve 7 günlük ücretsiz Pro denemeniz başlar.
+        yayına açılır ve 2 aylık ücretsiz Pro denemeniz başlar.
       </p>
       <dl className="mt-6 divide-y divide-line rounded-2xl bg-tint/[0.03] px-4 text-left text-sm ring-1 ring-line">
         {rows.map(([label, value]) => (

@@ -52,7 +52,7 @@ export default function DistanceSalesPage() {
         Paketler, işletmelerin ticari veya mesleki faaliyetleri için satın alınır; bu nedenle Alıcı 6502 sayılı Tüketicinin Korunması Hakkında
         Kanun anlamında tüketici sayılmaz ve cayma hakkı doğmaz. Alıcının tüketici sayıldığı durumlarda da hizmet elektronik ortamda anında ifa
         edildiği ve Alıcının onayıyla ifasına başlandığı için, Mesafeli Sözleşmeler Yönetmeliği’nin 15. maddesinin birinci fıkrasının (ğ) ve (h)
-        bentleri uyarınca <strong>cayma hakkı kullanılamaz</strong>. Yeni işletmelere ödeme öncesinde 7 günlük ücretsiz deneme sunulur.
+        bentleri uyarınca <strong>cayma hakkı kullanılamaz</strong>. Yeni işletmelere ödeme öncesinde 2 aylık ücretsiz deneme sunulur.
       </p>
       <h3>7. Şikâyet ve itiraz</h3>
       <p>

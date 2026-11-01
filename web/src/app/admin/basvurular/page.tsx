@@ -57,7 +57,7 @@ export default function AdminApplications() {
     <div className="mx-auto max-w-4xl">
       <PageTitle
         title="Başvurular"
-        hint="Yeni işletmeler onaylanana kadar görünmez ve randevu almaz. Onayda 7 günlük Pro denemesi başlar."
+        hint="Yeni işletmeler onaylanana kadar görünmez ve randevu almaz. Onayda 2 aylık Pro denemesi başlar."
       />
 
       <div className="mt-6">

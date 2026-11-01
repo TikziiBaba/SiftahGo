@@ -62,7 +62,7 @@ export default function TermsPage() {
       <h2>6. Paketler ve ücretsiz deneme</h2>
       <ul>
         <li>Müşteriler için randevu almak ücretsizdir. İşletme sayfasının yayında kalması için İşletme bir paket kullanır.</li>
-        <li>Yeni işletmeler 7 gün boyunca Pro paketi ücretsiz kullanır. Deneme sonunda paket alınmazsa sayfa yayından kalkar; bilgiler silinmez.</li>
+        <li>Yeni işletmeler 2 ay boyunca Pro paketi ücretsiz kullanır. Deneme sonunda paket alınmazsa sayfa yayından kalkar; bilgiler silinmez.</li>
         <li>
           Paketler aylık (30 gün) veya yıllık (365 gün, 10 ay fiyatına) alınır; her ödeme kalan süreye eklenir. Ücretli dönemde paket
           değiştirilirse kalan süre, eski ve yeni paket fiyatlarının oranıyla yeni pakete çevrilir. Otomatik yenileme ve taahhüt yoktur.

@@ -89,7 +89,7 @@ function ApplicationForm({ business }: { business: Business | null }) {
         </View>
         <View style={{ gap: 6, marginVertical: 8 }}>
           <Text variant="display">{business ? 'Başvurunuzu düzeltin' : 'İşletmenizi oluşturalım'}</Text>
-          <Text tone="muted">Bilgileriniz yetkililerimizce kontrol edildikten sonra sayfanız yayına açılır ve 7 günlük ücretsiz Pro denemeniz başlar.</Text>
+          <Text tone="muted">Bilgileriniz yetkililerimizce kontrol edildikten sonra sayfanız yayına açılır ve 2 aylık ücretsiz Pro denemeniz başlar.</Text>
         </View>
         {business?.approval_status === 'rejected' ? (
           <Banner
@@ -208,7 +208,7 @@ function WaitingScreen({ business: b }: { business: Business }) {
           </Text>
           <Text tone="muted" style={{ textAlign: 'center' }}>
             Yetkililerimiz bilgilerinizi kontrol ediyor; gerekirse sizi işletme telefonunuzdan arayabiliriz. Onaylanınca sayfanız yayına
-            açılır ve 7 günlük ücretsiz Pro denemeniz başlar.
+            açılır ve 2 aylık ücretsiz Pro denemeniz başlar.
           </Text>
         </View>
         <Group>

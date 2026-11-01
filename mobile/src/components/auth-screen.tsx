@@ -20,7 +20,7 @@ type Role = 'customer' | 'business';
 const HERO = {
   login: { title: 'Tekrar', accent: 'hoş geldiniz.', subtitle: 'Randevularınıza ve işletmenize ulaşmak için giriş yapın.' },
   customer: { title: 'Sıra beklemeden,', accent: 'saatini seç.', subtitle: 'Ücretsiz randevu · Aramak, beklemek yok · Ertele ya da iptal et' },
-  business: { title: 'Randevular düzende,', accent: 'siftah sabahtan.', subtitle: '7 gün ücretsiz · 1 dakikada kurulum · Taahhüt yok' },
+  business: { title: 'Randevular düzende,', accent: 'siftah sabahtan.', subtitle: 'İlk 2 ay ücretsiz · 1 dakikada kurulum · Taahhüt yok' },
 };
 
 const ROLES: { value: Role; title: string; icon: IconName }[] = [

@@ -14,7 +14,7 @@ export function ReviewActions({ business: b, onDone }: { business: Business; onD
   const [error, setError] = useState("");
 
   async function review(approve: boolean) {
-    if (approve && !confirm(`${b.name} onaylansın mı? Sayfası yayına açılır ve 7 günlük Pro denemesi başlar.`)) return;
+    if (approve && !confirm(`${b.name} onaylansın mı? Sayfası yayına açılır ve 2 aylık Pro denemesi başlar.`)) return;
     setBusy(approve ? "approve" : "reject");
     setError("");
     const { error } = await createClient().rpc("admin_review_business", { p_business_id: b.id, p_approve: approve, p_note: note });

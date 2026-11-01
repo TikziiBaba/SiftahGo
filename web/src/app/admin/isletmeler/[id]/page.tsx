@@ -367,7 +367,7 @@ export default function AdminBusinessDetail() {
             <Section title="Başvuru" className="ring-1 ring-gold/20">
               <p className="mt-2 text-sm text-ink-3">
                 {b.approval_status === "pending"
-                  ? `Başvuru ${dateTime(b.submitted_at)} geldi. Onaylanınca sayfa yayına açılır ve 7 günlük Pro denemesi başlar.`
+                  ? `Başvuru ${dateTime(b.submitted_at)} geldi. Onaylanınca sayfa yayına açılır ve 2 aylık Pro denemesi başlar.`
                   : `${dateTime(b.reviewed_at)} reddedildi. İşletme sahibi bilgileri düzeltip yeniden başvurabilir.`}
               </p>
               {b.approval_note && (

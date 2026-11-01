@@ -32,7 +32,7 @@ import type { Plan } from "@/lib/types";
 export const metadata: Metadata = {
   title: "Esnaf için online randevu ve takvim",
   description:
-    "Berber, kuaför, güzellik salonu, oto yıkama, halı saha ve tüm esnaf için online randevu, takvim ve müşteri yönetimi. İlk 7 gün ücretsiz.",
+    "Berber, kuaför, güzellik salonu, oto yıkama, halı saha ve tüm esnaf için online randevu, takvim ve müşteri yönetimi. İlk 2 ay ücretsiz.",
   alternates: { canonical: "/esnaf" },
 };
 
@@ -105,7 +105,7 @@ function Hero() {
           </Reveal>
           <Reveal onLoad delay={320}>
             <ul className="mt-10 flex flex-wrap gap-x-6 gap-y-2 text-sm text-ink-3">
-              {["7 gün ücretsiz", "1 dakikada kurulum", "Taahhüt yok", "Web, iOS ve Android"].map(
+              {["İlk 2 ay ücretsiz", "1 dakikada kurulum", "Taahhüt yok", "Web, iOS ve Android"].map(
                 (t) => (
                   <li key={t} className="flex items-center gap-2">
                     <Check className="size-4 text-brand-300" /> {t}
@@ -682,7 +682,7 @@ async function Pricing() {
             <span className="text-gradient">sürpriz yok</span>
           </>
         }
-        text="İlk 7 gün ücretsiz, sonra aylık ödeme ya da yıllık ödemede 2 ay bedava; taahhüt yok. Müşterileriniz için randevu her zaman ücretsiz."
+        text="İlk 2 ay ücretsiz, sonra aylık ödeme ya da yıllık ödemede 2 ay bedava; taahhüt yok. Müşterileriniz için randevu her zaman ücretsiz."
       />
       <div className="mt-16 grid gap-4 md:grid-cols-3">
         {plans.map((plan, i) => {
@@ -819,7 +819,7 @@ function Faq() {
     ],
     [
       "Ücret ne kadar, taahhüt var mı?",
-      "İlk 7 gün ücretsizdir; deneme boyunca Pro paketin tüm özelliklerini kullanırsınız. Paketler aylık (30 gün) veya yıllık (365 gün, 10 ay fiyatına) alınır; taahhüt ve otomatik yenileme yoktur. İstediğiniz zaman paket değiştirebilir veya bırakabilirsiniz. Ödeme PayTR güvencesiyle kartla alınır.",
+      "İlk 2 ay ücretsizdir; deneme boyunca Pro paketin tüm özelliklerini kullanırsınız. Paketler aylık (30 gün) veya yıllık (365 gün, 10 ay fiyatına) alınır; taahhüt ve otomatik yenileme yoktur. İstediğiniz zaman paket değiştirebilir veya bırakabilirsiniz. Ödeme PayTR güvencesiyle kartla alınır.",
     ],
     [
       "Müşterilerim ücret ödüyor mu?",
@@ -864,7 +864,7 @@ function FinalCta() {
             <span className="text-gradient">ilk randevu yarın gelsin.</span>
           </h2>
           <p className="relative mx-auto mt-5 max-w-lg text-lg text-ink-2">
-            İlk 7 gün ücretsiz, taahhüt yok. Dakikalar içinde işletme sayfanız yayında.
+            İlk 2 ay ücretsiz, taahhüt yok. Dakikalar içinde işletme sayfanız yayında.
           </p>
           <div className="relative mt-10 flex justify-center">
             <PrimaryCta href="/kayit?rol=isletme">Hemen başla</PrimaryCta>
