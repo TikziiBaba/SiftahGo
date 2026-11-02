@@ -3635,6 +3635,7 @@ declare
   v_services uuid[];
   v_today    date;
   v_id       uuid;
+  v_value    numeric := round(p_value, 2);
 begin
   select * into b from public.businesses where owner_id = auth.uid();
   if not found then raise exception 'Bu işlem için yetkiniz yok.'; end if;
@@ -3645,8 +3646,8 @@ begin
 
   if length(v_title) not between 1 and 80 then raise exception 'Kupon başlığı 1 ile 80 karakter arasında olmalı.'; end if;
   if p_type is null or p_type not in ('percent', 'fixed') then raise exception 'İndirim türü yüzde ya da sabit tutar olmalı.'; end if;
-  if p_value is null or p_value <= 0 or p_value > 100000 then raise exception 'İndirim değeri 0''dan büyük olmalı.'; end if;
-  if p_type = 'percent' and p_value not between 1 and 90 then raise exception 'Yüzde indirim 1 ile 90 arasında olmalı.'; end if;
+  if v_value is null or v_value <= 0 or v_value > 100000 then raise exception 'İndirim değeri 0''dan büyük olmalı.'; end if;
+  if p_type = 'percent' and v_value not between 1 and 90 then raise exception 'Yüzde indirim 1 ile 90 arasında olmalı.'; end if;
   if p_starts is null or p_ends is null or p_ends < p_starts then raise exception 'Bitiş tarihi başlangıçtan önce olamaz.'; end if;
   if p_ends - p_starts + 1 > 90 then raise exception 'Kupon süresi en fazla 90 gün olabilir.'; end if;
   if (p_start is null) <> (p_end is null) or p_start >= p_end then
@@ -3658,24 +3659,28 @@ begin
   end if;
   select coalesce(array_agg(distinct d order by d), '{}') into v_days from unnest(coalesce(p_weekdays, '{}')) d;
   select coalesce(array_agg(distinct s order by s), '{}') into v_services from unnest(coalesce(p_services, '{}')) s;
-  if (select count(*) from public.services where id = any (v_services) and business_id = b.id) <> cardinality(v_services) then
-    raise exception 'Seçilen hizmetlerden biri bu işletmeye ait değil.';
-  end if;
 
   if p_id is null then
+    if (select count(*) from public.services where id = any (v_services) and business_id = b.id) <> cardinality(v_services) then
+      raise exception 'Seçilen hizmetlerden biri bu işletmeye ait değil.';
+    end if;
     if p_ends < v_today then raise exception 'Bitiş tarihi geçmişte olamaz.'; end if;
     insert into public.coupons (business_id, title, discount_type, discount_value, starts_on, ends_on, weekdays,
                                 start_time, end_time, total_limit, service_ids)
-    values (b.id, v_title, p_type, p_value, p_starts, p_ends, v_days, p_start, p_end, p_limit, v_services)
+    values (b.id, v_title, p_type, v_value, p_starts, p_ends, v_days, p_start, p_end, p_limit, v_services)
     returning id into v_id;
     return v_id;
   end if;
 
   select * into c from public.coupons where id = p_id and business_id = b.id for update;
   if not found then raise exception 'Kupon bulunamadı.'; end if;
+  -- Silinen hizmet service_ids'te kalır; alınmış kuponda yalnızca kilit karşılaştırması geçerlidir.
+  if c.claimed_count = 0 and (select count(*) from public.services where id = any (v_services) and business_id = b.id) <> cardinality(v_services) then
+    raise exception 'Seçilen hizmetlerden biri bu işletmeye ait değil.';
+  end if;
   if p_ends is distinct from c.ends_on and p_ends < v_today then raise exception 'Bitiş tarihi geçmişte olamaz.'; end if;
   if c.claimed_count > 0 then
-    if p_type <> c.discount_type or p_value <> c.discount_value or v_days is distinct from c.weekdays
+    if p_type <> c.discount_type or v_value <> c.discount_value or v_days is distinct from c.weekdays
        or p_start is distinct from c.start_time or p_end is distinct from c.end_time
        or v_services is distinct from (select coalesce(array_agg(distinct s order by s), '{}') from unnest(c.service_ids) s) then
       raise exception 'Kupon alındıktan sonra indirim, gün ve saat aralığı ile hizmetler değiştirilemez.';
@@ -3688,7 +3693,7 @@ begin
   end if;
 
   update public.coupons
-  set title = v_title, discount_type = p_type, discount_value = p_value, starts_on = p_starts, ends_on = p_ends,
+  set title = v_title, discount_type = p_type, discount_value = v_value, starts_on = p_starts, ends_on = p_ends,
       weekdays = v_days, start_time = p_start, end_time = p_end, total_limit = p_limit, service_ids = v_services
   where id = c.id;
   return c.id;

@@ -1324,7 +1324,7 @@ const kfeats = Object.fromEntries((await db.query(`select id, features from plan
 ok(kfeats.esnaf.includes('coupons') && kfeats.pro.includes('coupons') && !kfeats.baslangic.includes('coupons'), 'kupon özelliği Esnaf ve Pro paketinde, Başlangıç\'ta yok');
 
 const ymd = async (n) => (await db.query(`select to_char((now() at time zone 'Europe/Istanbul')::date + $1::int, 'YYYY-MM-DD') d`, [n])).rows[0].d;
-const bugun = await ymd(0), dun = await ymd(-1), ileri = await ymd(30), gun5 = await ymd(-5), gun10 = await ymd(10), gun40 = await ymd(40), gun91 = await ymd(91);
+const bugun = await ymd(0), dun = await ymd(-1), ileri = await ymd(30), gun5 = await ymd(-5), gun10 = await ymd(10), gun40 = await ymd(40), gun91 = await ymd(91), gun89 = await ymd(89), gun90 = await ymd(90), gun1 = await ymd(1);
 const yerel = (await db.query(`select extract(isodow from now() at time zone 'Europe/Istanbul')::int dow, extract(hour from now() at time zone 'Europe/Istanbul')::int h`)).rows[0];
 const baskaGun = (yerel.dow % 7) + 1;
 const kSvc = (await as(KSAHIP, `insert into services (business_id, name, duration_minutes, price) values ($1, 'Saç Kesimi', 30, 400) returning id`, [kbiz])).rows[0].id;
@@ -1345,6 +1345,12 @@ await expectError(() => kaydet(M1), /yetki/i, 'işletmesi olmayan kupon açamaz'
 await expectError(() => kaydet(KSAHIP, { value: 91 }), /1.*90/, 'yüzde 91 reddedildi');
 await expectError(() => kaydet(KSAHIP, { value: 0 }), /0/, 'sıfır indirim reddedildi');
 await expectError(() => kaydet(KSAHIP, { ends: gun91 }), /90 gün/, '91 günlük süre reddedildi');
+await expectError(() => kaydet(KSAHIP, { ends: gun90 }), /90 gün/, 'bugün dahil 91 gün reddedildi');
+const K90 = await yeniKupon({ ends: gun89 });
+ok((await kupRow(K90)).id === K90, 'tam 90 günlük kupon kabul edilir');
+await as(KSAHIP, `select delete_coupon($1)`, [K90]);
+await expectError(() => kaydet(KSAHIP, { value: 0.001, type: 'fixed' }), /0'dan büyük/, '0.001 sabit indirim kısıt hatası değil açık hata verir');
+await expectError(() => kaydet(KSAHIP, { value: 0.004 }), /0'dan büyük/, '0.004 yüzde açık hata verir');
 await expectError(() => kaydet(KSAHIP, { starts: ileri, ends: bugun }), /bitiş/i, 'bitiş başlangıçtan önce olamaz');
 await expectError(() => kaydet(KSAHIP, { starts: gun5, ends: dun }), /geçmiş/i, 'bitişi geçmiş kupon açılamaz');
 await expectError(() => kaydet(KSAHIP, { start: '12:00' }), /saat/i, 'yalnız başlangıç saati reddedildi');
@@ -1414,6 +1420,7 @@ await expectError(() => kaydet(KSAHIP, { id: K1, services: [kSvc], days: [1, 2] 
 await expectError(() => kaydet(KSAHIP, { id: K1, services: [kSvc], start: '10:00', end: '12:00' }), /alındıktan sonra/, 'alınmış kuponun saatleri değişmez');
 await expectError(() => kaydet(KSAHIP, { id: K1 }), /alındıktan sonra/, 'alınmış kuponun hizmetleri değişmez');
 await expectError(() => kaydet(KSAHIP, { id: K1, services: [kSvc], ends: gun10 }), /alındıktan sonra/, 'alınmış kuponun bitişi kısaltılamaz');
+await expectError(() => kaydet(KSAHIP, { id: K1, services: [kSvc], starts: gun1, ends: gun40, limit: 60 }), /alındıktan sonra/, 'alınmış kuponun başlangıcı ileri alınamaz');
 await kaydet(KSAHIP, { id: K1, services: [kSvc], title: 'Yeni başlık', ends: gun40, limit: 70 });
 kr = await kupRow(K1);
 ok(kr.title === 'Yeni başlık' && kr.total_limit === 70, 'alınmış kuponun başlığı, bitişi ve sınırı değişir');
@@ -1421,6 +1428,14 @@ await expectError(() => kaydet(KSAHIP, { id: K1, services: [kSvc], ends: gun40, 
 await kaydet(KSAHIP, { id: K1, services: [kSvc], title: 'Yeni başlık', ends: gun40, limit: 80 });
 ok((await kupRow(K1)).total_limit === 80, 'sınır yükseltilebilir');
 await expectError(() => as(KSAHIP, `select delete_coupon($1)`, [K1]), /durdur/, 'alınmış kupon silinemez');
+// silinen hizmet alınmış kuponu kilitlemez
+const kSvc2 = (await as(KSAHIP, `insert into services (business_id, name, duration_minutes, price) values ($1, 'Silinecek Hizmet', 30, 100) returning id`, [kbiz])).rows[0].id;
+const Ksv = await yeniKupon({ title: 'Hizmetli', services: [kSvc2], limit: 5 });
+await alKod(M3, Ksv);
+await db.query(`delete from services where id = $1`, [kSvc2]);
+await kaydet(KSAHIP, { id: Ksv, title: 'Hizmetsiz kaldı', services: [kSvc2], ends: gun40, limit: 8 });
+ok((await kupRow(Ksv)).title === 'Hizmetsiz kaldı' && (await kupRow(Ksv)).total_limit === 8, 'hizmeti silinen alınmış kuponun başlık, bitiş ve sınırı düzenlenir');
+await expectError(() => kaydet(KSAHIP, { id: Ksv, title: 'x', services: [], ends: gun40, limit: 8 }), /alındıktan sonra/, 'hizmeti silinen kuponda hizmet listesi yine kilitli');
 const Ksil = await yeniKupon({ title: 'Silinecek' });
 await kaydet(KSAHIP, { id: Ksil, value: 40, days: [1, 2, 3], start: '09:00', end: '12:00' });
 ok((await kupRow(Ksil)).discount_value == 40, 'alınmamış kuponun indirimi değişir');
@@ -1435,6 +1450,7 @@ const f1 = await bul(KSAHIP, kbiz, kc1.code);
 ok(f1.claim_id === kc1.id && f1.title === 'Yeni başlık' && f1.discount_type === 'percent' && Number(f1.discount_value) === 20
   && f1.customer_name === 'Müşteri Bir' && f1.problem === null && f1.state === 'active', 'kod sorgusu kupon ve müşteri adını verir');
 ok((await bul(KSAHIP, kbiz, '000000')) === null, 'olmayan kod için sonuç boş');
+ok((await kasada(KSAHIP, kbiz, '000001')).rows[0].id === null, 'olmayan kod kasada null döner');
 ok((await kasada(KSAHIP, kbiz, ` ${kc1.code} `)).rows[0].id === kc1.id, 'kasada kod kullanılmış sayıldı (boşluklar yok sayılır)');
 await expectError(() => kasada(KSAHIP, kbiz, kc1.code), /zaten kullanıldı/, 'çift kullanım reddedilir');
 ok((await bul(KSAHIP, kbiz, kc1.code)).state === 'used', 'kullanılan kodun durumu used');
