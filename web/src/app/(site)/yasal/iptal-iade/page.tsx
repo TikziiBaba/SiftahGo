@@ -31,6 +31,10 @@ export default function RefundPage() {
           süreniz de yeni paketle devam eder.
           Daha küçük pakete geçerseniz paket sınırını aşan personel pasif olur.
         </li>
+        <li>
+          Vitrin paketi de aynı koşullara bağlıdır: otomatik yenilenmez, ödeme sonrasında nakit iade edilmez. Vitrin paketinde randevu alınmaz;
+          menü veya ürün listesi, kuponlar ve işletme sayfası pakete dahildir. Yeni işletmeler 2 ay ücretsiz deneyebilir.
+        </li>
         <li>{SITE_NAME}’dan kaynaklanan ve 24 saati aşan kesintilerde kesinti süresi paketinize eklenir.</li>
       </ul>
 

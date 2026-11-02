@@ -83,6 +83,7 @@ export default function PrivacyPage() {
         </li>
         <li>
           Randevudan sonra “Hizmet nasıldı?” değerlendirme isteği gönderilmesi ve değerlendirmelerin işletme sayfasında yayımlanması.
+          Vitrin işletmelerinde değerlendirme randevuya değil, kullanılmış bir kupona bağlıdır.
           <em> Hukuki sebep: meşru menfaat (m. 5/2-f) ve verinin ilgili kişinin kendisi tarafından alenileştirilmesi (m. 5/2-d).</em>
         </li>
         <li>

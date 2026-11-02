@@ -33,6 +33,11 @@ export default function DistanceSalesPage() {
           kullanılması. Paket içerikleri ve fiyatları{" "}
           <Link href="/esnaf#fiyatlar">Fiyatlar</Link> bölümünde ve panelin Abonelik sayfasında yazılıdır.
         </li>
+        <li>
+          <strong>Vitrin paketi:</strong> Randevu almayan işletmeler içindir. İşletme sayfasının yayında kalmasını, menü veya ürün listesini ve kuponları
+          içerir; randevu alınmaz. Vitrin paketi de aylık (30 gün) veya yıllık (365 gün, 10 ay fiyatına) alınır ve yeni işletmelere 2 ay ücretsiz
+          deneme sunulur. Fiyatı <Link href="/esnaf#fiyatlar">Fiyatlar</Link> bölümünde yazılıdır.
+        </li>
       </ul>
       <h3>4. Fiyat ve ödeme</h3>
       <ul>
@@ -91,6 +96,10 @@ export default function DistanceSalesPage() {
       <p>
         Alıcı, ödeme sırasında verdiği bilgilerin doğru olduğunu ve kullandığı kartın kendisine ait olduğunu veya kart sahibinin onayıyla
         kullandığını kabul eder. Kartın yetkisiz kullanımı nedeniyle bankanın ödemeyi geri alması halinde ilgili paket geri alınır.
+      </p>
+      <p>
+        Kuponu İşletme hazırlar, indirimi İşletme uygular ve indirimli tutarı İşletme tahsil eder. Kuponun şartlarına uygun olarak yerine
+        getirilmesinden İşletme sorumludur; Satıcı bunun için ödeme almaz.
       </p>
       <h3>Madde 7 · Uyuşmazlıklar</h3>
       <p>

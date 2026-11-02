@@ -56,6 +56,7 @@ export default function TermsPage() {
           Platform’da gördüğü müşteri bilgilerini yalnızca randevu ve hizmet için kullanır; izinsiz reklam mesajı göndermez, bilgileri üçüncü kişilerle
           paylaşmaz. Kendi müşterilerinin verileri bakımından İşletme de 6698 sayılı Kanun kapsamında ayrı veri sorumlusudur.
         </li>
+        <li>Menüsünde ve sayfasında gösterdiği ürünlerin, hizmetlerin ve fiyatların doğruluğundan ve güncelliğinden sorumludur.</li>
         <li>Müşterilerine karşı vergi, fatura ve tüketici mevzuatından doğan yükümlülükleri kendisine aittir.</li>
       </ul>
 
@@ -66,6 +67,10 @@ export default function TermsPage() {
         <li>
           Paketler aylık (30 gün) veya yıllık (365 gün, 10 ay fiyatına) alınır; her ödeme kalan süreye eklenir. Ücretli dönemde paket
           değiştirilirse kalan süre, eski ve yeni paket fiyatlarının oranıyla yeni pakete çevrilir. Otomatik yenileme ve taahhüt yoktur.
+        </li>
+        <li>
+          Vitrin paketi randevu almayan işletmeler içindir: işletme sayfası, menü veya ürün listesi ve kuponları içerir; randevu alınmaz.
+          Aylık, yıllık (10 ay fiyatına) alınır ve yeni işletmelere 2 ay ücretsiz deneme sunulur. Fiyat <Link href="/esnaf#fiyatlar">Fiyatlar</Link> bölümünde yazılıdır.
         </li>
         <li>
           Davet: Bir İşletme, başka bir İşletmenin davet koduyla katılıp ilk ödemesini yaptığında her iki İşletmenin paket süresine 30 gün eklenir.
