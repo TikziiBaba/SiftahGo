@@ -35,7 +35,7 @@ function when(iso: string) {
 }
 
 /** Üst menüdeki bildirim düğmesi. Yeni bildirimler Realtime ile anında gelir. */
-export function InboxBell() {
+export function InboxBell({ showcase = false }: { showcase?: boolean }) {
   const account = useAccount();
   const userId = account && account.kind !== "guest" ? account.id : null;
   const [items, setItems] = useState<Item[]>([]);
@@ -127,7 +127,7 @@ export function InboxBell() {
           <p className="border-b border-line px-4 py-3 text-sm font-semibold">Bildirimler</p>
           {items.length === 0 ? (
             <p className="px-4 py-10 text-center text-sm text-ink-3">
-              Henüz bildirim yok. Yeni randevular, onaylar ve iptaller burada görünür.
+              Henüz bildirim yok. {showcase ? "Yeni değerlendirmeler burada görünür." : "Yeni randevular, onaylar ve iptaller burada görünür."}
             </p>
           ) : (
             <ul className="max-h-[min(28rem,70vh)] divide-y divide-line overflow-y-auto">

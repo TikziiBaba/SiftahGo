@@ -108,7 +108,7 @@ export function ShowcasePage({
                   <Text variant="bodyStrong" tone={status.open ? 'success' : 'secondary'}>
                     {status.open ? 'Açık' : 'Kapalı'}
                   </Text>
-                  {status.open && status.until ? <Text tone="muted">· {status.until}’e kadar</Text> : null}
+                  {status.open && status.until ? <Text tone="muted">· Kapanış {status.until}</Text> : null}
                   <Ionicons name="time-outline" size={14} color={colors.ink3} />
                   <Text tone="muted">Saatler</Text>
                 </Pressable>
@@ -199,7 +199,8 @@ export function ShowcasePage({
                       <View style={{ flex: 1 }}>
                         <Text variant="bodyStrong">{r.customer_name}</Text>
                         <Text variant="caption" tone="muted">
-                          {formatDate(r.created_at, false)} · Kupon kullanan müşteri
+                          {formatDate(r.created_at, false)}
+                          {r.coupon_claim_id ? ' · Kupon kullanan müşteri' : ''}
                         </Text>
                       </View>
                       <View style={{ flexDirection: 'row', gap: 1 }}>

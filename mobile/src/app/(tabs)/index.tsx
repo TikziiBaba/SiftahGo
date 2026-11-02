@@ -13,7 +13,7 @@ import { OptionSheet } from '@/components/pickers';
 import { TopBar, useScrollY } from '@/components/top-bar';
 import { Avatar, Badge, Button, Card, Chip, Empty, Field, PressableScale, Skeleton, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
-import { CATEGORIES, categoryLabel, CITIES, isShowcase } from '@/lib/constants';
+import { CATEGORIES, categoryLabel, CITIES, isShowcase, menuLabel } from '@/lib/constants';
 import { supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
 import type { Business } from '@/lib/types';
@@ -348,7 +348,7 @@ function BusinessCard({ item, open }: { item: Item; open: boolean }) {
           {isShowcase(item) && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
               <Text variant="label" tone="brand">
-                Menüyü gör
+                {menuLabel(item.category) === 'Menü' ? 'Menüyü gör' : 'Ürünleri gör'}
               </Text>
               <Ionicons name="arrow-forward" size={12} color={colors.brand300} />
             </View>

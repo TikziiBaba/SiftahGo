@@ -83,9 +83,10 @@ function Hours({ business }: { business: Business }) {
 
   async function save() {
     if (!hours) return false;
-    const invalid = hours.find((h) => h.is_open && h.close_time.slice(0, 5) <= h.open_time.slice(0, 5));
+    // Vitrinde kapanış açılıştan önce olabilir (ertesi gün); randevuda aynı gün içinde olmalı.
+    const invalid = hours.find((h) => h.is_open && (showcase ? h.close_time.slice(0, 5) === h.open_time.slice(0, 5) : h.close_time.slice(0, 5) <= h.open_time.slice(0, 5)));
     if (invalid) {
-      setError(`${WEEKDAYS[invalid.weekday - 1]}: kapanış saati açılıştan sonra olmalı.`);
+      setError(showcase ? `${WEEKDAYS[invalid.weekday - 1]}: açılış ve kapanış saati aynı olamaz.` : `${WEEKDAYS[invalid.weekday - 1]}: kapanış saati açılıştan sonra olmalı.`);
       return false;
     }
     const { error } = await supabase.from('working_hours').upsert(hours);
@@ -133,6 +134,7 @@ function Hours({ business }: { business: Business }) {
                     <TimePill value={h.open_time.slice(0, 5)} label={`${WEEKDAYS[h.weekday - 1]} açılış`} onPress={() => setEditing({ weekday: h.weekday, field: 'open_time' })} />
                     <Text tone="muted">–</Text>
                     <TimePill value={h.close_time.slice(0, 5)} label={`${WEEKDAYS[h.weekday - 1]} kapanış`} onPress={() => setEditing({ weekday: h.weekday, field: 'close_time' })} />
+                    {showcase && h.close_time.slice(0, 5) < h.open_time.slice(0, 5) && <Text tone="muted" variant="caption">ertesi gün</Text>}
                   </View>
                 ) : (
                   <Text tone="muted" style={{ flex: 1 }}>

@@ -32,7 +32,7 @@ export function SupportThread({ messages, mine }: { messages: SupportMessage[]; 
 }
 
 /** Kullanıcının destek talepleri: liste, yeni talep ve konuşma. Hesabım ve panel ortak kullanır; seçili talep adreste durur. */
-export function SupportCenter() {
+export function SupportCenter({ showcase = false }: { showcase?: boolean } = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -78,6 +78,7 @@ export function SupportCenter() {
   if (creating) {
     return (
       <NewTicket
+        showcase={showcase}
         onCancel={() => setCreating(false)}
         onCreated={async (id) => {
           await load();
@@ -92,7 +93,7 @@ export function SupportCenter() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-lg text-sm text-ink-3">
-          SiftahGo ekibine yazın. Saat, fiyat gibi randevu konularında en hızlı yanıtı işletmenin kendisi verir.
+          {showcase ? "SiftahGo ekibine yazın." : "SiftahGo ekibine yazın. Saat, fiyat gibi randevu konularında en hızlı yanıtı işletmenin kendisi verir."}
         </p>
         <button type="button" onClick={() => setCreating(true)} className="btn btn-primary">
           <Plus className="size-4" /> Yeni talep
@@ -129,7 +130,7 @@ export function SupportCenter() {
   );
 }
 
-function NewTicket({ onCancel, onCreated }: { onCancel: () => void; onCreated: (id: string) => void }) {
+function NewTicket({ showcase, onCancel, onCreated }: { showcase: boolean; onCancel: () => void; onCreated: (id: string) => void }) {
   const [category, setCategory] = useState<SupportCategory>("teknik");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
@@ -152,7 +153,7 @@ function NewTicket({ onCancel, onCreated }: { onCancel: () => void; onCreated: (
       <label className="block">
         <span className="label">Konu başlığı</span>
         <select className="input" value={category} onChange={(e) => setCategory(e.target.value as SupportCategory)}>
-          {Object.entries(SUPPORT_CATEGORIES).map(([id, label]) => (
+          {Object.entries(SUPPORT_CATEGORIES).filter(([id]) => !(showcase && id === "randevu")).map(([id, label]) => (
             <option key={id} value={id}>
               {label}
             </option>
@@ -165,7 +166,7 @@ function NewTicket({ onCancel, onCreated }: { onCancel: () => void; onCreated: (
       </label>
       <label className="block">
         <span className="label">Mesajınız</span>
-        <textarea className="input" required minLength={2} maxLength={4000} rows={6} placeholder="Ne oldu, ne zaman oldu? Varsa işletme adını ve randevu tarihini yazın." value={body} onChange={(e) => setBody(e.target.value)} />
+        <textarea className="input" required minLength={2} maxLength={4000} rows={6} placeholder={showcase ? "Ne oldu, ne zaman oldu? Varsa işletme adını ve tarihi yazın." : "Ne oldu, ne zaman oldu? Varsa işletme adını ve randevu tarihini yazın."} value={body} onChange={(e) => setBody(e.target.value)} />
       </label>
       {error && <p className="text-sm text-bad">{error}</p>}
       <div className="flex flex-wrap gap-2">

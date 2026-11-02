@@ -25,6 +25,7 @@ export function MyCoupons() {
   const [showcaseIds, setShowcaseIds] = useState<Set<string>>(new Set());
   const [reviewed, setReviewed] = useState<Set<string>>(new Set());
   const [reviewing, setReviewing] = useState<string | null>(null);
+  const canReview = (c: MyCoupon) => c.state === "used" && !!c.redeemed_at && showcaseIds.has(c.business_id) && !reviewed.has(c.claim_id);
 
   const load = useCallback(async () => {
     const supabase = createClient();
@@ -63,7 +64,7 @@ export function MyCoupons() {
   return (
     <ul className="space-y-3">
       {list.map((c) => (
-        <li key={c.claim_id} className={`card flex flex-wrap items-center gap-4 p-4 ${c.state !== "active" && c.state !== "attached" ? "opacity-60" : ""}`}>
+        <li key={c.claim_id} className={`card flex flex-wrap items-center gap-4 p-4 ${c.state !== "active" && c.state !== "attached" && !canReview(c) ? "opacity-60" : ""}`}>
           <div className="min-w-0 flex-1">
             <p className="font-semibold">{c.title}</p>
             <Link href={`/${c.business_slug}`} className="text-sm text-ink-2 hover:underline">
@@ -76,7 +77,7 @@ export function MyCoupons() {
             <p className="rounded-lg bg-brand-400/10 px-3 py-1.5 text-lg font-bold tabular-nums tracking-widest text-accent">{c.code}</p>
             <p className="mt-1 text-xs text-ink-3">{STATE[c.state]}</p>
           </div>
-          {c.state === "used" && c.redeemed_at && showcaseIds.has(c.business_id) && !reviewed.has(c.claim_id) && reviewing !== c.claim_id && (
+          {canReview(c) && reviewing !== c.claim_id && (
             <button type="button" onClick={() => setReviewing(c.claim_id)} className="btn btn-primary w-full py-2 sm:w-auto">
               <Star className="size-4" /> Değerlendir
             </button>

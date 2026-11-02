@@ -35,12 +35,16 @@ export const CATEGORIES = [
   { id: 'diger', label: 'Diğer', icon: 'grid-outline' },
 ] as const satisfies readonly { id: string; label: string; icon: IconName }[];
 
-// Randevusuz (vitrin) işletmelerin seçebildiği kategoriler; 'Diğer' ikisinde de var. Web ile aynı.
+// Randevusuz (vitrin) işletmelerde önce gösterilen kategoriler (categoriesFor). Web ile aynı.
 export const SHOWCASE_CATEGORY_IDS: readonly string[] = ['lokanta', 'kafe', 'firin', 'market', 'manav-kasap', 'magaza'];
 
-/** İşletme türüne göre seçilebilen kategoriler: vitrin yalnızca kendi kategorilerini ve 'Diğer'i, randevulu vitrin kategorileri dışındakileri görür. */
+/**
+ * Tür ve kategori ayrıdır: her tür her kategoriyi seçebilir. Listede türe en yakın kategoriler başta, 'Diğer' sonda;
+ * yeni işletme kurulumunda ilk kategori varsayılan olur.
+ */
 export function categoriesFor(type: BusinessType) {
-  return CATEGORIES.filter((c) => (type === 'showcase' ? SHOWCASE_CATEGORY_IDS.includes(c.id) || c.id === 'diger' : !SHOWCASE_CATEGORY_IDS.includes(c.id)));
+  const near = (c: (typeof CATEGORIES)[number]) => c.id !== 'diger' && SHOWCASE_CATEGORY_IDS.includes(c.id) === (type === 'showcase');
+  return [...CATEGORIES.filter(near), ...CATEGORIES.filter((c) => c.id !== 'diger' && !near(c)), ...CATEGORIES.filter((c) => c.id === 'diger')];
 }
 
 /** Randevu almayan, menü ve kuponla sayfa açan işletme mi. */

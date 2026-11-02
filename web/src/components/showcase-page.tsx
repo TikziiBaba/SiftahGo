@@ -111,7 +111,7 @@ export function ShowcasePage({
             <summary className="inline-flex cursor-pointer list-none items-center gap-2 text-sm [&::-webkit-details-marker]:hidden">
               <span className={`size-2.5 rounded-full ${status.open ? "bg-ok" : "bg-ink-3"}`} aria-hidden />
               <span className={`font-semibold ${status.open ? "text-ok" : "text-ink-2"}`}>{status.open ? "Açık" : "Kapalı"}</span>
-              {status.open && status.until && <span className="text-ink-3">· {status.until}’e kadar</span>}
+              {status.open && status.until && <span className="text-ink-3">· Kapanış {status.until}</span>}
               <span className="inline-flex items-center gap-1 text-ink-3 underline-offset-2 group-open:underline">
                 <Clock className="size-3.5" /> Saatler
               </span>
@@ -215,7 +215,8 @@ export function ShowcasePage({
                   </div>
                   {r.comment && <p className="mt-1 text-ink-2">{r.comment}</p>}
                   <p className="mt-0.5 text-xs text-ink-3">
-                    {formatDate(r.created_at, { weekday: undefined, year: "numeric" })} · Kupon kullanan müşteri
+                    {formatDate(r.created_at, { weekday: undefined, year: "numeric" })}
+                    {r.coupon_claim_id ? " · Kupon kullanan müşteri" : ""}
                   </p>
                   {r.reply && (
                     <div className="mt-2 rounded-lg border-l-2 border-brand-400/40 bg-tint/[0.03] px-3 py-2">

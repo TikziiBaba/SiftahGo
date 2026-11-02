@@ -225,8 +225,8 @@ async function sendMessages(supabase: SupabaseClient, messages: Message[], label
 }
 
 /**
- * Vitrin müşterisine "Nasıldı?" gönderir. Tekrar denenmez. Dokununca işletme sayfası açılır: eski uygulamalar da
- * "waitlist" türünü slug ile işletme sayfasına yönlendirdiği için yeni bir tür eklenmedi.
+ * Vitrin müşterisine "Nasıldı?" gönderir. Tekrar denenmez. Dokununca kupon listesi açılır (kind "coupon_review");
+ * türü tanımayan eski uygulamalar müşteri randevuları ekranını açar.
  */
 export function sendCouponReviewRequestPushes(supabase: SupabaseClient, notices: CouponReviewRequest[]) {
   return sendMessages(
@@ -236,7 +236,7 @@ export function sendCouponReviewRequestPushes(supabase: SupabaseClient, notices:
         to,
         title: "Nasıldı?",
         body: `${n.business_name} · Kuponunuzu kullandınız, puan vermek için dokunun`,
-        data: { kind: "waitlist", recipient: "customer", slug: n.business_slug },
+        data: { kind: "coupon_review", recipient: "customer", slug: n.business_slug },
       })),
     ),
     "Kupon değerlendirme isteği",

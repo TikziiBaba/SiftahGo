@@ -7,7 +7,7 @@ import { useEffect } from 'react';
 import { ToastProvider } from '@/components/toast';
 import { WhatsNew } from '@/components/whats-new';
 import { AuthProvider, useAuth } from '@/lib/auth';
-import { isShowcase } from '@/lib/constants';
+import { isShowcase, menuLabel } from '@/lib/constants';
 import { installErrorHandler } from '@/lib/error-log';
 import { InboxProvider } from '@/lib/inbox';
 import { useIntroSeen } from '@/lib/intro';
@@ -63,9 +63,12 @@ function RootStack({ fontsReady }: { fontsReady: boolean }) {
     if (ready) SplashScreen.hideAsync();
   }, [ready]);
 
+  // Profil ve işletme birlikte yüklendiği için tür belli olmadan ekranlar açılmaz (yanıp sönme yok).
+  const showcase = !!business && isShowcase(business);
+
   usePushRegistration(session?.user.id);
   // Bildirime dokununca açılacak ekranlar oturuma bağlı; oturum yüklenmeden yönlendirme yapılmaz.
-  useNotificationTaps(ready && !!session, profile?.role === 'business');
+  useNotificationTaps(ready && !!session, profile?.role === 'business', showcase);
 
   // Açılış ekranı, yazı tipi ve oturum hazır olana kadar görünür kalır.
   if (!ready) return null;
@@ -74,8 +77,6 @@ function RootStack({ fontsReady }: { fontsReady: boolean }) {
   const approved = business?.approval_status === 'approved';
   // İşletme hesabı açılmış ama işletme henüz oluşturulmamış ya da başvurusu onaylanmamış.
   const needsSetup = isBusiness && !approved;
-  // Profil ve işletme birlikte yüklendiği için tür belli olmadan ekranlar açılmaz (yanıp sönme yok).
-  const showcase = !!business && isShowcase(business);
 
   return (
     <>
@@ -143,7 +144,7 @@ function RootStack({ fontsReady }: { fontsReady: boolean }) {
 
         {/* Menü yalnızca vitrin esnafında. */}
         <Stack.Protected guard={isBusiness && approved && showcase}>
-          <Stack.Screen name="yonetim/menu" options={{ title: 'Menü' }} />
+          <Stack.Screen name="yonetim/menu" options={{ title: business ? menuLabel(business.category) : 'Menü' }} />
         </Stack.Protected>
       </Stack>
     </>

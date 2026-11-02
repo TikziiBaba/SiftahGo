@@ -17,7 +17,7 @@ import { isSubscribed, isTrial, STATUS, WEEKDAYS } from '@/lib/constants';
 import { formatMoney } from '@/lib/coupons';
 import { addDays, dayBounds, dayOf, errorMessage, formatDate, formatDuration, formatPrice, formatTime, isoWeekday, relativeDay, shortDay, toIso, todayStr } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
-import { daysLeft } from '@/lib/plan';
+import { daysLeft, usePlan } from '@/lib/plan';
 import { supabase } from '@/lib/supabase';
 import { colors, fonts, radius, shadows } from '@/lib/theme';
 import type { AppointmentStatus, Business, WorkingHour } from '@/lib/types';
@@ -91,6 +91,7 @@ function Agenda({ business }: { business: Business }) {
   const subscribed = isSubscribed(business);
   const left = daysLeft(business.subscription_ends_at);
   const trial = isTrial(business);
+  const plan = usePlan(business.plan_id);
   const weekStart = addDays(day, 1 - isoWeekday(day));
   const list = rows?.day === day ? rows.list : null;
 
@@ -299,7 +300,7 @@ function Agenda({ business }: { business: Business }) {
             {trial ? (
               <Banner
                 icon="sparkles-outline"
-                text={`Ücretsiz Pro denemenizin bitmesine ${left} gün kaldı. Sayfanız yayında kalsın diye paket seçin.`}
+                text={`Ücretsiz ${plan?.name ?? 'Pro'} denemenizin bitmesine ${left} gün kaldı. Sayfanız yayında kalsın diye paket seçin.`}
                 onPress={() => router.push('/yonetim/abonelik')}
               />
             ) : left <= 5 && (

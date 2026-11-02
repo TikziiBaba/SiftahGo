@@ -205,7 +205,7 @@ export function buildCouponReviewRequestEmail(n: CouponReviewRequest & { email: 
     title: "Nasıldı?",
     intro: `Merhaba${n.customer_name.trim() ? ` ${n.customer_name.trim().split(" ")[0]}` : ""}, ${n.business_name} işletmesinde kuponunuzu kullandınız. Deneyiminizi puanlarsanız diğer müşterilere yardımcı olursunuz.`,
     rows: [["İşletme", n.business_name]],
-    action: { label: "Puan ver", href: `${appUrl}/${n.business_slug}` },
+    action: { label: "Puan ver", href: `${appUrl}/hesabim?sekme=kuponlar` },
     footer: "Bu e-posta SiftahGo kuponunuzu kullandığınız için gönderildi.",
   });
 }

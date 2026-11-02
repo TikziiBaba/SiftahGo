@@ -68,7 +68,7 @@ export function PageAppearance() {
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h2 className="text-xl font-bold">Sayfa görünümü</h2>
-          <p className="mt-1 text-sm text-ink-3">Paketiniz yükseldikçe sayfanızı daha çok kişiselleştirebilirsiniz.</p>
+          <p className="mt-1 text-sm text-ink-3">{isShowcase(business) ? "Duyuru ve kısayollarla sayfanızı kişiselleştirebilirsiniz." : "Paketiniz yükseldikçe sayfanızı daha çok kişiselleştirebilirsiniz."}</p>
         </div>
         <Link href={`/${business.slug}`} target="_blank" className="btn btn-ghost py-2 text-sm">
           <ExternalLink className="size-4" /> Sayfamı gör
@@ -84,7 +84,7 @@ export function PageAppearance() {
             className="input"
             value={form.announcement}
             onChange={(e) => setForm({ ...form, announcement: e.target.value })}
-            placeholder="Örn. Bayramda da açığız! Salı günleri saç kesiminde %20 indirim."
+            placeholder={isShowcase(business) ? "Örn. Bayramda da açığız! Salı günleri çorbada %20 indirim." : "Örn. Bayramda da açığız! Salı günleri saç kesiminde %20 indirim."}
             aria-label="Duyuru"
           />
           <p className="mt-1 text-right text-xs text-ink-3">{form.announcement.length}/160 · Boş bırakırsanız görünmez.</p>
@@ -119,6 +119,7 @@ export function PageAppearance() {
           </div>
         </Part>
 
+        {!isShowcase(business) && (
         <Part icon={Palette} title="Sayfa rengi" plan="Pro" locked={!has("theme")}
           text="Kapak, düğmeler ve vurgular bu renge bürünür. Renkler koyu temada okunaklı olacak şekilde seçildi.">
           <div role="radiogroup" aria-label="Sayfa rengi" className="flex flex-wrap gap-3">
@@ -142,6 +143,7 @@ export function PageAppearance() {
             })}
           </div>
         </Part>
+        )}
 
         <div className="flex flex-wrap items-center gap-3 p-5">
           <button disabled={busy || !anyOpen} className="btn btn-primary px-6">

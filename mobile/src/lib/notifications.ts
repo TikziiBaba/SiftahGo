@@ -68,16 +68,21 @@ export function usePushRegistration(userId: string | undefined) {
 }
 
 // businessAccount: kullanıcı işletme hesabı; müşteri olarak aldığı randevular sekmede değil ayrı ekranda.
-type Target = { kind?: string; recipient: string; appointmentId?: string; startsAt?: string; slug?: string; day?: string; businessAccount: boolean };
+// showcase: işletme vitrin türünde; takvimi yoktur, randevusuz bildirimler İşletmem'e gider.
+type Target = { kind?: string; recipient: string; appointmentId?: string; startsAt?: string; slug?: string; day?: string; businessAccount: boolean; showcase?: boolean };
 
 /**
  * Bildirimin ilgili ekranını açar: işletme o günün takvimine (yeni değerlendirmede Yorumlar'a),
  * müşteri randevularına gider. Bekleme listesi haberi işletme sayfasını o gün seçili açar.
  */
-export async function openNotificationTarget({ kind, recipient, appointmentId, startsAt, slug, day, businessAccount }: Target) {
+export async function openNotificationTarget({ kind, recipient, appointmentId, startsAt, slug, day, businessAccount, showcase }: Target) {
+  // Vitrin müşterisine "Nasıldı?": kupon listesi, oradan değerlendirilir. Eski uygulamalar bu türü tanımaz ve
+  // müşteri randevuları ekranını açar (çökmez).
+  if (kind === 'coupon_review') return router.navigate('/kuponlarim');
   if (kind === 'waitlist' && slug) return router.navigate({ pathname: '/isletme/[slug]', params: { slug, ...(day ? { day } : {}) } });
   if (recipient !== 'business') return businessAccount ? router.push('/randevularim') : openTab('/randevular');
   if (kind === 'reviewed') return router.navigate('/yonetim/yorumlar');
+  if (showcase) return openTab('/isletmem');
   if (!startsAt && appointmentId) {
     const { data } = await supabase.from('appointments').select('starts_at').eq('id', appointmentId).maybeSingle();
     startsAt = data?.starts_at;
@@ -94,7 +99,7 @@ function openTab(href: Href) {
   router.navigate(href);
 }
 
-function handleTap(response: Notifications.NotificationResponse | null, businessAccount: boolean) {
+function handleTap(response: Notifications.NotificationResponse | null, businessAccount: boolean, showcase: boolean) {
   if (!response || response.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) return;
   // Aynı dokunuş bir daha işlenmesin.
   Notifications.clearLastNotificationResponse();
@@ -109,18 +114,19 @@ function handleTap(response: Notifications.NotificationResponse | null, business
       slug: typeof data.slug === 'string' ? data.slug : undefined,
       day: typeof data.day === 'string' ? data.day : undefined,
       businessAccount,
+      showcase,
     });
   }
 }
 
 /** Telefondaki bildirime dokunulunca (uygulama kapalıyken de) ilgili ekranı açar. */
-export function useNotificationTaps(enabled: boolean, businessAccount: boolean) {
+export function useNotificationTaps(enabled: boolean, businessAccount: boolean, showcase: boolean) {
   useEffect(() => {
     // Web önizlemesinde bildirim modülü yok.
     if (!enabled || Platform.OS === 'web') return;
     // Uygulamayı bir bildirim açtıysa
-    handleTap(Notifications.getLastNotificationResponse(), businessAccount);
-    const sub = Notifications.addNotificationResponseReceivedListener((r) => handleTap(r, businessAccount));
+    handleTap(Notifications.getLastNotificationResponse(), businessAccount, showcase);
+    const sub = Notifications.addNotificationResponseReceivedListener((r) => handleTap(r, businessAccount, showcase));
     return () => sub.remove();
-  }, [enabled, businessAccount]);
+  }, [enabled, businessAccount, showcase]);
 }

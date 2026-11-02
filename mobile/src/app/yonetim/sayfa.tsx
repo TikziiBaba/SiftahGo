@@ -9,7 +9,7 @@ import { SaveBar } from '@/components/save-bar';
 import { Badge, Button, Card, Field, SectionTitle, styles, Text } from '@/components/ui';
 import { AccentProvider } from '@/lib/accent';
 import { useAuth } from '@/lib/auth';
-import { categoryLabel, isShowcase, isSubscribed, type IconName } from '@/lib/constants';
+import { categoryLabel, isShowcase, isSubscribed, menuLabel, type IconName } from '@/lib/constants';
 import { errorMessage } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 import { usePlan } from '@/lib/plan';
@@ -76,8 +76,9 @@ function Appearance({ business }: { business: Business }) {
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Preview business={business} form={form} has={has} />
         <Button title="Logo ve kapak fotoğrafı" icon="images-outline" variant="secondary" size="sm" onPress={() => router.push('/yonetim/gorseller')} />
-        <Text tone="muted">Paketiniz yükseldikçe sayfanızı daha çok kişiselleştirebilirsiniz.</Text>
+        <Text tone="muted">{isShowcase(business) ? 'Duyuru ve kısayollarla sayfanızı kişiselleştirebilirsiniz.' : 'Paketiniz yükseldikçe sayfanızı daha çok kişiselleştirebilirsiniz.'}</Text>
 
+        {!isShowcase(business) && (
         <Part icon="color-palette-outline" title="Sayfa rengi" plan="Pro" locked={!has('theme')} text="Kapak, düğmeler ve vurgular bu renge bürünür. Renkler koyu temada okunaklı olacak şekilde seçildi.">
           <View style={s.swatches} accessibilityRole="radiogroup" accessibilityLabel="Sayfa rengi">
             {ACCENTS.map((a) => {
@@ -104,12 +105,13 @@ function Appearance({ business }: { business: Business }) {
             })}
           </View>
         </Part>
+        )}
 
         <Part icon="megaphone-outline" title="Duyuru bandı" plan="Esnaf" locked={!has('announcement')} text={`Sayfanızın üstünde öne çıkar: tatil günleri, kampanyalar, ${isShowcase(business) ? 'yeni ürünler' : 'yeni hizmetler'}.`}>
           <Field
             value={form.announcement}
             onChangeText={(announcement) => set({ announcement })}
-            placeholder="Örn. Bayramda da açığız! Salı günleri %20 indirim."
+            placeholder={isShowcase(business) ? 'Örn. Bayramda da açığız! Salı günleri çorbada %20 indirim.' : 'Örn. Bayramda da açığız! Salı günleri saç kesiminde %20 indirim.'}
             multiline
             maxLength={160}
             accessibilityLabel="Duyuru"
@@ -227,7 +229,7 @@ function Preview({ business, form, has }: { business: Business; form: Form; has:
           ) : null}
           <View style={[s.previewButton, { backgroundColor: accent.base }]}>
             <Text variant="label" style={{ color: accent.ink }}>
-              {isShowcase(business) ? 'Menüyü gör' : 'Randevu al'}
+              {isShowcase(business) ? (menuLabel(business.category) === 'Menü' ? 'Menüyü gör' : 'Ürünleri gör') : 'Randevu al'}
             </Text>
           </View>
         </View>

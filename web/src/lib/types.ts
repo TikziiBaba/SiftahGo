@@ -180,6 +180,8 @@ export type Review = {
   business_id: string;
   // Vitrin kupon yorumunda randevu yoktur
   appointment_id: string | null;
+  // Dolu ise kasada kullanılan kupon için yazılmış yorum
+  coupon_claim_id?: string | null;
   customer_id: string | null;
   customer_name: string;
   rating: number;

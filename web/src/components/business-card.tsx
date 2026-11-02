@@ -4,7 +4,7 @@ import { ViewTransition } from "react";
 import { ArrowRight, MapPin, Navigation, Star } from "lucide-react";
 import { GlowCard } from "@/components/glow-card";
 import { CategoryIcon } from "@/lib/category-icons";
-import { categoryLabel, isShowcase } from "@/lib/constants";
+import { categoryLabel, isShowcase, menuLabel } from "@/lib/constants";
 import type { Business } from "@/lib/types";
 
 export type BusinessCardData = Pick<
@@ -91,7 +91,7 @@ export function BusinessCard({ b, distanceKm, morph = false }: { b: BusinessCard
             </div>
             {isShowcase(b) && (
               <span className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-accent-strong">
-                Menüyü gör <ArrowRight className="size-3" />
+                {menuLabel(b.category) === "Menü" ? "Menüyü gör" : "Ürünleri gör"} <ArrowRight className="size-3" />
               </span>
             )}
           </div>

@@ -16,8 +16,9 @@ const MAX_ITEMS = 200;
 const EMPTY = { category: "", name: "", description: "", price: "", image_url: null as string | null, is_active: true };
 
 export default function MenuPage() {
+  const { business } = useBusiness();
   return (
-    <PlanGate feature="menu" title="Menü">
+    <PlanGate feature="menu" title={menuLabel(business.category)}>
       <Menu />
     </PlanGate>
   );

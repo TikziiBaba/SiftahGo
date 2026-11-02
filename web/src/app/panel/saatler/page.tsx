@@ -44,8 +44,9 @@ export default function HoursPage() {
 
   async function saveHours() {
     if (!hours) return;
-    const invalid = hours.find((h) => h.is_open && h.close_time.slice(0, 5) <= h.open_time.slice(0, 5));
-    if (invalid) return setMessage({ ok: false, text: `${WEEKDAYS[invalid.weekday - 1]}: kapanış saati açılıştan sonra olmalı.` });
+    // Vitrinde kapanış açılıştan önce olabilir (ertesi gün); randevuda aynı gün içinde olmalı.
+    const invalid = hours.find((h) => h.is_open && (showcase ? h.close_time.slice(0, 5) === h.open_time.slice(0, 5) : h.close_time.slice(0, 5) <= h.open_time.slice(0, 5)));
+    if (invalid) return setMessage({ ok: false, text: showcase ? `${WEEKDAYS[invalid.weekday - 1]}: açılış ve kapanış saati aynı olamaz.` : `${WEEKDAYS[invalid.weekday - 1]}: kapanış saati açılıştan sonra olmalı.` });
     setBusy(true);
     const { error } = await supabase.from("working_hours").upsert(hours);
     setBusy(false);
@@ -96,6 +97,7 @@ export default function HoursPage() {
                   <input type="time" className="input w-auto py-2" value={h.open_time.slice(0, 5)} onChange={(e) => update(h.weekday, { open_time: e.target.value })} />
                   <span className="text-ink-3">–</span>
                   <input type="time" className="input w-auto py-2" value={h.close_time.slice(0, 5)} onChange={(e) => update(h.weekday, { close_time: e.target.value })} />
+                  {showcase && h.close_time.slice(0, 5) < h.open_time.slice(0, 5) && <span className="text-xs text-ink-3">ertesi gün</span>}
                 </div>
               ) : (
                 <span className="text-sm text-ink-3">Kapalı</span>

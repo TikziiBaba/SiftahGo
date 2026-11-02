@@ -223,6 +223,8 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
   // Alt menüde seçili sütun; ana sekmeler dışındaki bölümler "Daha fazla" (5. sütun) sayılır.
   const navIndex = moreActive ? primary.length : primary.indexOf(pathname);
   const planName = business.plan_id ? PLAN_NAMES[business.plan_id] ?? business.plan_id : "Paketsiz";
+  // Deneme sırasında tür değiştiyse paket değişmiş olabilir (vitrin <-> randevulu): gerçek paket adı.
+  const trialName = business.plan_id ? planName : showcase ? "Vitrin" : "Pro";
 
   return (
     <BusinessContext.Provider value={{ business, refresh }}>
@@ -277,7 +279,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
           </nav>
           <Link href="/panel/abonelik" className="mt-4 block rounded-2xl bg-gradient-to-br from-brand-400/15 to-gold/10 p-3 ring-1 ring-brand-400/20">
             <p className="flex items-center gap-1.5 text-xs font-semibold text-accent">
-              <Sparkles className="size-3.5" /> {trial ? (showcase ? "Vitrin deneme" : "Pro deneme") : `${planName} paketi`}
+              <Sparkles className="size-3.5" /> {trial ? `${trialName} deneme` : `${planName} paketi`}
             </p>
             <p className="mt-0.5 text-2xs text-ink-3">{daysLeft > 0 ? `${daysLeft} gün kaldı` : "Süresi doldu"}</p>
             <div className="mt-2 h-1 rounded-full bg-tint/10">
@@ -296,7 +298,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
               <p className="truncate font-semibold">{current?.label ?? "Panel"}</p>
             </div>
             <div className="flex items-center gap-1">
-              <InboxBell />
+              <InboxBell showcase={showcase} />
               <Link href={`/${business.slug}`} target="_blank" className="btn btn-secondary py-2">
                 <ExternalLink className="size-4" /> <span className="hidden sm:inline">Sayfamı gör</span>
               </Link>
@@ -319,7 +321,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
               href="/panel/abonelik"
               className="flex items-center justify-center gap-2 border-b border-brand-400/20 bg-brand-400/10 px-4 py-2 text-sm text-accent-strong print:hidden"
             >
-              Ücretsiz {showcase ? "Vitrin" : "Pro"} denemenizin bitmesine {daysLeft} gün kaldı. Sayfanız yayında kalsın diye paket seçin →
+              Ücretsiz {trialName} denemenizin bitmesine {daysLeft} gün kaldı. Sayfanız yayında kalsın diye paket seçin →
             </Link>
           )}
           {subscribed && !trial && daysLeft <= 5 && pathname !== "/panel/abonelik" && (
