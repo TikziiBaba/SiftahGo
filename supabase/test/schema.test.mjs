@@ -1454,6 +1454,10 @@ ok((await kasada(KSAHIP, kbiz, '000001')).rows[0].id === null, 'olmayan kod kasa
 ok((await kasada(KSAHIP, kbiz, ` ${kc1.code} `)).rows[0].id === kc1.id, 'kasada kod kullanılmış sayıldı (boşluklar yok sayılır)');
 await expectError(() => kasada(KSAHIP, kbiz, kc1.code), /zaten kullanıldı/, 'çift kullanım reddedilir');
 ok((await bul(KSAHIP, kbiz, kc1.code)).state === 'used', 'kullanılan kodun durumu used');
+{
+  const fr = await bul(KSAHIP, kbiz, kc1.code);
+  ok(fr.claim_id === kc1.id && Math.abs(Date.now() - new Date(fr.redeemed_at).getTime()) < 60000, 'kod sorgusu kasada kullanılma anını (redeemed_at) verir');
+}
 await db.query(`update coupon_claims set redeemed_at = now() - interval '11 minutes' where id = $1`, [kc1.id]);
 await expectError(() => as(KSAHIP, `select undo_coupon_redeem($1)`, [kc1.id]), /10 dakika/, '10 dakikadan sonra geri alınamaz');
 await db.query(`update coupon_claims set redeemed_at = now() - interval '9 minutes' where id = $1`, [kc1.id]);
@@ -1461,6 +1465,34 @@ await expectError(() => as(KBASKA, `select undo_coupon_redeem($1)`, [kc1.id]), /
 await as(KSAHIP, `select undo_coupon_redeem($1)`, [kc1.id]);
 ok((await db.query(`select redeemed_at from coupon_claims where id = $1`, [kc1.id])).rows[0].redeemed_at === null, '10 dakika içinde geri alınır');
 await expectError(() => as(KSAHIP, `select undo_coupon_redeem($1)`, [kc1.id]), /kullanılmış/, 'kullanılmamış kod geri alınamaz');
+ok((await bul(KSAHIP, kbiz, kc1.code)).redeemed_at === null, 'geri alınan kodun redeemed_at değeri boş');
+
+// paket düşünce alınmış kod kullanılamaz, paket dönünce çalışır (deneme paketi de kuponlu sayılır)
+const KL = await yeniKupon({ title: 'Paket düşecek' });
+const ML = '00000000-0000-0000-0000-0000000000d0';
+await db.exec(`insert into auth.users values ('${ML}', 'kml@x.com', '{"full_name":"Paket Müşteri"}');`);
+const kcl = await alKod(ML, KL);
+const planSet = (plan, ends) => db.query(`update businesses set plan_id = $2, subscription_ends_at = ${ends} where id = $1`, [kbiz, plan]);
+const lapseState = async () => (await as(ML, `select state from my_coupons() where claim_id = $1`, [kcl.id])).rows[0].state;
+ok(await lapseState() === 'active', 'paketli işletmede alınmış kupon active');
+await planSet('baslangic', `now() + interval '1 year'`);
+ok(await lapseState() === 'unavailable', 'paketi düşen işletmenin alınmış kuponu unavailable');
+const lf = await bul(KSAHIP, kbiz, kcl.code);
+ok(lf.state === 'unavailable' && lf.problem === 'Bu işletmede kuponlar şu an kullanılamıyor.', 'kod sorgusu paket sebebini verir');
+await expectError(() => kasada(KSAHIP, kbiz, kcl.code), /şu an kullanılamıyor/, 'paketi düşen işletmede kod kasada kullanılamaz');
+await planSet('esnaf', `now() - interval '1 day'`);
+ok(await lapseState() === 'unavailable', 'aboneliği bitmiş işletmenin kuponu unavailable');
+await planSet('pro', `now() + interval '1 month'`);
+await db.query(`update businesses set trial_ends_at = subscription_ends_at where id = $1`, [kbiz]);
+ok(await lapseState() === 'active', 'denemedeki işletmenin kuponu active');
+await db.query(`update businesses set trial_ends_at = null where id = $1`, [kbiz]);
+await planSet('esnaf', `now() + interval '1 year'`);
+ok(await lapseState() === 'active' && (await bul(KSAHIP, kbiz, kcl.code)).problem === null, 'paket dönünce kupon yeniden active');
+await kasada(KSAHIP, kbiz, kcl.code);
+ok(await lapseState() === 'used', 'paket dönünce kod kasada kullanılır, used kalır');
+await planSet('baslangic', `now() + interval '1 year'`);
+ok(await lapseState() === 'used', 'paket düşse de kullanılmış kod used kalır');
+await planSet('esnaf', `now() + interval '1 year'`);
 
 // gün ve saat aralığı
 const K5 = await yeniKupon({ title: 'Gün ve saat' });
@@ -1667,6 +1699,17 @@ await as(P8, `select cancel_appointment($1)`, [ra2.id]);
 ok(await myState(P8, cx.id) === 'active', 'yeni randevu iptal olunca kod yalnızca bir kez döner');
 const ra2row = await aptRow(ra2.id);
 ok(Number(ra2row.price) === 80 && ra2row.coupon_claim_id === cx.id, 'iptal edilen randevuda geçmiş fiyat kalır');
+
+// iptal edilen randevunun kodu kasada kullanıldıysa randevu yeniden etkinleşince indirimini kaybeder
+const Ky = await yeniKupon({ title: 'İptal sonrası kasada' });
+const ry = (await kitap(P8, svc100, sat(8), Ky, '05557770008')).rows[0].r;
+await as(P8, `select cancel_appointment($1)`, [ry.id]);
+const cy = await claimOf(Ky, P8);
+await kasada(KSAHIP, kbiz, cy.code);
+await db.query(`update appointments set status = 'confirmed' where id = $1`, [ry.id]);
+const ryRow = await aptRow(ry.id);
+ok(Number(ryRow.price) === 100 && ryRow.list_price === null && ryRow.coupon_claim_id === null, 'iptal sonrası kasada kullanılan kodun randevusu yeniden etkinleşince indirimini kaybeder');
+ok(await myState(P8, cy.id) === 'used', 'kasada kullanılan kod tek kez used');
 
 // durdurulan kuponun alınmış kodu randevu alır ve ertelenir
 const Kp = await yeniKupon({ title: 'Durdurulacak randevulu', start: '09:00', end: '11:00' });

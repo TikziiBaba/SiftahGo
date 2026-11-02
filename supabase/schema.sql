@@ -926,9 +926,12 @@ begin
                     and (old.status = 'pending' or (old.status = 'cancelled' and old.rejected));
     -- Kodu başka randevuya geçmiş (iptal sonrası yeniden alınmış) bir randevu yeniden etkinleşirse (ör. gelmedi ->
     -- tamamlandı) indirimini ve kupon bağını kaybeder, liste fiyatına döner; hata verilmez, sahibi olanı kaydedebilsin.
+    -- İptal edilmiş randevunun kodu kasada kullanıldıysa o randevu yeniden etkinleşince de indirimini kaybeder (tek kod, tek indirim).
     if new.status in ('pending', 'confirmed', 'completed') and new.status is distinct from old.status
        and new.coupon_claim_id is not null
-       and not exists (select 1 from public.coupon_claims cl where cl.id = new.coupon_claim_id and cl.appointment_id = new.id) then
+       and (not exists (select 1 from public.coupon_claims cl where cl.id = new.coupon_claim_id and cl.appointment_id = new.id)
+            or (old.status = 'cancelled'
+                and exists (select 1 from public.coupon_claims cl where cl.id = new.coupon_claim_id and cl.redeemed_at is not null))) then
       new.price := coalesce(old.list_price, new.price);
       new.list_price := null;
       new.coupon_claim_id := null;
@@ -3619,7 +3622,8 @@ as $$
   );
 $$;
 
--- Müşterinin gözünden durum: used (kullanıldı), attached (aktif bir randevuya bağlı; saati geçmiş onay bekleyen sayılmaz), expired (süresi doldu), active.
+-- Müşterinin gözünden durum: used (kullanıldı), attached (aktif bir randevuya bağlı; saati geçmiş onay bekleyen sayılmaz), expired (süresi doldu),
+-- unavailable (işletmenin paketinde kupon yok), active.
 create function public.coupon_claim_state(cl public.coupon_claims)
 returns text
 language plpgsql stable security definer set search_path = ''
@@ -3639,6 +3643,8 @@ begin
   select c.ends_on, b.timezone into v_ends, v_tz
   from public.coupons c join public.businesses b on b.id = c.business_id where c.id = cl.coupon_id;
   if v_ends < (now() at time zone v_tz)::date then return 'expired'; end if;
+  -- Paketi kuponu kapsamıyorsa (düştü ya da süresi bitti) alınmış kod beklemeye geçer; paket dönünce kod da döner.
+  if not public.plan_has_feature(cl.business_id, 'coupons') then return 'unavailable'; end if;
   return 'active';
 end;
 $$;
@@ -3656,6 +3662,7 @@ begin
   st := public.coupon_claim_state(cl);
   if st = 'used' then return 'Bu kod zaten kullanıldı.'; end if;
   if st = 'attached' then return 'Bu kupon bir randevuya bağlı; indirim randevuda uygulanır.'; end if;
+  if st = 'unavailable' then return 'Bu işletmede kuponlar şu an kullanılamıyor.'; end if;
   select * into c from public.coupons where id = cl.coupon_id;
   return public.coupon_invalid_reason(c, now());
 end;
@@ -3856,7 +3863,7 @@ end;
 $$;
 
 -- Kasada kod sorgusu (yalnızca işletme sahibi). Kod yanlışsa null döner. problem boşsa kod şimdi kullanılabilir.
--- state: active | attached | used | expired.
+-- state: active | attached | used | expired | unavailable. redeemed_at: kasada kullanılma anı (10 dakika geri alınabilir).
 create function public.find_coupon_code(p_business_id uuid, p_code text)
 returns jsonb
 language plpgsql volatile security definer set search_path = ''
@@ -3877,7 +3884,7 @@ begin
   end if;
   return jsonb_build_object(
     'claim_id', cl.id, 'title', c.title, 'discount_type', c.discount_type, 'discount_value', c.discount_value,
-    'customer_name', v_name, 'state', public.coupon_claim_state(cl), 'problem', public.coupon_redeem_problem(cl)
+    'redeemed_at', cl.redeemed_at, 'customer_name', v_name, 'state', public.coupon_claim_state(cl), 'problem', public.coupon_redeem_problem(cl)
   );
 end;
 $$;
