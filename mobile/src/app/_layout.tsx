@@ -131,6 +131,7 @@ function RootStack({ fontsReady }: { fontsReady: boolean }) {
 
         {/* Randevuyla ilgili ekranlar vitrin esnafına kapalı. */}
         <Stack.Protected guard={isBusiness && approved && !showcase}>
+          <Stack.Screen name="yonetim/sadakat" options={{ title: 'Sadakat kartı' }} />
           <Stack.Screen name="randevu-ekle" options={{ title: 'Randevu ekle', presentation: 'modal' }} />
           <Stack.Screen name="yonetim/hizmetler/index" options={{ title: 'Hizmetler' }} />
           <Stack.Screen name="yonetim/hizmetler/[id]" options={{ title: 'Hizmet', presentation: 'modal' }} />

@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { categoryHref } from "@/lib/city-pages";
 import { ChevronRight, Clock, Megaphone, Sparkles, Star } from "lucide-react";
 import { Morph } from "@/components/business-card";
 import { ShopCoupons } from "@/components/shop-coupons";
@@ -53,7 +54,7 @@ export function ShowcasePage({
           </li>
           <ChevronRight className="size-3.5" aria-hidden />
           <li>
-            <Link href={`/kesfet?kategori=${business.category}`} className="hover:text-ink">{categoryLabel(business.category)}</Link>
+            <Link href={categoryHref(business.city, business.category)} className="hover:text-ink">{categoryLabel(business.category)}</Link>
           </li>
           <ChevronRight className="size-3.5" aria-hidden />
           <li aria-current="page" className="max-w-[12rem] truncate font-medium text-ink-2">{business.name}</li>

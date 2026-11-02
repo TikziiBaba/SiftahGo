@@ -57,5 +57,13 @@
       "Randevu almayan esnaf (lokanta, market, mağaza gibi) artık menüsü ve kuponlarıyla sayfa açabiliyor; Keşfet'te \"Menüyü gör\" ile görünür.",
       "Kuponunu kasada kullandığınız işletmeyi Kuponlarım ekranından değerlendirebilirsiniz."
     ]
+  },
+  {
+    "id": 9,
+    "date": "2026-11-02",
+    "items": [
+      "İşletme sayfasında daha önce aldığınız hizmetleri görüp tek dokunuşla yeniden randevu alabilirsiniz.",
+      "Esnaf isterse sadakat kartı açabiliyor: tamamlanan her randevu bir damga, ödül işletmeden."
+    ]
   }
 ]

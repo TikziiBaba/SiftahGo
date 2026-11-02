@@ -11,6 +11,7 @@
 drop trigger if exists on_auth_user_created on auth.users;
 
 drop table if exists
+  public.loyalty_rewards,
   public.menu_items,
   public.coupon_code_attempts,
   public.coupon_claims,
@@ -83,7 +84,8 @@ begin
         'coupon_price', 'coupon_invalid_reason', 'coupon_valid_at', 'coupon_claim_used', 'coupon_claim_state',
         'coupon_redeem_problem', 'coupon_lookup', 'save_coupon', 'set_coupon_active', 'delete_coupon',
         'claim_coupon', 'find_coupon_code', 'redeem_coupon_code', 'undo_coupon_redeem', 'my_coupons', 'business_coupons',
-        'enforce_menu_limit', 'enforce_working_hours', 'add_coupon_review', 'claim_coupon_review_requests', 'claim_coupon_review_notices'
+        'enforce_menu_limit', 'enforce_working_hours', 'add_coupon_review', 'claim_coupon_review_requests', 'claim_coupon_review_notices',
+        'loyalty_stamps', 'my_loyalty', 'business_loyalty', 'give_loyalty_reward'
       )
   loop
     execute 'drop function if exists ' || r.sig || ' cascade';
@@ -154,8 +156,8 @@ create table public.plans (
 insert into public.plans (id, name, price, staff_limit, features, sort_order) values
   ('vitrin', 'Vitrin', 149, 1, '{coupons,announcement,links,menu}', 0),
   ('baslangic', 'Başlangıç', 349, 1, '{}', 1),
-  ('esnaf', 'Esnaf', 649, 5, '{customers,reports,announcement,links,coupons}', 2),
-  ('pro', 'Pro', 999, null, '{customers,reports,announcement,links,theme,coupons}', 3);
+  ('esnaf', 'Esnaf', 649, 5, '{customers,reports,announcement,links,coupons,loyalty}', 2),
+  ('pro', 'Pro', 999, null, '{customers,reports,announcement,links,theme,coupons,loyalty}', 3);
 
 create table public.businesses (
   id                 uuid primary key default gen_random_uuid(),
@@ -165,7 +167,7 @@ create table public.businesses (
                      -- Web sitesindeki sayfa adlarıyla çakışmasın.
                      check (slug not in (
                        'panel', 'kesfet', 'giris', 'kayit', 'hesabim', 'api', 'auth', 'admin',
-                       'sifremi-unuttum', 'sifre-yenile', 'yasal', 'iletisim', 'esnaf'
+                       'sifremi-unuttum', 'sifre-yenile', 'yasal', 'iletisim', 'esnaf', 'sehir'
                      )),
   name               text not null check (length(trim(name)) > 0 and length(name) <= 100),
   category           text not null default 'diger' check (length(category) <= 40),
@@ -229,8 +231,12 @@ create table public.businesses (
   referral_code        text not null unique default upper(substr(md5(gen_random_uuid()::text), 1, 8)),
   referred_by          uuid references public.businesses (id) on delete set null,
   referral_rewarded_at timestamptz,
+  -- İsteğe bağlı sadakat kartı: boşsa kapalı ("10. randevuda saç yıkama bedava"). Paket düşerse silinmez, gizlenir.
+  loyalty_target     int check (loyalty_target between 2 and 50),
+  loyalty_reward     text not null default '' check (length(loyalty_reward) <= 100),
   created_at         timestamptz not null default now(),
   constraint businesses_location_check check ((latitude is null) = (longitude is null)),
+  constraint businesses_loyalty_check check (loyalty_target is null or length(trim(loyalty_reward)) > 0),
   constraint businesses_images_upload_check check (
     (logo_url is null or public.is_upload_url(logo_url))
     and (cover_url is null or public.is_upload_url(cover_url))
@@ -4656,6 +4662,116 @@ create policy "hata: yönetici okur" on public.error_logs for select using ((sel
 create policy "hata: yönetici günceller" on public.error_logs
   for update using ((select public.is_admin())) with check ((select public.is_admin()));
 create policy "hata: yönetici siler" on public.error_logs for delete using ((select public.is_admin()));
+
+-- ---------------------------------------------------------------------
+-- Sadakat kartı
+-- ---------------------------------------------------------------------
+-- Verilen ödüller. Damga saklanmaz, randevudan hesaplanır: iptal ve "gelmedi" ek iş gerektirmez.
+create table public.loyalty_rewards (
+  id          uuid primary key default gen_random_uuid(),
+  business_id uuid not null references public.businesses (id) on delete cascade,
+  customer_id uuid not null references public.profiles (id) on delete cascade,
+  given_at    timestamptz not null default now()
+);
+create index loyalty_rewards_business_idx on public.loyalty_rewards (business_id, customer_id);
+create index loyalty_rewards_customer_idx on public.loyalty_rewards (customer_id);
+alter table public.loyalty_rewards enable row level security;
+create policy "sadakat: müşteri kendi ödülünü okur" on public.loyalty_rewards
+  for select using (customer_id = (select auth.uid()));
+create policy "sadakat: sahibi okur" on public.loyalty_rewards
+  for select using ((select public.is_business_owner(business_id)));
+
+-- Bir müşterinin işletmedeki damgası: tamamlanan ya da onaylı olup saati geçen randevu (add_review ile aynı kural).
+create function public.loyalty_stamps(p_business_id uuid, p_customer_id uuid)
+returns int
+language sql stable security definer set search_path = ''
+as $$
+  select count(*)::int from public.appointments a
+  where a.business_id = p_business_id and a.customer_id = p_customer_id
+    and (a.status = 'completed' or (a.status = 'confirmed' and a.ends_at <= now()));
+$$;
+revoke execute on function public.loyalty_stamps(uuid, uuid) from public, anon, authenticated;
+
+-- İşletme sayfasındaki kart. Kural kapalıysa ya da paket düştüyse boş döner; girişsiz ziyaretçi kuralı görür.
+create function public.my_loyalty(p_business_id uuid)
+returns jsonb
+language plpgsql stable security definer set search_path = ''
+as $$
+declare
+  b       public.businesses;
+  v_uid   uuid := auth.uid();
+  v_visit int := 0;
+  v_given int := 0;
+begin
+  select * into b from public.businesses where id = p_business_id;
+  if not found or b.loyalty_target is null or b.business_type <> 'appointment'
+     or not public.is_bookable(b.id) or not public.plan_has_feature(b.id, 'loyalty') then
+    return null;
+  end if;
+  if v_uid is not null then
+    v_visit := public.loyalty_stamps(b.id, v_uid);
+    select count(*)::int into v_given from public.loyalty_rewards r where r.business_id = b.id and r.customer_id = v_uid;
+  end if;
+  return jsonb_build_object(
+    'target', b.loyalty_target,
+    'reward', b.loyalty_reward,
+    'stamps', v_visit % b.loyalty_target,
+    'available', greatest(v_visit / b.loyalty_target - v_given, 0)
+  );
+end;
+$$;
+
+-- Esnafın müşteri listesi: en çok gelen üstte.
+create function public.business_loyalty(p_business_id uuid)
+returns table (customer_id uuid, customer_name text, visits int, available int)
+language plpgsql stable security definer set search_path = ''
+as $$
+declare
+  v_target int;
+begin
+  if not public.is_business_owner(p_business_id) then raise exception 'Yetkiniz yok.'; end if;
+  select b.loyalty_target into v_target from public.businesses b where b.id = p_business_id;
+  if v_target is null then return; end if;
+  return query
+  select x.customer_id, x.customer_name, x.visits,
+         greatest(x.visits / v_target - (
+           select count(*)::int from public.loyalty_rewards r
+           where r.business_id = p_business_id and r.customer_id = x.customer_id
+         ), 0)
+  from (
+    select a.customer_id,
+           (array_agg(a.customer_name order by a.starts_at desc))[1] as customer_name,
+           count(*)::int as visits
+    from public.appointments a
+    where a.business_id = p_business_id and a.customer_id is not null
+      and (a.status = 'completed' or (a.status = 'confirmed' and a.ends_at <= now()))
+    group by a.customer_id
+  ) x
+  order by 4 desc, x.visits desc
+  limit 200;
+end;
+$$;
+
+-- Esnaf ödülü verdiğini işaretler. İşletme satırı kilitlenir: aynı ödül iki kez verilmez.
+create function public.give_loyalty_reward(p_business_id uuid, p_customer_id uuid)
+returns void
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  v_target int;
+begin
+  if not public.is_business_owner(p_business_id) then raise exception 'Yetkiniz yok.'; end if;
+  select b.loyalty_target into v_target from public.businesses b where b.id = p_business_id for update;
+  if v_target is null or not public.plan_has_feature(p_business_id, 'loyalty') then
+    raise exception 'Sadakat kartı açık değil.';
+  end if;
+  if public.loyalty_stamps(p_business_id, p_customer_id) / v_target
+     <= (select count(*) from public.loyalty_rewards r where r.business_id = p_business_id and r.customer_id = p_customer_id) then
+    raise exception 'Bu müşterinin bekleyen ödülü yok.';
+  end if;
+  insert into public.loyalty_rewards (business_id, customer_id) values (p_business_id, p_customer_id);
+end;
+$$;
 
 -- ---------------------------------------------------------------------
 -- 5) Canlı güncelleme (panelde yeni randevular ve bildirimler anında görünür)

@@ -61,7 +61,13 @@ export type Business = {
   referred_by: string | null;
   referral_rewarded_at: string | null;
   business_type: BusinessType;
+  // İsteğe bağlı sadakat kartı: boşsa kapalı.
+  loyalty_target: number | null;
+  loyalty_reward: string;
 };
+
+export type MyLoyalty = { target: number; reward: string; stamps: number; available: number };
+export type LoyaltyCustomer = { customer_id: string; customer_name: string; visits: number; available: number };
 
 export type SuspensionReason = "kural_ihlali" | "odeme" | "sikayet" | "sahip_talebi" | "diger";
 

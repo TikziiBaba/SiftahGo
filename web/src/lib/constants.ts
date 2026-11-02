@@ -144,6 +144,7 @@ export const PLAN_FEATURES: Record<string, string> = {
   links: "WhatsApp, Instagram ve web kısayolları",
   theme: "Sayfa rengi seçimi",
   coupons: "Kupon: indirim tanımlayın, kasada kodla kullanın",
+  loyalty: "İsteğe bağlı sadakat kartı",
   menu: "Menü: ürünlerinizi fiyatıyla sayfanızda gösterin",
 };
 // Davet bağlantısıyla (/kayit?davet=KOD) gelenin kodu; işletme kurulumunda doldurulur.

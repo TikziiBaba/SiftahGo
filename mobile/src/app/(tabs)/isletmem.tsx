@@ -235,6 +235,16 @@ function Hub({ business }: { business: Business }) {
             right={plan && !plan.features.includes('coupons') ? <Ionicons name="lock-closed" size={14} color={colors.ink3} /> : undefined}
             onPress={() => router.push('/yonetim/kuponlar')}
           />
+          {!showcase && (
+            <ListRow
+              icon="gift-outline"
+              title="Sadakat kartı"
+              subtitle="İsterseniz açın: randevu başına damga, ödülü siz verirsiniz"
+              disabled={locked}
+              right={plan && !plan.features.includes('loyalty') ? <Ionicons name="lock-closed" size={14} color={colors.ink3} /> : undefined}
+              onPress={() => router.push('/yonetim/sadakat')}
+            />
+          )}
           <ListRow
             icon="star-outline"
             title="Yorumlar"

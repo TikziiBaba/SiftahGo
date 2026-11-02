@@ -62,8 +62,15 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
   const [waitDays, setWaitDays] = useState<string[]>([]);
   const [waitBusy, setWaitBusy] = useState(false);
   const [waitError, setWaitError] = useState("");
+  // Bu işletmeden daha önce alınan hizmetler (giriş yapmışsa): en yeni randevu önce
+  const [past, setPast] = useState<{ service_id: string; staff_id: string | null; starts_at: string }[]>([]);
 
   const service = services.find((s) => s.id === serviceId);
+  // Hizmet başına en son randevu; artık sunulmayan hizmet gösterilmez.
+  const previous = past.flatMap((v, i) => {
+    const s = services.find((x) => x.id === v.service_id);
+    return s && past.findIndex((o) => o.service_id === v.service_id) === i ? [{ ...v, service: s }] : [];
+  });
   // Kaydı olmayan personel tüm hizmetleri verir.
   const staff = allStaff.filter(
     (p) => !staffServices.some((l) => l.staff_id === p.id) || staffServices.some((l) => l.staff_id === p.id && l.service_id === serviceId),
@@ -93,10 +100,20 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) return setLoggedIn(false);
       setLoggedIn(true);
-      const [{ data: waits }, { data: p }] = await Promise.all([
+      const [{ data: waits }, { data: p }, { data: visits }] = await Promise.all([
         supabase.from("waitlist").select("day").eq("business_id", business.id),
         supabase.from("profiles").select("full_name, phone").eq("id", session.user.id).maybeSingle(),
+        supabase
+          .from("appointments")
+          .select("service_id, staff_id, starts_at")
+          .eq("business_id", business.id)
+          .eq("customer_id", session.user.id)
+          .in("status", ["completed", "confirmed"])
+          .lt("starts_at", new Date().toISOString())
+          .order("starts_at", { ascending: false })
+          .limit(30),
       ]);
+      setPast((visits ?? []) as typeof past);
       setWaitDays((waits ?? []).map((w: { day: string }) => w.day));
       if (p) setForm((f) => ({ ...f, name: f.name || p.full_name, phone: f.phone || p.phone || "" }));
     });
@@ -231,6 +248,33 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
       <h2 className="text-lg font-semibold">Randevu al</h2>
 
       <Step n={1} title="Hizmet seçin">
+        {previous.length > 0 && (
+          <div className="mb-4 rounded-xl bg-brand-400/5 p-3 ring-1 ring-brand-400/20">
+            <p className="text-sm font-medium">Daha önce aldıklarınız</p>
+            <ul className="mt-2 grid gap-2">
+              {previous.map((v) => (
+                <li key={v.service_id} className="flex items-center justify-between gap-3">
+                  <span className="min-w-0 text-sm">
+                    <span className="block truncate font-medium">{v.service.name}</span>
+                    <span className="text-ink-3">Son randevu: {formatDate(v.starts_at)}</span>
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-secondary shrink-0"
+                    onClick={() => {
+                      setServiceId(v.service.id);
+                      const offers = !staffServices.some((l) => l.staff_id === v.staff_id) || staffServices.some((l) => l.staff_id === v.staff_id && l.service_id === v.service.id);
+                      setStaffId(v.staff_id && offers && allStaff.some((p) => p.id === v.staff_id) ? v.staff_id : "");
+                      setTime(null);
+                    }}
+                  >
+                    Tekrar al
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <ul className="grid gap-2">
           {services.map((s) => (
             <li key={s.id}>

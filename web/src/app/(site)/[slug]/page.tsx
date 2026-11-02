@@ -9,6 +9,8 @@ import { createClient as createSupabase, type SupabaseClient } from "@supabase/s
 import { ChevronRight, Clock, Globe, MapPin, Megaphone, Phone, Sparkles, Star } from "lucide-react";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
 import { BookingWidget } from "@/components/booking-widget";
+import { LoyaltyCard } from "@/components/loyalty-card";
+import { categoryHref } from "@/lib/city-pages";
 import { Morph } from "@/components/business-card";
 import { ShopCoupons } from "@/components/shop-coupons";
 import { ShowcasePage } from "@/components/showcase-page";
@@ -240,7 +242,7 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
           </li>
           <ChevronRight className="size-3.5" aria-hidden />
           <li>
-            <Link href={`/kesfet?kategori=${business.category}`} className="hover:text-ink">{categoryLabel(business.category)}</Link>
+            <Link href={categoryHref(business.city, business.category)} className="hover:text-ink">{categoryLabel(business.category)}</Link>
           </li>
           <ChevronRight className="size-3.5" aria-hidden />
           <li aria-current="page" className="max-w-[12rem] truncate font-medium text-ink-2">{business.name}</li>
@@ -331,6 +333,8 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
             Bu sayfa şu an yayında değil; sadece siz görebilirsiniz. Ayarlardan yayına alabilirsiniz.
           </p>
         )}
+
+        {features.includes("loyalty") && <LoyaltyCard businessId={business.id} />}
 
         {/* Kuponlar önbellekteki sayfaya gömülmez: tarayıcıda ayrı okunur (bayat kalmasın). */}
         {features.includes("coupons") && (

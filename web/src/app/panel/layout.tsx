@@ -19,6 +19,7 @@ import {
   Settings,
   Sparkles,
   Star,
+  Gift,
   Ticket,
   UtensilsCrossed,
   Users,
@@ -59,6 +60,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
     items: [
       { href: "/panel/raporlar", label: "Raporlar", icon: BarChart3 },
       { href: "/panel/kuponlar", label: "Kuponlar", icon: Ticket },
+      { href: "/panel/sadakat", label: "Sadakat kartı", icon: Gift },
       { href: "/panel/qr", label: "QR kod", icon: QrCode },
     ],
   },
@@ -105,7 +107,7 @@ function showcaseGroups(category: string): { title: string; items: Item[] }[] {
 }
 const SHOWCASE_PRIMARY = ["/panel", "/panel/menu", "/panel/kuponlar", "/panel/yorumlar"];
 // Vitrinde açılmayan sayfalar (adresle girilirse panele döner) ve randevulu işletmede açılmayan sayfa.
-const APPOINTMENT_ONLY = ["/panel/hizmetler", "/panel/personel", "/panel/musteriler", "/panel/raporlar"];
+const APPOINTMENT_ONLY = ["/panel/hizmetler", "/panel/personel", "/panel/musteriler", "/panel/raporlar", "/panel/sadakat"];
 const SHOWCASE_ONLY = ["/panel/menu"];
 
 // Aboneliği olmayan işletmenin açabileceği sayfalar.

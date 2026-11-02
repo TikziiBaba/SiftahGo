@@ -2039,5 +2039,41 @@ const idx = (await db.query(`select indexname from pg_indexes where schemaname =
 ok(idx.length === 2, 'kupon haberi sorguları için kısmi dizinler var');
 }
 
+// Sadakat kartı: isteğe bağlı, damga randevudan hesaplanır, ödülü esnaf işaretler
+const LO = 'aaaaaaaa-0000-4000-8000-000000000001', LC = 'aaaaaaaa-0000-4000-8000-000000000002', LX = 'aaaaaaaa-0000-4000-8000-000000000003';
+await db.exec(`
+  insert into auth.users values ('${LO}', 'lo@x.com', '{"full_name":"Sadık Usta","role":"business"}');
+  insert into auth.users values ('${LC}', 'lc@x.com', '{"full_name":"Sadık Müşteri"}');
+  insert into auth.users values ('${LX}', 'lx@x.com', '{"full_name":"Başka Usta","role":"business"}');
+`);
+const lb = (await as(LO, `insert into businesses (owner_id, slug, name, city, category) values ($1, 'sadik-berber', 'Sadık', 'Sivas', 'berber') returning id`, [LO])).rows[0].id;
+await expectError(() => as(LX, `insert into businesses (owner_id, slug, name, city, category) values ($1, 'sehir', 'Şehir', 'Sivas', 'berber')`, [LX]), /check/, "'sehir' adresi ayrılmış");
+await db.query(`update businesses set approval_status = 'approved', plan_id = 'esnaf', subscription_ends_at = now() + interval '1 year' where id = $1`, [lb]);
+ok((await as(LC, `select my_loyalty($1) r`, [lb])).rows[0].r === null, 'kural kapalıyken kart yok');
+await expectError(() => as(LO, `update businesses set loyalty_target = 3, loyalty_reward = ' ' where id = $1`, [lb]), /check/, 'ödül adı zorunlu');
+await as(LO, `update businesses set loyalty_target = 3, loyalty_reward = 'Saç yıkama' where id = $1`, [lb]);
+const addVisit = (status, days) => db.query(`insert into appointments (business_id, customer_id, service_name, customer_name, customer_phone, starts_at, ends_at, status)
+  values ($1, $2, 'Kesim', 'Sadık Müşteri', '05550000000', now() - make_interval(days => $3::int), now() - make_interval(days => $3::int) + interval '30 minutes', $4)`, [lb, LC, days, status]);
+await addVisit('completed', 9); await addVisit('confirmed', 8); await addVisit('cancelled', 7); await addVisit('no_show', 6);
+let lcard = (await as(LC, `select my_loyalty($1) r`, [lb])).rows[0].r;
+ok(lcard.stamps === 2 && lcard.available === 0 && lcard.target === 3 && lcard.reward === 'Saç yıkama', 'iptal ve gelmedi damga sayılmaz');
+ok((await as(null, `select my_loyalty($1) r`, [lb])).rows[0].r.stamps === 0, 'girişsiz ziyaretçi kuralı görür');
+await expectError(() => as(LO, `select give_loyalty_reward($1, $2)`, [lb, LC]), /bekleyen ödül/, 'hak edilmeden ödül verilmez');
+await addVisit('completed', 5);
+lcard = (await as(LC, `select my_loyalty($1) r`, [lb])).rows[0].r;
+ok(lcard.stamps === 0 && lcard.available === 1, '3. randevuda ödül hak edilir');
+await expectError(() => as(LX, `select give_loyalty_reward($1, $2)`, [lb, LC]), /Yetkiniz/, 'başka esnaf ödül veremez');
+await expectError(() => as(LC, `select give_loyalty_reward($1, $2)`, [lb, LC]), /Yetkiniz/, 'müşteri kendine ödül veremez');
+await expectError(() => as(LX, `select * from business_loyalty($1)`, [lb]), /Yetkiniz/, 'liste yalnızca sahibine');
+const lrow = (await as(LO, `select * from business_loyalty($1)`, [lb])).rows[0];
+ok(lrow.customer_id === LC && lrow.visits === 3 && lrow.available === 1, 'esnaf bekleyen ödülü görür');
+await as(LO, `select give_loyalty_reward($1, $2)`, [lb, LC]);
+await expectError(() => as(LO, `select give_loyalty_reward($1, $2)`, [lb, LC]), /bekleyen ödül/, 'aynı ödül iki kez verilmez');
+ok((await as(LC, `select my_loyalty($1) r`, [lb])).rows[0].r.available === 0, 'verilen ödül düşer');
+await expectError(() => as(LC, `insert into loyalty_rewards (business_id, customer_id) values ($1, $2)`, [lb, LC]), /row-level|permission/, 'ödül doğrudan yazılamaz');
+await expectError(() => as(LC, `select loyalty_stamps($1, $2)`, [lb, LC]), /permission denied/, 'iç işlev kapalı');
+await db.query(`update businesses set plan_id = 'baslangic' where id = $1`, [lb]);
+ok((await as(LC, `select my_loyalty($1) r`, [lb])).rows[0].r === null, 'paket düşünce kart gizlenir');
+
 console.log(failures ? `\n${failures} TEST BAŞARISIZ` : '\nTÜM TESTLER GEÇTİ');
 process.exit(failures ? 1 : 0);

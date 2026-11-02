@@ -13,6 +13,7 @@ import { ShopCoupons } from '@/components/shop-coupons';
 import { BackButton, Shortcut, ShowcasePage } from '@/components/showcase-page';
 import { TopBar, useScrollY } from '@/components/top-bar';
 import { Avatar, Badge, Button, Card, Chip, Empty, IconButton, Loading, SectionTitle, Skeleton, styles, Text } from '@/components/ui';
+import { ShopLoyalty } from '@/components/shop-loyalty';
 import { AccentProvider } from '@/lib/accent';
 import { useAuth } from '@/lib/auth';
 import { categoryIcon, categoryLabel, isShowcase, isSubscribed, WEB_URL, WEEKDAYS, type IconName } from '@/lib/constants';
@@ -51,6 +52,8 @@ export default function BusinessScreen() {
 
   const [serviceId, setServiceId] = useState<string | null>(null);
   const [staffId, setStaffId] = useState('');
+  // Bu işletmeden daha önce alınan hizmetler (giriş yapmışsa): en yeni randevu önce
+  const [past, setPast] = useState<{ service_id: string; staff_id: string | null; starts_at: string }[]>([]);
   const [day, setDay] = useState(todayStr);
   const [slotResult, setSlotResult] = useState<{ key: string; times: string[] } | null>(null);
   const [time, setTime] = useState<string | null>(null);
@@ -108,6 +111,20 @@ export default function BusinessScreen() {
       setFavorite(!!row);
       setWaitDays((waits ?? []).map((w: { day: string }) => w.day));
     });
+    if (!isShowcase(data.business)) {
+      supabase
+        .from('appointments')
+        .select('service_id, staff_id, starts_at')
+        .eq('business_id', data.business.id)
+        .eq('customer_id', session.user.id)
+        .in('status', ['completed', 'confirmed'])
+        .lt('starts_at', new Date().toISOString())
+        .order('starts_at', { ascending: false })
+        .limit(30)
+        .then(({ data: visits }) => {
+          if (active) setPast((visits ?? []) as typeof past);
+        });
+    }
     return () => {
       active = false;
     };
@@ -162,6 +179,11 @@ export default function BusinessScreen() {
   }
 
   const { business, services, hours, links, reviews } = data;
+  // Hizmet başına en son randevu; artık sunulmayan hizmet gösterilmez.
+  const previous = past.flatMap((v, i) => {
+    const x = services.find((o) => o.id === v.service_id);
+    return x && past.findIndex((o) => o.service_id === v.service_id) === i ? [{ ...v, service: x }] : [];
+  });
   // Vitrin işletme randevu almaz: menü, kupon ve yorumlarla ayrı sayfa.
   if (isShowcase(business)) {
     return (
@@ -323,6 +345,33 @@ export default function BusinessScreen() {
 
             {/* Kuponlar paketle gelir; paket düşerse gizlenir (web ile aynı). */}
             {features.includes('coupons') && <ShopCoupons businessId={business.id} services={services.map((x) => ({ id: x.id, name: x.name }))} />}
+
+            {features.includes('loyalty') && <ShopLoyalty businessId={business.id} />}
+
+            {previous.length > 0 && <SectionTitle title="Daha önce aldıklarınız" />}
+            {previous.map((v) => (
+              <Card key={v.service_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text variant="bodyStrong">{v.service.name}</Text>
+                  <Text variant="caption" tone="muted">Son randevu: {formatDate(v.starts_at)}</Text>
+                </View>
+                <Button
+                  title="Tekrar al"
+                  size="sm"
+                  variant="secondary"
+                  onPress={() => {
+                    setServiceId(v.service.id);
+                    const offers = !links.some((l) => l.staff_id === v.staff_id) || links.some((l) => l.staff_id === v.staff_id && l.service_id === v.service.id);
+                    setStaffId(v.staff_id && offers && data.staff.some((p) => p.id === v.staff_id) ? v.staff_id : '');
+                    setTime(null);
+                    if (!isOpen(day)) {
+                      const first = days.find((d) => !d.disabled);
+                      if (first) setDay(first.day);
+                    }
+                  }}
+                />
+              </Card>
+            ))}
 
             <SectionTitle title="Hizmet seçin" />
             {services.length === 0 && <Text tone="muted">Bu işletme henüz hizmet eklememiş.</Text>}
