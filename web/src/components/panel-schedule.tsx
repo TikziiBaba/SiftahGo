@@ -1,6 +1,7 @@
 "use client";
 
 import { STATUS_COLORS } from "@/components/charts";
+import { BusinessDelayButton, delayLabel } from "@/components/delay-actions";
 import { STATUS } from "@/lib/constants";
 import { addDays, dayOf, formatDate, formatTime, isoWeekday, todayStr } from "@/lib/format";
 import type { Appointment, Staff, WorkingHour } from "@/lib/types";
@@ -38,6 +39,7 @@ export function DayCalendar({
   hours,
   now,
   onSelect,
+  onDelay,
 }: {
   day: string;
   rows: Row[];
@@ -45,6 +47,7 @@ export function DayCalendar({
   hours: WorkingHour[];
   now: number;
   onSelect: (id: string) => void;
+  onDelay?: () => void;
 }) {
   const visible = rows.filter((r) => r.status !== "cancelled");
   const { from, to, open } = range(day, hours, visible);
@@ -63,10 +66,17 @@ export function DayCalendar({
           <div className="grid border-b border-line bg-surface-2/60 text-sm font-medium" style={{ gridTemplateColumns: `3.5rem repeat(${cols.length}, minmax(9rem, 1fr))` }}>
             <span />
             {cols.map((c) => (
-              <span key={c.id ?? "none"} className="truncate border-l border-line px-3 py-2.5">
-                {c.name}
-                <span className="ml-1.5 text-xs text-ink-3">{visible.filter((r) => (c.id ? r.staff_id === c.id : !staff.some((s) => s.id === r.staff_id))).length}</span>
-              </span>
+              <div key={c.id ?? "none"} className="border-l border-line px-3 py-2.5">
+                <span className="block truncate">
+                  {c.name}
+                  <span className="ml-1.5 text-xs text-ink-3">{visible.filter((r) => (c.id ? r.staff_id === c.id : !staff.some((s) => s.id === r.staff_id))).length}</span>
+                </span>
+                {c.id && day === todayStr() && (
+                  <div className="mt-1.5 font-normal">
+                    <BusinessDelayButton staff={{ id: c.id, name: c.name }} onDone={onDelay} />
+                  </div>
+                )}
+              </div>
             ))}
           </div>
           <div className="relative grid" style={{ gridTemplateColumns: `3.5rem repeat(${cols.length}, minmax(9rem, 1fr))`, height }}>
@@ -108,6 +118,7 @@ export function DayCalendar({
                           {formatTime(r.starts_at)} {r.customer_name}
                         </span>
                         {h > 34 && <span className="block truncate text-ink-3">{r.service_name}</span>}
+                        {h > 50 && delayLabel(r) && <span className="block truncate font-medium text-warn">{delayLabel(r)}</span>}
                       </button>
                     );
                   })}

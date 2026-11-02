@@ -23,6 +23,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { CookieSettingsButton } from "@/components/cookie-consent";
+import { CustomerLateButton, delayLabel } from "@/components/delay-actions";
 import { HoldButton } from "@/components/hold-button";
 import { RescheduleDialog } from "@/components/reschedule-dialog";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
@@ -262,7 +263,7 @@ function AccountView() {
           ) : (
             <ul className="space-y-3">
               {upcoming.map((r) => (
-                <AppointmentCard key={r.id} row={r} onCancel={() => cancel(r.id)} onReschedule={r.service_id ? () => setMoving(r) : undefined} />
+                <AppointmentCard key={r.id} row={r} onChanged={load} onCancel={() => cancel(r.id)} onReschedule={r.service_id ? () => setMoving(r) : undefined} />
               ))}
             </ul>
           ))}
@@ -355,8 +356,10 @@ function AppointmentCard({
   onReschedule,
   canReview,
   onReviewed,
+  onChanged,
 }: {
   row: Row;
+  onChanged?: () => void;
   onCancel?: () => void;
   onReschedule?: () => void;
   canReview?: boolean;
@@ -383,6 +386,7 @@ function AppointmentCard({
           <p className="text-sm text-ink-2">
             {formatDate(row.starts_at)} · {row.service_name} · {formatPrice(row.price)}
           </p>
+          {delayLabel(row, "customer") && row.status !== "cancelled" && <p className="text-sm font-medium text-warn">{delayLabel(row, "customer")}</p>}
         </div>
         <span className={`chip ${status.className}`}>{row.rejected ? "Onaylanmadı" : status.label}</span>
         <div className="flex w-full flex-wrap gap-2 sm:w-auto">
@@ -401,6 +405,7 @@ function AppointmentCard({
               <RotateCcw className="size-4" /> Tekrar al
             </Link>
           )}
+          {onCancel && <CustomerLateButton appointment={row} onDone={onChanged} />}
           {canReview && !reviewing && (
             <button onClick={() => setReviewing(true)} className="btn btn-primary py-2">
               <Star className="size-4" /> Değerlendir

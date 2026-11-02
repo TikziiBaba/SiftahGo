@@ -31,6 +31,7 @@ import {
 import { AppointmentReview } from "@/components/appointment-review";
 import { KpiCard } from "@/components/charts";
 import { useBusiness } from "@/components/panel-context";
+import { delayLabel } from "@/components/delay-actions";
 import { DayCalendar, WeekView } from "@/components/panel-schedule";
 import { RescheduleDialog } from "@/components/reschedule-dialog";
 import { createClient } from "@/lib/supabase/client";
@@ -311,6 +312,7 @@ export default function AppointmentsPage() {
                   {nextUp.service_name}
                   {nextUp.staff && ` · ${nextUp.staff.name}`} · {formatPrice(nextUp.price)}
                 </p>
+                {delayLabel(nextUp) && <p className="text-sm font-medium text-warn">{delayLabel(nextUp)}</p>}
               </div>
               <div className="flex gap-2">
                 <a href={`tel:${nextUp.customer_phone}`} className="btn btn-secondary py-2">
@@ -409,6 +411,7 @@ export default function AppointmentsPage() {
               staff={staff}
               hours={hours}
               now={loadedAt}
+              onDelay={load}
               onSelect={(id) => {
                 setFocus(id);
                 setView("liste");

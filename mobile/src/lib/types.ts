@@ -243,6 +243,13 @@ export type Appointment = {
   customer_flagged: boolean;
   // Seansı düşülen paket (tamamlanınca)
   package_id: string | null;
+  // Gecikme haberi: son haberin dakikası/zamanı ve verilen haber sayısı (randevu saati değişmez)
+  customer_late_minutes: number | null;
+  customer_late_at: string | null;
+  customer_late_count: number;
+  business_delay_minutes: number | null;
+  business_delay_at: string | null;
+  business_delay_count: number;
   created_at: string;
 };
 
