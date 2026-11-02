@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
 import { ReviewSheet } from '@/components/review-sheet';
+import { useToast } from '@/components/toast';
 import { Banner, Button, Card, Empty, Skeleton, styles, Text } from '@/components/ui';
 import { formatCouponWhen, formatDiscount } from '@/lib/coupons';
 import { errorMessage } from '@/lib/format';
@@ -20,6 +21,7 @@ const STATE: Record<MyCoupon['state'], string> = {
 
 /** Hesap altında müşterinin aldığı kuponlar ve kodları (web: components/my-coupons.tsx). */
 export default function MyCouponsScreen() {
+  const toast = useToast();
   const [list, setList] = useState<MyCoupon[] | null>(null);
   const [error, setError] = useState('');
   // Kasada kullanılan vitrin kuponları ve henüz değerlendirilmemiş olanlar (Değerlendir düğmesi için).
@@ -106,6 +108,7 @@ export default function MyCouponsScreen() {
         onClose={() => setReviewing(null)}
         onDone={() => {
           setReviewing(null);
+          toast('Değerlendirmeniz alındı. Teşekkürler!');
           load();
         }}
       />

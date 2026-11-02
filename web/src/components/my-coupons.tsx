@@ -25,6 +25,7 @@ export function MyCoupons() {
   const [showcaseIds, setShowcaseIds] = useState<Set<string>>(new Set());
   const [reviewed, setReviewed] = useState<Set<string>>(new Set());
   const [reviewing, setReviewing] = useState<string | null>(null);
+  const [thanks, setThanks] = useState(false);
   const canReview = (c: MyCoupon) => c.state === "used" && !!c.redeemed_at && showcaseIds.has(c.business_id) && !reviewed.has(c.claim_id);
 
   const load = useCallback(async () => {
@@ -62,6 +63,12 @@ export function MyCoupons() {
     );
   }
   return (
+    <>
+      {thanks && (
+        <p className="mb-3 rounded-xl bg-emerald-500/10 p-3 text-sm text-ok" role="status">
+          Değerlendirmeniz alındı. Teşekkürler!
+        </p>
+      )}
     <ul className="space-y-3">
       {list.map((c) => (
         <li key={c.claim_id} className={`card flex flex-wrap items-center gap-4 p-4 ${c.state !== "active" && c.state !== "attached" && !canReview(c) ? "opacity-60" : ""}`}>
@@ -87,6 +94,7 @@ export function MyCoupons() {
               submit={(rating, comment) => createClient().rpc("add_coupon_review", { p_claim_id: c.claim_id, p_rating: rating, p_comment: comment })}
               onDone={() => {
                 setReviewing(null);
+                setThanks(true);
                 load();
               }}
             />
@@ -94,5 +102,6 @@ export function MyCoupons() {
         </li>
       ))}
     </ul>
+    </>
   );
 }

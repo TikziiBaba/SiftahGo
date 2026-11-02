@@ -76,7 +76,7 @@ function Coupons() {
 
       {error && <p className="mt-4 rounded-xl bg-rose-500/10 p-3 text-sm text-rose-300">{error}</p>}
 
-      <CouponRedeem />
+      <CouponRedeem onChange={load} />
 
       {editing && (
         <CouponForm

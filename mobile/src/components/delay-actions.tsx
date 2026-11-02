@@ -59,7 +59,14 @@ export function CustomerLateButton({ appointment, onDone }: { appointment: Appoi
   const [error, setError] = useState('');
   const now = useNow(); // sunucu zaten pencereyi denetler
   const inWindow = now >= new Date(appointment.starts_at).getTime() - TWO_HOURS && now < new Date(appointment.ends_at).getTime();
-  if (!inWindow || !['pending', 'confirmed'].includes(appointment.status)) return null;
+  if (!['pending', 'confirmed'].includes(appointment.status)) return null;
+  // Haber randevu satırından okunur: ekran yenilense de görünür; saat değişince sunucu sütunları sıfırlar.
+  const notice = appointment.customer_late_minutes ? (
+    <Text variant="caption" tone="muted">
+      İşletmeye {appointment.customer_late_minutes} dk geciktiğiniz bildirildi.
+    </Text>
+  ) : null;
+  if (!inWindow) return notice;
 
   async function send(minutes: number) {
     setBusy(true);
@@ -74,7 +81,8 @@ export function CustomerLateButton({ appointment, onDone }: { appointment: Appoi
 
   return (
     <>
-      <Button title="Gecikiyorum" icon="time-outline" variant="secondary" size="sm" onPress={() => setOpen(true)} />
+      {notice}
+      {appointment.customer_late_count < 3 ? <Button title="Gecikiyorum" icon="time-outline" variant="secondary" size="sm" onPress={() => setOpen(true)} /> : null}
       <Sheet visible={open} onClose={() => setOpen(false)} title="Gecikiyorum" subtitle="Ne kadar geç kalacaksın?">
         <Minutes options={LATE_MINUTES} busy={busy} onPick={send} />
         {error ? (
@@ -103,7 +111,7 @@ export function BusinessDelayButton({ staff, named, onDone }: { staff: { id: str
     if (error) return setError(errorMessage(error));
     const n = Number(data ?? 0);
     setOpen(false);
-    toast(n > 0 ? `${n} müşteriye haber verildi` : 'Haber verilebilecek müşteri yok. Elle eklenen randevuları arayın.');
+    toast(n > 0 ? `${n} müşteriye haber verildi` : 'Haber verilebilecek müşteri yok. Elle eklenen randevuları arayın.', n > 0 ? 'success' : 'info');
     onDone?.();
   }
 

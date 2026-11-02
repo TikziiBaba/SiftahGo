@@ -16,12 +16,13 @@ type Found = {
   state: "active" | "attached" | "used" | "expired" | "unavailable";
   problem: string | null;
   redeemed_at: string | null;
+  has_review: boolean;
 };
 
 const UNDO_MS = 10 * 60 * 1000;
 
 /** Kasada müşterinin gösterdiği kodu sorgular, onaylanınca kullanılmış sayar; 10 dakika geri alınabilir. */
-export function CouponRedeem() {
+export function CouponRedeem({ onChange }: { onChange?: () => void }) {
   const { business } = useBusiness();
   const [code, setCode] = useState("");
   const [found, setFound] = useState<Found | null>(null);
@@ -51,7 +52,7 @@ export function CouponRedeem() {
     }
     const f = data as Found;
     setFound(f);
-    setUndoable(f.state === "used" && !!f.redeemed_at && Date.now() - new Date(f.redeemed_at).getTime() < UNDO_MS);
+    setUndoable(f.state === "used" && !!f.redeemed_at && Date.now() - new Date(f.redeemed_at).getTime() < UNDO_MS && !f.has_review);
     return true;
   }
 
@@ -82,6 +83,7 @@ export function CouponRedeem() {
     const ok = await lookup();
     setBusy(false);
     if (ok) setMessage({ ok: true, text: "Kupon kullanıldı olarak işaretlendi." });
+    onChange?.();
   }
 
   async function undo() {
@@ -96,6 +98,7 @@ export function CouponRedeem() {
     const ok = await lookup();
     setBusy(false);
     if (ok) setMessage({ ok: true, text: "Geri alındı; kupon yeniden kullanılabilir." });
+    onChange?.();
   }
 
   return (

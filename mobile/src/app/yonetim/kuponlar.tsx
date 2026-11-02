@@ -88,7 +88,7 @@ function Coupons({ business }: { business: Business }) {
 
         {error ? <Banner tone="danger" icon="alert-circle-outline" text={error} /> : null}
 
-        <CouponRedeem businessId={business.id} />
+        <CouponRedeem businessId={business.id} onChange={load} />
 
         {editing && (
           <CouponForm

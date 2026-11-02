@@ -4006,7 +4006,8 @@ begin
   end if;
   return jsonb_build_object(
     'claim_id', cl.id, 'title', c.title, 'discount_type', c.discount_type, 'discount_value', c.discount_value,
-    'redeemed_at', cl.redeemed_at, 'customer_name', v_name, 'state', public.coupon_claim_state(cl), 'problem', public.coupon_redeem_problem(cl)
+    'redeemed_at', cl.redeemed_at, 'customer_name', v_name, 'state', public.coupon_claim_state(cl), 'problem', public.coupon_redeem_problem(cl),
+    'has_review', exists (select 1 from public.reviews r where r.coupon_claim_id = cl.id)
   );
 end;
 $$;

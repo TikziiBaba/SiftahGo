@@ -225,7 +225,7 @@ export default function SubscriptionPage() {
                     <Feature key={f}>{f}</Feature>
                   ))}
                   {Object.entries(PLAN_FEATURES)
-                    .filter(([key]) => !showcase || ["coupons", "announcement", "links", "menu"].includes(key))
+                    .filter(([key]) => !showcase || ["coupons", "announcement", "links"].includes(key))
                     .filter(([key]) => showcase || key !== "menu")
                     .map(([key, label]) => (
                     <Feature key={key} off={!plan.features.includes(key)}>

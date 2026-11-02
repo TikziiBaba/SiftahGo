@@ -747,6 +747,32 @@ begin
 end;
 $$;
 
+create or replace function public.find_coupon_code(p_business_id uuid, p_code text)
+returns jsonb
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  cl     public.coupon_claims;
+  c      public.coupons;
+  v_name text;
+begin
+  if not public.is_business_owner(p_business_id) then raise exception 'Bu işlem için yetkiniz yok.'; end if;
+  cl := public.coupon_lookup(p_business_id, p_code);
+  if cl.id is null then return null; end if;
+  select * into c from public.coupons where id = cl.coupon_id;
+  if cl.customer_id is null then
+    v_name := 'Eski üye';
+  else
+    select coalesce(nullif(trim(full_name), ''), 'Müşteri') into v_name from public.profiles where id = cl.customer_id;
+  end if;
+  return jsonb_build_object(
+    'claim_id', cl.id, 'title', c.title, 'discount_type', c.discount_type, 'discount_value', c.discount_value,
+    'redeemed_at', cl.redeemed_at, 'customer_name', v_name, 'state', public.coupon_claim_state(cl), 'problem', public.coupon_redeem_problem(cl),
+    'has_review', exists (select 1 from public.reviews r where r.coupon_claim_id = cl.id)
+  );
+end;
+$$;
+
 drop policy "randevu: işletme manuel ekler" on public.appointments;
 create policy "randevu: işletme manuel ekler" on public.appointments
   for insert with check (

@@ -1920,6 +1920,8 @@ await expectError(() => as(O1, `select undo_coupon_redeem($1)`, [cA.id]), /süre
 await db.query(`update coupon_claims set redeemed_at = now() where id = $1`, [cA.id]);
 await expectError(() => as(O1, `select undo_coupon_redeem($1)`, [cA.id]), /değerlendirme/, 'yorum yazılmış kuponun kasada kullanımı geri alınamaz');
 ok((await db.query(`select redeemed_at from coupon_claims where id = $1`, [cA.id])).rows[0].redeemed_at !== null, 'reddedilen geri alma kuponu açmaz');
+const fcode = async (c) => (await as(O1, `select find_coupon_code($1, $2) r`, [vb, c.code])).rows[0].r;
+ok((await fcode(cA)).has_review === true && (await fcode(cC)).has_review === false, 'kod sorgusu has_review: yorumlu true, yorumsuz false');
 await db.query(`update coupon_claims set redeemed_at = now() where id = $1`, [cC.id]);
 await as(O1, `select undo_coupon_redeem($1)`, [cC.id]);
 await expectError(() => review(M1, cC.id), /kullan/, 'geri alınan kupon değerlendirilemez');

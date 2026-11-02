@@ -32,7 +32,7 @@ import { AppointmentReview } from "@/components/appointment-review";
 import { KpiCard } from "@/components/charts";
 import { useBusiness } from "@/components/panel-context";
 import { AppointmentPrice } from "@/components/appointment-price";
-import { delayLabel } from "@/components/delay-actions";
+import { BusinessDelayButton, delayLabel } from "@/components/delay-actions";
 import { DayCalendar, WeekView } from "@/components/panel-schedule";
 import { RescheduleDialog } from "@/components/reschedule-dialog";
 import { ShowcaseHome } from "@/components/showcase-home";
@@ -400,6 +400,14 @@ function AppointmentsPage() {
               ))}
             </div>
           </div>
+
+          {view === "liste" && day === today && staff.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {staff.map((m) => (
+                <BusinessDelayButton key={m.id} staff={m} named={staff.length > 1} onDone={load} />
+              ))}
+            </div>
+          )}
 
           <h2 className="text-lg font-semibold">
             {view === "hafta"

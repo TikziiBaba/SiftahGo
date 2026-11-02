@@ -181,7 +181,7 @@ function Subscription({ business }: { business: Business }) {
                   <Feature key={f}>{f}</Feature>
                 ))}
                 {Object.entries(PLAN_FEATURES)
-                  .filter(([key]) => (showcase ? ['coupons', 'announcement', 'links', 'menu'].includes(key) : key !== 'menu'))
+                  .filter(([key]) => (showcase ? ['coupons', 'announcement', 'links'].includes(key) : key !== 'menu'))
                   .map(([key, label]) => (
                     <Feature key={key} off={!plan.features.includes(key)}>
                       {label}

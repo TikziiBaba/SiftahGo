@@ -45,10 +45,14 @@ export function CustomerLateButton({ appointment, onDone }: { appointment: Appoi
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [sent, setSent] = useState<number | null>(null);
   const now = useNow(); // sunucu zaten pencereyi denetler
   const inWindow = now >= new Date(appointment.starts_at).getTime() - TWO_HOURS && now < new Date(appointment.ends_at).getTime();
-  if (!inWindow || !["pending", "confirmed"].includes(appointment.status)) return null;
+  if (!["pending", "confirmed"].includes(appointment.status)) return null;
+  // Haber randevu satırından okunur: sayfa yenilense de görünür; saat değişince sunucu sütunları sıfırlar.
+  const notice = appointment.customer_late_minutes ? (
+    <p className="mt-2 text-sm text-ok">İşletmeye {appointment.customer_late_minutes} dk geciktiğiniz bildirildi.</p>
+  ) : null;
+  if (!inWindow) return notice;
 
   async function send(minutes: number) {
     setBusy(true);
@@ -56,7 +60,6 @@ export function CustomerLateButton({ appointment, onDone }: { appointment: Appoi
     const { error } = await createClient().rpc("report_customer_late", { p_id: appointment.id, p_minutes: minutes });
     setBusy(false);
     if (error) return setError(errorMessage(error));
-    setSent(minutes);
     setOpen(false);
     onDone?.();
   }
@@ -71,12 +74,12 @@ export function CustomerLateButton({ appointment, onDone }: { appointment: Appoi
             Vazgeç
           </button>
         </div>
-      ) : (
+      ) : appointment.customer_late_count < 3 ? (
         <button type="button" className="btn btn-secondary py-2" onClick={() => setOpen(true)}>
           <Clock className="size-4" /> Gecikiyorum
         </button>
-      )}
-      {sent && !open && <p className="mt-2 text-sm text-ok">İşletmeye {sent} dk gecikeceğin haber verildi.</p>}
+      ) : null}
+      {!open && notice}
       {error && <p className="mt-2 text-sm text-bad">{error}</p>}
     </div>
   );
@@ -87,7 +90,7 @@ export function BusinessDelayButton({ staff, named, onDone }: { staff: { id: str
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [result, setResult] = useState("");
+  const [result, setResult] = useState<{ text: string; none: boolean } | null>(null);
 
   async function send(minutes: number) {
     setBusy(true);
@@ -96,7 +99,7 @@ export function BusinessDelayButton({ staff, named, onDone }: { staff: { id: str
     setBusy(false);
     if (error) return setError(errorMessage(error));
     const n = Number(data ?? 0);
-    setResult(n > 0 ? `${n} müşteriye haber verildi` : "Haber verilebilecek müşteri yok. Elle eklenen randevuları arayın.");
+    setResult(n > 0 ? { text: `${n} müşteriye haber verildi`, none: false } : { text: "Haber verilebilecek müşteri yok. Elle eklenen randevuları arayın.", none: true });
     setOpen(false);
     onDone?.();
   }
@@ -111,13 +114,13 @@ export function BusinessDelayButton({ staff, named, onDone }: { staff: { id: str
           </button>
         </div>
       ) : (
-        <button type="button" className="btn btn-secondary px-3 py-1 text-xs" onClick={() => { setResult(""); setOpen(true); }} aria-label={`${staff.name} için gecikme haberi`}>
+        <button type="button" className="btn btn-secondary px-3 py-1 text-xs" onClick={() => { setResult(null); setOpen(true); }} aria-label={`${staff.name} için gecikme haberi`}>
           <Clock className="size-3.5" /> {named ? `${staff.name}: Sarktık` : "Sarktık"}
         </button>
       )}
       {result && !open && (
-        <p className="text-xs text-ok" role="status">
-          {result}
+        <p className={`text-xs ${result.none ? "text-warn" : "text-ok"}`} role="status">
+          {result.text}
         </p>
       )}
       {error && <p className="text-xs text-bad">{error}</p>}
