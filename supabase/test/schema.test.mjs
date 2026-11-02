@@ -1298,5 +1298,239 @@ ok(toCustomer.length === 3 && toCustomer.every((r) => r.email === 'gmusteri@x.co
 ok((await db.query(`select * from claim_delay_notices(100)`)).rows.length === 0, 'alınan haber ikinci kez dönmez');
 ok((await db.query(`select count(*)::int c from delay_notices where status = 'pending'`)).rows[0].c === 0, 'iptal edilen randevunun haberi de gönderilmiş sayıldı');
 
+// --- Kupon: kendi işletmeleri ve müşterileriyle
+const KSAHIP = '00000000-0000-0000-0000-0000000000c1';
+const KBASLANGIC = '00000000-0000-0000-0000-0000000000c2';
+const KBASKA = '00000000-0000-0000-0000-0000000000c3';
+const M1 = '00000000-0000-0000-0000-0000000000c4';
+const M2 = '00000000-0000-0000-0000-0000000000c5';
+const M3 = '00000000-0000-0000-0000-0000000000c6';
+const M4 = '00000000-0000-0000-0000-0000000000c7';
+await db.exec(`
+  insert into auth.users values ('${KSAHIP}', 'ksahip@x.com', '{"full_name":"Kupon Sahibi","role":"business"}');
+  insert into auth.users values ('${KBASLANGIC}', 'kbas@x.com', '{"full_name":"Başlangıç Sahibi","role":"business"}');
+  insert into auth.users values ('${KBASKA}', 'kbaska@x.com', '{"full_name":"Başka Kupon Sahibi","role":"business"}');
+  insert into auth.users values ('${M1}', 'km1@x.com', '{"full_name":"Müşteri Bir"}');
+  insert into auth.users values ('${M2}', 'km2@x.com', '{"full_name":"Müşteri İki"}');
+  insert into auth.users values ('${M3}', 'km3@x.com', '{"full_name":"Müşteri Üç"}');
+  insert into auth.users values ('${M4}', 'km4@x.com', '{"full_name":"Müşteri Dört"}');
+`);
+const kbiz = (await as(KSAHIP, `insert into businesses (owner_id, slug, name, city, category) values ($1, 'kupon-berber', 'Kupon Berber', 'İstanbul', 'berber') returning id`, [KSAHIP])).rows[0].id;
+const kbiz2 = (await as(KBASKA, `insert into businesses (owner_id, slug, name, city, category) values ($1, 'kupon-baska', 'Kupon Başka', 'İstanbul', 'berber') returning id`, [KBASKA])).rows[0].id;
+const kbiz3 = (await as(KBASLANGIC, `insert into businesses (owner_id, slug, name, city, category) values ($1, 'kupon-baslangic', 'Kupon Başlangıç', 'İstanbul', 'berber') returning id`, [KBASLANGIC])).rows[0].id;
+await db.query(`update businesses set approval_status = 'approved', plan_id = 'esnaf', subscription_ends_at = now() + interval '1 year' where id in ($1, $2)`, [kbiz, kbiz2]);
+await db.query(`update businesses set approval_status = 'approved', plan_id = 'baslangic', subscription_ends_at = now() + interval '1 year' where id = $1`, [kbiz3]);
+const kfeats = Object.fromEntries((await db.query(`select id, features from plans`)).rows.map((r) => [r.id, r.features]));
+ok(kfeats.esnaf.includes('coupons') && kfeats.pro.includes('coupons') && !kfeats.baslangic.includes('coupons'), 'kupon özelliği Esnaf ve Pro paketinde, Başlangıç\'ta yok');
+
+const ymd = async (n) => (await db.query(`select to_char((now() at time zone 'Europe/Istanbul')::date + $1::int, 'YYYY-MM-DD') d`, [n])).rows[0].d;
+const bugun = await ymd(0), dun = await ymd(-1), ileri = await ymd(30), gun5 = await ymd(-5), gun10 = await ymd(10), gun40 = await ymd(40), gun91 = await ymd(91);
+const yerel = (await db.query(`select extract(isodow from now() at time zone 'Europe/Istanbul')::int dow, extract(hour from now() at time zone 'Europe/Istanbul')::int h`)).rows[0];
+const baskaGun = (yerel.dow % 7) + 1;
+const kSvc = (await as(KSAHIP, `insert into services (business_id, name, duration_minutes, price) values ($1, 'Saç Kesimi', 30, 400) returning id`, [kbiz])).rows[0].id;
+const kSvcBaska = (await as(KBASKA, `insert into services (business_id, name, duration_minutes, price) values ($1, 'Başka Hizmet', 30, 100) returning id`, [kbiz2])).rows[0].id;
+const kaydet = (uid, o = {}) => as(uid,
+  `select save_coupon($1, $2, $3, $4, $5::date, $6::date, $7::int[], $8::time, $9::time, $10::int, $11::uuid[]) id`,
+  [o.id ?? null, o.title ?? 'Hafta içi indirimi', o.type ?? 'percent', o.value ?? 20, o.starts ?? bugun, o.ends ?? ileri,
+    o.days ?? [], o.start ?? null, o.end ?? null, o.limit ?? null, o.services ?? []]);
+const yeniKupon = async (o = {}, uid = KSAHIP) => (await kaydet(uid, o)).rows[0].id;
+const kupRow = async (id) => (await db.query(`select * from coupons where id = $1`, [id])).rows[0];
+const alKod = async (uid, kupon) => (await as(uid, `select * from claim_coupon($1)`, [kupon])).rows[0];
+const kasada = (uid, biz, kod) => as(uid, `select redeem_coupon_code($1, $2) id`, [biz, kod]);
+const bul = async (uid, biz, kod) => (await as(uid, `select find_coupon_code($1, $2) r`, [biz, kod])).rows[0].r;
+
+// paket ve doğrulama
+await expectError(() => kaydet(KBASLANGIC), /paket/i, 'Başlangıç paketi kupon açamaz');
+await expectError(() => kaydet(M1), /yetki/i, 'işletmesi olmayan kupon açamaz');
+await expectError(() => kaydet(KSAHIP, { value: 91 }), /1.*90/, 'yüzde 91 reddedildi');
+await expectError(() => kaydet(KSAHIP, { value: 0 }), /0/, 'sıfır indirim reddedildi');
+await expectError(() => kaydet(KSAHIP, { ends: gun91 }), /90 gün/, '91 günlük süre reddedildi');
+await expectError(() => kaydet(KSAHIP, { starts: ileri, ends: bugun }), /bitiş/i, 'bitiş başlangıçtan önce olamaz');
+await expectError(() => kaydet(KSAHIP, { starts: gun5, ends: dun }), /geçmiş/i, 'bitişi geçmiş kupon açılamaz');
+await expectError(() => kaydet(KSAHIP, { start: '12:00' }), /saat/i, 'yalnız başlangıç saati reddedildi');
+await expectError(() => kaydet(KSAHIP, { start: '15:00', end: '12:00' }), /saat/i, 'bitiş saati başlangıçtan önce olamaz');
+await expectError(() => kaydet(KSAHIP, { days: [0, 3] }), /gün/i, 'geçersiz gün reddedildi');
+await expectError(() => kaydet(KSAHIP, { title: '  ' }), /başlığı/i, 'boş başlık reddedildi');
+await expectError(() => kaydet(KSAHIP, { title: 'a'.repeat(81) }), /başlığı/i, '81 karakterlik başlık reddedildi');
+await expectError(() => kaydet(KSAHIP, { type: 'bedava' }), /tür/i, 'geçersiz indirim türü reddedildi');
+await expectError(() => kaydet(KSAHIP, { limit: 0 }), /sınır/i, 'sıfır sınır reddedildi');
+await expectError(() => kaydet(KSAHIP, { services: [kSvcBaska] }), /hizmet/i, 'başka işletmenin hizmeti seçilemez');
+ok((await db.query(`select coupon_price(100, 'percent', 15) p`)).rows[0].p == 85, 'yüzde indirim fiyatı');
+ok((await db.query(`select coupon_price(100, 'fixed', 150) p`)).rows[0].p == 0, 'sabit indirim fiyatı aşarsa 0');
+ok((await db.query(`select coupon_price(100, 'fixed', 30) p`)).rows[0].p == 70, 'sabit indirim');
+ok((await db.query(`select coupon_price(99.99, 'percent', 33) p`)).rows[0].p == 66.99, 'kuruş yuvarlama');
+
+// tanım, görünürlük ve sahiplik
+const K1 = await yeniKupon({ title: 'Genel indirim', services: [kSvc], limit: 60 });
+let kr = await kupRow(K1);
+ok(kr.business_id === kbiz && kr.is_active && kr.claimed_count === 0 && Number(kr.discount_value) === 20, 'kupon kaydedildi');
+ok((await as(null, `select id from coupons`)).rows.length === 1 && (await as(M1, `select id from coupons`)).rows.length === 1, 'etkin kuponu herkes okur');
+await as(KSAHIP, `select set_coupon_active($1, false)`, [K1]);
+ok((await as(null, `select id from coupons`)).rows.length === 0 && (await as(KSAHIP, `select id from coupons`)).rows.length === 1, 'durdurulan kupon müşteriden gizlenir, sahibi görür');
+await as(KSAHIP, `select set_coupon_active($1, true)`, [K1]);
+await db.query(`update businesses set plan_id = 'baslangic' where id = $1`, [kbiz]);
+ok((await as(null, `select id from coupons`)).rows.length === 0, 'paketi düşen işletmenin kuponu gizlenir');
+await expectError(() => alKod(M1, K1), /bulunamadı/, 'paketi düşen işletmenin kuponu alınamaz');
+await db.query(`update businesses set plan_id = 'esnaf' where id = $1`, [kbiz]);
+await expectError(() => kaydet(KBASKA, { id: K1 }), /bulunamadı/, 'başkasının kuponu düzenlenemez');
+await expectError(() => as(KBASKA, `select set_coupon_active($1, false)`, [K1]), /yetki/i, 'başkasının kuponu durdurulamaz');
+await expectError(() => as(KBASKA, `select delete_coupon($1)`, [K1]), /yetki/i, 'başkasının kuponu silinemez');
+await expectError(() => as(M1, `select set_coupon_active($1, false)`, [K1]), /yetki/i, 'müşteri kuponu durduramaz');
+
+// alma
+const kc1 = await alKod(M1, K1);
+ok(/^\d{6}$/.test(kc1.code) && kc1.customer_id === M1 && kc1.business_id === kbiz && kc1.redeemed_at === null, '6 haneli kod oluştu');
+ok((await kupRow(K1)).claimed_count === 1, 'alınan sayısı arttı');
+await expectError(() => alKod(M1, K1), /zaten/i, 'kupon kişi başına bir kez alınır');
+await expectError(() => alKod(null, K1), /giriş/i, 'kupon almak için giriş gerekir');
+await expectError(() => alKod(M1, '00000000-0000-0000-0000-000000000001'), /bulunamadı/, 'olmayan kupon alınamaz');
+
+// toplam sınır: kullanılmayan kupon yer açmaz
+const K2 = await yeniKupon({ title: 'Tek kişilik', limit: 1 });
+const kc2 = await alKod(M2, K2);
+await expectError(() => alKod(M3, K2), /tükendi/, 'sınır dolunca kupon alınamaz');
+await db.query(`update coupon_claims set appointment_id = null, redeemed_at = null where id = $1`, [kc2.id]);
+await expectError(() => alKod(M3, K2), /tükendi/, 'kullanılmayan kupon sınırdan yer açmaz');
+
+// durdurulmuş ve bitmiş kupon yeni müşteriye verilmez; önceden alınan kod çalışır
+const K3 = await yeniKupon({ title: 'Durdurulacak' });
+const kc3 = await alKod(M2, K3);
+await as(KSAHIP, `select set_coupon_active($1, false)`, [K3]);
+await expectError(() => alKod(M3, K3), /durdur/i, 'durdurulmuş kupon alınamaz');
+await kasada(KSAHIP, kbiz, kc3.code);
+ok((await db.query(`select redeemed_at from coupon_claims where id = $1`, [kc3.id])).rows[0].redeemed_at !== null, 'durdurulmadan önce alınan kod kasada çalışır');
+const K4 = await yeniKupon({ title: 'Bitecek' });
+const kc4 = await alKod(M3, K4);
+await db.query(`update coupons set starts_on = $2::date - 3, ends_on = $2::date - 1 where id = $1`, [K4, bugun]);
+await expectError(() => alKod(M4, K4), /süresi dolmuş/, 'bitmiş kupon alınamaz');
+await expectError(() => kasada(KSAHIP, kbiz, kc4.code), /süresi dolmuş/, 'bitmiş kuponun kodu kasada reddedilir');
+const K4b = await yeniKupon({ title: 'Başlamamış', starts: ileri, ends: gun40 });
+await expectError(() => alKod(M4, K4b), /başlamadı/, 'başlamamış kupon alınamaz');
+
+// ilk alımdan sonra kilit
+await expectError(() => kaydet(KSAHIP, { id: K1, services: [kSvc], value: 30 }), /alındıktan sonra/, 'alınmış kuponun indirimi değişmez');
+await expectError(() => kaydet(KSAHIP, { id: K1, services: [kSvc], type: 'fixed' }), /alındıktan sonra/, 'alınmış kuponun türü değişmez');
+await expectError(() => kaydet(KSAHIP, { id: K1, services: [kSvc], days: [1, 2] }), /alındıktan sonra/, 'alınmış kuponun günleri değişmez');
+await expectError(() => kaydet(KSAHIP, { id: K1, services: [kSvc], start: '10:00', end: '12:00' }), /alındıktan sonra/, 'alınmış kuponun saatleri değişmez');
+await expectError(() => kaydet(KSAHIP, { id: K1 }), /alındıktan sonra/, 'alınmış kuponun hizmetleri değişmez');
+await expectError(() => kaydet(KSAHIP, { id: K1, services: [kSvc], ends: gun10 }), /alındıktan sonra/, 'alınmış kuponun bitişi kısaltılamaz');
+await kaydet(KSAHIP, { id: K1, services: [kSvc], title: 'Yeni başlık', ends: gun40, limit: 70 });
+kr = await kupRow(K1);
+ok(kr.title === 'Yeni başlık' && kr.total_limit === 70, 'alınmış kuponun başlığı, bitişi ve sınırı değişir');
+await expectError(() => kaydet(KSAHIP, { id: K1, services: [kSvc], ends: gun40, limit: 5 }), /alındıktan sonra/, 'alınmış kuponun sınırı düşürülemez');
+await kaydet(KSAHIP, { id: K1, services: [kSvc], title: 'Yeni başlık', ends: gun40, limit: 80 });
+ok((await kupRow(K1)).total_limit === 80, 'sınır yükseltilebilir');
+await expectError(() => as(KSAHIP, `select delete_coupon($1)`, [K1]), /durdur/, 'alınmış kupon silinemez');
+const Ksil = await yeniKupon({ title: 'Silinecek' });
+await kaydet(KSAHIP, { id: Ksil, value: 40, days: [1, 2, 3], start: '09:00', end: '12:00' });
+ok((await kupRow(Ksil)).discount_value == 40, 'alınmamış kuponun indirimi değişir');
+await as(KSAHIP, `select delete_coupon($1)`, [Ksil]);
+ok((await db.query(`select 1 from coupons where id = $1`, [Ksil])).rows.length === 0, 'alınmamış kupon silinir');
+
+// kasada
+await expectError(() => bul(KBASKA, kbiz, kc1.code), /yetki/i, 'kodu yalnızca kuponun işletme sahibi sorgular');
+await expectError(() => bul(M1, kbiz, kc1.code), /yetki/i, 'müşteri kodu sorgulayamaz');
+await expectError(() => kasada(KBASKA, kbiz, kc1.code), /yetki/i, 'başka işletme sahibi kodu kullanılmış sayamaz');
+const f1 = await bul(KSAHIP, kbiz, kc1.code);
+ok(f1.claim_id === kc1.id && f1.title === 'Yeni başlık' && f1.discount_type === 'percent' && Number(f1.discount_value) === 20
+  && f1.customer_name === 'Müşteri Bir' && f1.problem === null && f1.state === 'active', 'kod sorgusu kupon ve müşteri adını verir');
+ok((await bul(KSAHIP, kbiz, '000000')) === null, 'olmayan kod için sonuç boş');
+ok((await kasada(KSAHIP, kbiz, ` ${kc1.code} `)).rows[0].id === kc1.id, 'kasada kod kullanılmış sayıldı (boşluklar yok sayılır)');
+await expectError(() => kasada(KSAHIP, kbiz, kc1.code), /zaten kullanıldı/, 'çift kullanım reddedilir');
+ok((await bul(KSAHIP, kbiz, kc1.code)).state === 'used', 'kullanılan kodun durumu used');
+await db.query(`update coupon_claims set redeemed_at = now() - interval '11 minutes' where id = $1`, [kc1.id]);
+await expectError(() => as(KSAHIP, `select undo_coupon_redeem($1)`, [kc1.id]), /10 dakika/, '10 dakikadan sonra geri alınamaz');
+await db.query(`update coupon_claims set redeemed_at = now() - interval '9 minutes' where id = $1`, [kc1.id]);
+await expectError(() => as(KBASKA, `select undo_coupon_redeem($1)`, [kc1.id]), /yetki/i, 'başka işletme geri alamaz');
+await as(KSAHIP, `select undo_coupon_redeem($1)`, [kc1.id]);
+ok((await db.query(`select redeemed_at from coupon_claims where id = $1`, [kc1.id])).rows[0].redeemed_at === null, '10 dakika içinde geri alınır');
+await expectError(() => as(KSAHIP, `select undo_coupon_redeem($1)`, [kc1.id]), /kullanılmış/, 'kullanılmamış kod geri alınamaz');
+
+// gün ve saat aralığı
+const K5 = await yeniKupon({ title: 'Gün ve saat' });
+const kc5 = await alKod(M4, K5);
+await db.query(`update coupons set weekdays = $2::int[] where id = $1`, [K5, [baskaGun]]);
+await expectError(() => kasada(KSAHIP, kbiz, kc5.code), /bu günde geçerli değil/, 'gün dışında kod reddedilir');
+ok((await bul(KSAHIP, kbiz, kc5.code)).problem !== null, 'kod sorgusu sebebi yazar');
+const dis = yerel.h < 20 ? [yerel.h + 2, yerel.h + 3] : [0, 1];
+await db.query(`update coupons set weekdays = '{}', start_time = $2::time, end_time = $3::time where id = $1`, [K5, `${dis[0]}:00`, `${dis[1]}:00`]);
+await expectError(() => kasada(KSAHIP, kbiz, kc5.code), /bu saatte geçerli değil/, 'saat aralığı dışında kod reddedilir');
+await db.query(`update coupons set weekdays = $2::int[], start_time = '00:00', end_time = '24:00' where id = $1`, [K5, [yerel.dow]]);
+await kasada(KSAHIP, kbiz, kc5.code);
+ok((await db.query(`select redeemed_at from coupon_claims where id = $1`, [kc5.id])).rows[0].redeemed_at !== null, 'gün ve saat aralığındaki kod kullanılır');
+
+// randevuya bağlı kod kasada kullanılamaz; kullanılmışlık randevudan hesaplanır
+const kStaff = (await db.query(`select id from staff where business_id = $1`, [kbiz])).rows[0].id;
+const K6 = await yeniKupon({ title: 'Randevulu' });
+const kc6 = await alKod(M1, K6);
+const kApt = (await db.query(
+  `insert into appointments (business_id, staff_id, customer_id, service_name, customer_name, customer_phone, starts_at, ends_at, status)
+   values ($1, $2, $3, 'Saç Kesimi', 'Müşteri Bir', '05550000000', now() + interval '3 days', now() + interval '3 days 30 minutes', 'confirmed') returning id`,
+  [kbiz, kStaff, M1])).rows[0].id;
+await db.query(`update coupon_claims set appointment_id = $2 where id = $1`, [kc6.id, kApt]);
+await expectError(() => kasada(KSAHIP, kbiz, kc6.code), /randevuya bağlı/, 'randevuya bağlı kod kasada kullanılamaz');
+const myState = async (uid, id) => (await as(uid, `select state from my_coupons() where claim_id = $1`, [id])).rows[0]?.state;
+ok(await myState(M1, kc6.id) === 'attached', 'randevuya bağlı kuponun durumu attached');
+await db.query(`update appointments set status = 'completed' where id = $1`, [kApt]);
+ok(await myState(M1, kc6.id) === 'used', 'tamamlanan randevudaki kupon kullanılmış sayılır');
+await expectError(() => kasada(KSAHIP, kbiz, kc6.code), /zaten kullanıldı/, 'randevusu tamamlanan kod kasada kullanılamaz');
+await db.query(`update appointments set status = 'no_show' where id = $1`, [kApt]);
+ok(await myState(M1, kc6.id) === 'active', 'gelmeyen müşterinin kuponu geri döner');
+await db.query(`update appointments set status = 'cancelled' where id = $1`, [kApt]);
+await kasada(KSAHIP, kbiz, kc6.code);
+ok(await myState(M1, kc6.id) === 'used', 'iptal edilen randevunun kuponu kasada kullanılabilir');
+
+// kuponlarım
+const mine = (await as(M1, `select * from my_coupons()`)).rows;
+ok(mine.length === 2 && mine.every((r) => /^\d{6}$/.test(r.code) && r.business_slug === 'kupon-berber' && r.business_name === 'Kupon Berber'), 'müşteri yalnızca kendi kuponlarını görür');
+ok(await myState(M1, kc1.id) === 'active', 'durum: kullanılabilir');
+ok(await myState(M3, kc4.id) === 'expired', 'durum: süresi dolmuş');
+ok((await as(null, `select * from my_coupons()`)).rows.length === 0, 'girişsiz kullanıcının kuponu yok');
+
+// esnaf raporu
+const rapor = (await as(KSAHIP, `select * from business_coupons($1)`, [kbiz])).rows;
+const r1 = rapor.find((r) => r.id === K1), r3 = rapor.find((r) => r.id === K3);
+ok(r1.claimed === 1 && r1.used === 0 && r3.claimed === 1 && r3.used === 1, 'rapor: alınan ve kullanılan sayıları');
+await expectError(() => as(KBASKA, `select * from business_coupons($1)`, [kbiz]), /yetki/i, 'raporu yalnızca işletme sahibi görür');
+
+// hesabını silen müşteri: sayılar değişmez, kod kullanılamaz
+const K7 = await yeniKupon({ title: 'Hesap silinecek' });
+const kc7 = await alKod(M4, K7);
+const once = (await as(KSAHIP, `select id, claimed, used from business_coupons($1) order by id`, [kbiz])).rows;
+await db.query(`delete from auth.users where id = $1`, [M4]);
+const sonra = (await as(KSAHIP, `select id, claimed, used from business_coupons($1) order by id`, [kbiz])).rows;
+ok(JSON.stringify(once) === JSON.stringify(sonra) && once.find((r) => r.id === K7).claimed === 1, 'hesap silinince rapor sayıları değişmez');
+const eski = await bul(KSAHIP, kbiz, kc7.code);
+ok(eski.customer_name === 'Eski üye' && eski.problem !== null, 'silinen hesabın kodunda müşteri adı Eski üye, kod kullanılamaz');
+await expectError(() => kasada(KSAHIP, kbiz, kc7.code), /hesabı silinmiş/, 'hesabı silinen müşterinin kodu kasada reddedilir');
+
+// istemci doğrudan yazamaz
+const dogrudan = async (uid, sql, params) => { try { return (await as(uid, sql, params)).rows.length; } catch (e) { return /row-level security/.test(e.message) ? 'rls' : e.message; } };
+ok(await dogrudan(M1, `insert into coupons (business_id, title, discount_type, discount_value, starts_on, ends_on) values ($1, 'x', 'percent', 90, $2::date, $3::date)`, [kbiz, bugun, ileri]) === 'rls', 'müşteri coupons tablosuna yazamaz');
+ok(await dogrudan(KSAHIP, `insert into coupons (business_id, title, discount_type, discount_value, starts_on, ends_on) values ($1, 'x', 'percent', 90, $2::date, $3::date)`, [kbiz, bugun, ileri]) === 'rls', 'işletme sahibi coupons tablosuna doğrudan yazamaz');
+ok(await dogrudan(KSAHIP, `update coupons set discount_value = 90 where id = $1 returning id`, [K1]) === 0 && Number((await kupRow(K1)).discount_value) === 20, 'işletme sahibi kuponu doğrudan güncelleyemez');
+ok(await dogrudan(KSAHIP, `delete from coupons where id = $1 returning id`, [K1]) === 0 && !!(await kupRow(K1)), 'işletme sahibi kuponu doğrudan silemez');
+ok(await dogrudan(M1, `insert into coupon_claims (coupon_id, business_id, customer_id, code) values ($1, $2, $3, '123456')`, [K2, kbiz, M1]) === 'rls', 'müşteri coupon_claims tablosuna yazamaz');
+ok(await dogrudan(M1, `update coupon_claims set redeemed_at = now() where id = $1 returning id`, [kc2.id]) === 0, 'müşteri kodu doğrudan kullanılmış yapamaz');
+ok(await dogrudan(KSAHIP, `update coupon_claims set redeemed_at = null, code = '111111' where id = $1 returning id`, [kc3.id]) === 0
+  && (await db.query(`select redeemed_at from coupon_claims where id = $1`, [kc3.id])).rows[0].redeemed_at !== null, 'işletme sahibi kod satırını doğrudan güncelleyemez');
+ok(await dogrudan(M1, `delete from coupon_claims where id = $1 returning id`, [kc1.id]) === 0, 'müşteri kod satırını silemez');
+ok((await as(M1, `select id from coupon_claims where id = $1`, [kc2.id])).rows.length === 0, 'müşteri başkasının kod satırını okuyamaz');
+ok((await as(M2, `select id from coupon_claims`)).rows.length === 2, 'müşteri yalnızca kendi kod satırlarını okur');
+ok((await as(KSAHIP, `select id from coupon_claims`)).rows.length >= 5 && (await as(KBASKA, `select id from coupon_claims`)).rows.length === 0, 'işletme sahibi yalnızca kendi işletmesinin kod satırlarını okur');
+ok(await dogrudan(KSAHIP, `select * from coupon_code_attempts`) === 0 && await dogrudan(KSAHIP, `insert into coupon_code_attempts (business_id) values ($1)`, [kbiz]) === 'rls', 'deneme kayıtları istemciye kapalı');
+
+await expectError(() => as(KSAHIP, `select coupon_lookup($1, '123456')`, [kbiz]), /permission denied/, 'kod arama iç fonksiyonu istemciden çağrılamaz');
+
+// 10 dakikada 20 yanlış deneme
+const KB = await yeniKupon({ title: 'Başka işletme kuponu' }, KBASKA);
+const kcB = await alKod(M1, KB);
+for (let i = 0; i < 20; i++) await bul(KBASKA, kbiz2, String(100000 + i));
+await expectError(() => bul(KBASKA, kbiz2, kcB.code), /çok fazla/, '20 yanlış denemeden sonra doğru kod da durur (sorgu)');
+await expectError(() => kasada(KBASKA, kbiz2, kcB.code), /çok fazla/, '20 yanlış denemeden sonra doğru kod da durur (kullanım)');
+await db.query(`update coupon_code_attempts set created_at = now() - interval '11 minutes' where business_id = $1`, [kbiz2]);
+ok((await kasada(KBASKA, kbiz2, kcB.code)).rows[0].id === kcB.id, '10 dakika geçince giriş yeniden açılır');
+ok((await bul(KSAHIP, kbiz, kc5.code)).state === 'used', 'bir işletmenin denemeleri diğerini kilitlemez');
+
 console.log(failures ? `\n${failures} TEST BAŞARISIZ` : '\nTÜM TESTLER GEÇTİ');
 process.exit(failures ? 1 : 0);
