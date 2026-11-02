@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { uploadToR2 } from "@/lib/r2";
 import { isSameOrigin } from "@/lib/same-origin";
 
-const KINDS = ["logo", "cover", "gallery"] as const;
+const KINDS = ["logo", "cover", "gallery", "menu"] as const;
 const TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
 // Dosyanın ilk baytları (konum, baytlar). Tür bilgisini istemci yazar; içerik gerçekten o görsel olmalı,
 // yoksa R2'de herkese açık adresle görsel kılığında başka dosya yayınlanabilir.

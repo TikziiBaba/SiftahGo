@@ -602,11 +602,261 @@ begin
       plan_id = case when plan_id is null then null when p_type = 'showcase' then 'vitrin' else 'baslangic' end
   where id = b.id;
 
-  if p_type = 'appointment' and not exists (select 1 from public.staff where business_id = b.id) then
+  -- Başlangıç 1 personelle sınırlı: fazla aktif personel pasif olur (apply_subscription ile aynı kural, en eskiler kalır).
+  if p_type = 'appointment' and b.plan_id is not null then
+    update public.staff set is_active = false
+    where id in (
+      select id from public.staff
+      where business_id = b.id and is_active
+      order by sort_order, created_at
+      offset (select staff_limit from public.plans where id = 'baslangic')
+    );
+  end if;
+  if p_type = 'appointment' and not exists (select 1 from public.staff where business_id = b.id and is_active) then
     select nullif(trim(full_name), '') into v_owner_name from public.profiles where id = b.owner_id;
     insert into public.staff (business_id, name) values (b.id, coalesce(v_owner_name, b.name));
   end if;
 end;
 $$;
+
+-- ---------------------------------------------------------------------
+-- Menü ve kupon yorumları
+-- - menu_items: 'menu' özelliği olan paket (Vitrin) yazar, en fazla 200 ürün; görsel işletmenin /menu/ klasöründen.
+-- - Kupon yorumu: reviews.appointment_id boş olabilir, coupon_claim_id dolu (add_coupon_review; yalnızca vitrin,
+--   kasada kullanılmış kupon, kupon başına bir kez). Yorumdan sonra kasada kullanım geri alınamaz.
+-- - claim_coupon_review_requests ("Nasıldı?", kullanımdan 2 saat sonra) ve claim_coupon_review_notices
+--   ("Yeni değerlendirme") /api/notifications tarafından çağrılır.
+-- - Vitrin işletmesinin sahibi doğrudan randevu ekleyemez.
+-- ---------------------------------------------------------------------
+create or replace function public.is_upload_url(p_url text)
+returns boolean
+language sql immutable set search_path = ''
+as $$
+  select coalesce(
+    p_url ~ '^https://cdn\.siftahgo\.app/businesses/[0-9a-f-]{36}/(logo|cover|gallery|menu)/[A-Za-z0-9._-]+$',
+    false
+  );
+$$;
+
+alter table public.reviews
+  alter column appointment_id drop not null,
+  add column coupon_claim_id uuid unique references public.coupon_claims (id) on delete cascade,
+  add column owner_notified_at timestamptz,
+  add constraint reviews_check check (num_nonnulls(appointment_id, coupon_claim_id) = 1);
+alter table public.coupon_claims add column review_requested_at timestamptz;
+
+create table public.menu_items (
+  id          uuid primary key default gen_random_uuid(),
+  business_id uuid not null references public.businesses (id) on delete cascade,
+  category    text not null default '' check (length(category) <= 60),
+  name        text not null check (length(trim(name)) > 0 and length(name) <= 100),
+  description text not null default '' check (length(description) <= 300),
+  price       numeric(10, 2) not null check (price >= 0),
+  image_url   text,
+  is_active   boolean not null default true,
+  sort_order  int not null default 0,
+  created_at  timestamptz not null default now(),
+  constraint menu_items_image_check check (
+    image_url is null
+    or (public.is_upload_url(image_url) and image_url like '%/businesses/' || business_id || '/menu/%')
+  )
+);
+create index menu_items_business_idx on public.menu_items (business_id, sort_order, created_at);
+
+create function public.enforce_menu_limit()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  perform 1 from public.businesses where id = new.business_id for update;
+  if (select count(*) from public.menu_items where business_id = new.business_id) >= 200 then
+    raise exception 'Menüde en fazla 200 ürün olabilir.';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger menu_items_limit
+  before insert on public.menu_items
+  for each row execute function public.enforce_menu_limit();
+
+alter table public.menu_items enable row level security;
+create policy "menü: herkes aktifi okur" on public.menu_items
+  for select using (is_active and public.is_bookable(business_id));
+create policy "menü: sahibi okur" on public.menu_items
+  for select using (public.is_business_owner(business_id));
+create policy "menü: sahibi yazar" on public.menu_items
+  for all using (public.is_business_owner(business_id) and public.plan_has_feature(business_id, 'menu'))
+  with check (public.is_business_owner(business_id) and public.plan_has_feature(business_id, 'menu'));
+
+-- Kupon yorumunda randevu yok: esnafa inbox yerine claim_coupon_review_notices haber verir.
+create or replace function public.review_after_insert()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  a public.appointments;
+  v_owner uuid;
+begin
+  -- Kupon yorumunda randevu yok (inbox randevuya bağlıdır); esnafa claim_coupon_review_notices haber verir.
+  if new.appointment_id is null then return null; end if;
+  select * into a from public.appointments where id = new.appointment_id;
+  select owner_id into v_owner from public.businesses where id = new.business_id;
+  perform public.inbox_insert(v_owner, 'reviewed', 'business', a);
+  return null;
+end;
+$$;
+
+create or replace function public.undo_coupon_redeem(p_claim_id uuid)
+returns void
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  cl public.coupon_claims;
+begin
+  select * into cl from public.coupon_claims where id = p_claim_id for update;
+  if not found or not public.is_business_owner(cl.business_id) then
+    raise exception 'Bu işlem için yetkiniz yok.';
+  end if;
+  if cl.redeemed_at is null then raise exception 'Bu kupon kasada kullanılmış olarak işaretlenmemiş.'; end if;
+  if exists (select 1 from public.reviews r where r.coupon_claim_id = cl.id) then
+    raise exception 'Müşteri bu kupon için değerlendirme yazdı; kullanım geri alınamaz.';
+  end if;
+  if now() - cl.redeemed_at > interval '10 minutes' then
+    raise exception 'Geri alma süresi (10 dakika) geçti.';
+  end if;
+  update public.coupon_claims set redeemed_at = null where id = cl.id;
+end;
+$$;
+
+drop policy "randevu: işletme manuel ekler" on public.appointments;
+create policy "randevu: işletme manuel ekler" on public.appointments
+  for insert with check (
+    public.is_business_owner(business_id)
+    and exists (select 1 from public.businesses b
+                where b.id = business_id and b.subscription_ends_at > now() and b.business_type = 'appointment')
+  );
+
+create function public.add_coupon_review(p_claim_id uuid, p_rating int, p_comment text default '')
+returns void
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  cl     public.coupon_claims;
+  v_name text;
+  v_type text;
+begin
+  select * into cl from public.coupon_claims where id = p_claim_id and customer_id = auth.uid() for update;
+  if not found then raise exception 'Kupon bulunamadı.'; end if;
+  if cl.redeemed_at is null then
+    raise exception 'Kuponu kasada kullandıktan sonra değerlendirebilirsiniz.';
+  end if;
+  select business_type into v_type from public.businesses where id = cl.business_id;
+  if v_type is distinct from 'showcase' then
+    raise exception 'Kupon yorumu yalnızca vitrin işletmeleri için; randevunuzu değerlendirin.';
+  end if;
+  if p_rating is null or p_rating not between 1 and 5 then
+    raise exception 'Puan 1 ile 5 arasında olmalı.';
+  end if;
+
+  -- "Ahmet Yılmaz" -> "Ahmet Y."
+  select coalesce(nullif(trim(full_name), ''), 'Müşteri') into v_name from public.profiles where id = cl.customer_id;
+  if position(' ' in v_name) > 0 then
+    v_name := split_part(v_name, ' ', 1) || ' ' || left(split_part(v_name, ' ', 2), 1) || '.';
+  end if;
+
+  insert into public.reviews (business_id, coupon_claim_id, customer_id, customer_name, rating, comment)
+  values (cl.business_id, cl.id, cl.customer_id, v_name, p_rating, left(trim(coalesce(p_comment, '')), 1000));
+exception
+  when unique_violation then
+    raise exception 'Bu kuponu zaten değerlendirdiniz.';
+end;
+$$;
+
+create function public.claim_coupon_review_requests(p_limit int default 50)
+returns table (
+  id            uuid,
+  email         text,
+  customer_name text,
+  business_name text,
+  business_slug text,
+  tokens        text[]
+)
+language plpgsql volatile security definer set search_path = ''
+as $$
+#variable_conflict use_column
+begin
+  return query
+  with picked as (
+    select cl.id from public.coupon_claims cl
+    join public.businesses b on b.id = cl.business_id
+    where cl.redeemed_at is not null
+      and cl.redeemed_at <= now() - interval '2 hours'
+      and cl.review_requested_at is null
+      and cl.customer_id is not null
+      and b.business_type = 'showcase'
+      and not exists (select 1 from public.reviews r where r.coupon_claim_id = cl.id)
+    order by cl.redeemed_at
+    limit p_limit
+    for update of cl skip locked
+  ), claimed as (
+    update public.coupon_claims cl
+    set review_requested_at = now()
+    from picked
+    where cl.id = picked.id
+    returning cl.*
+  )
+  select
+    c.id, u.email::text, p.full_name, b.name, b.slug,
+    coalesce((select array_agg(t.token) from public.push_tokens t where t.user_id = c.customer_id), '{}')
+  from claimed c
+  join public.businesses b on b.id = c.business_id
+  join public.profiles p on p.id = c.customer_id
+  left join auth.users u on u.id = c.customer_id;
+end;
+$$;
+
+revoke execute on function public.claim_coupon_review_requests(int) from public, anon, authenticated;
+
+create function public.claim_coupon_review_notices(p_limit int default 50)
+returns table (
+  id            uuid,
+  email         text,
+  rating        int,
+  comment       text,
+  customer_name text,
+  business_name text,
+  business_slug text,
+  tokens        text[]
+)
+language plpgsql volatile security definer set search_path = ''
+as $$
+#variable_conflict use_column
+begin
+  return query
+  with picked as (
+    select r.id from public.reviews r
+    where r.coupon_claim_id is not null and r.owner_notified_at is null
+    order by r.created_at
+    limit p_limit
+    for update skip locked
+  ), claimed as (
+    update public.reviews r
+    set owner_notified_at = now()
+    from picked
+    where r.id = picked.id
+    returning r.*
+  )
+  select
+    c.id, u.email::text, c.rating::int, c.comment, c.customer_name, b.name, b.slug,
+    coalesce((select array_agg(t.token) from public.push_tokens t where t.user_id = b.owner_id), '{}')
+  from claimed c
+  join public.businesses b on b.id = c.business_id
+  left join auth.users u on u.id = b.owner_id
+  order by c.created_at;
+end;
+$$;
+
+revoke execute on function public.claim_coupon_review_notices(int) from public, anon, authenticated;
 
 commit;

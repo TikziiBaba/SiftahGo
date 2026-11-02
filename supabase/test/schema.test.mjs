@@ -1812,5 +1812,177 @@ await as(ADM, `select admin_set_business_type($1,'appointment')`, [v]);
 ok((await db.query(`select count(*)::int c from staff where business_id=$1`, [v])).rows[0].c === 1, 'tekrar çevirmede personel çoğalmaz');
 }
 
+// --- Vitrin: menü, kupon yorumları, tür kuralları
+{
+const O1 = '00000000-0000-0000-0000-0000000000a1'; // vitrin sahibi
+const O2 = '00000000-0000-0000-0000-0000000000a2'; // başka vitrin sahibi
+const O3 = '00000000-0000-0000-0000-0000000000a3'; // randevulu işletme sahibi
+const M1 = '00000000-0000-0000-0000-0000000000a4';
+const M2 = '00000000-0000-0000-0000-0000000000a5';
+const O4 = '00000000-0000-0000-0000-0000000000a9'; // personeli pasif vitrin sahibi
+await db.exec(`
+  insert into auth.users values ('${O1}', 'o1@x.com', '{"full_name":"Vitrin Bir","role":"business"}');
+  insert into auth.users values ('${O2}', 'o2@x.com', '{"full_name":"Vitrin İki","role":"business"}');
+  insert into auth.users values ('${O3}', 'o3@x.com', '{"full_name":"Randevulu Üç","role":"business"}');
+  insert into auth.users values ('${M1}', 'm1@x.com', '{"full_name":"Mehmet Yılmaz"}');
+  insert into auth.users values ('${M2}', 'm2@x.com', '{"full_name":"Zeynep Kaya"}');
+  insert into auth.users values ('${O4}', 'o4@x.com', '{"full_name":"Vitrin Dört","role":"business"}');
+`);
+const mk = async (uid, slug, type) => (await as(uid, `insert into businesses (owner_id, slug, name, city, category, business_type) values ($1,$2,$2,'Sivas','lokanta',$3) returning id`, [uid, slug, type])).rows[0].id;
+const vb = await mk(O1, 'menu-lokanta', 'showcase');
+const vb2 = await mk(O2, 'menu-market', 'showcase');
+const ab = await mk(O3, 'menu-berber', 'appointment');
+await db.query(`update businesses set approval_status = 'approved', plan_id = 'vitrin', subscription_ends_at = now() + interval '1 year' where id in ($1, $2)`, [vb, vb2]);
+await db.query(`update businesses set approval_status = 'approved', plan_id = 'pro', subscription_ends_at = now() + interval '1 year' where id = $1`, [ab]);
+const bg = (await db.query(`select to_char((now() at time zone 'Europe/Istanbul')::date, 'YYYY-MM-DD') d, to_char((now() at time zone 'Europe/Istanbul')::date + 10, 'YYYY-MM-DD') e`)).rows[0];
+const kup = async (uid, title) => (await as(uid, `select save_coupon(null, $3, 'percent', 10, $1::date, $2::date, '{}', null, null, null, '{}') id`, [bg.d, bg.e, title])).rows[0].id;
+
+// menü
+const MENU = `https://cdn.siftahgo.app/businesses/${vb}/menu`;
+const item = (uid, biz, o = {}) => as(uid, `insert into menu_items (business_id, category, name, description, price, image_url, is_active) values ($1,$2,$3,'',$4,$5,$6) returning id`,
+  [biz, o.category ?? 'Çorbalar', o.name ?? 'Mercimek', o.price ?? 60, o.image ?? null, o.active ?? true]);
+const m1 = (await item(O1, vb)).rows[0].id;
+await item(O1, vb, { name: 'Gizli ürün', active: false });
+ok((await as(O1, `select id from menu_items where business_id = $1`, [vb])).rows.length === 2, 'sahibi menüsünün tüm ürünlerini okur');
+ok((await as(null, `select id from menu_items where business_id = $1`, [vb])).rows.length === 1, 'herkes yalnızca aktif ürünleri okur');
+await expectError(() => item(O2, vb, { name: 'Başkası' }), /row-level security/, 'başkası menüye ürün ekleyemez');
+await expectError(() => item(null, vb, { name: 'Anonim' }), /permission denied|row-level security/, 'girişsiz menüye ürün ekleyemez');
+ok((await as(O2, `update menu_items set name = 'x' where id = $1 returning id`, [m1])).rows.length === 0, 'başkası ürünü güncelleyemez');
+ok((await as(O2, `delete from menu_items where id = $1 returning id`, [m1])).rows.length === 0, 'başkası ürünü silemez');
+await expectError(() => item(O3, ab, { name: 'Menü paketi yok' }), /row-level security/, "menü özelliği olmayan paket (pro) menü yazamaz");
+await expectError(() => item(O1, vb, { price: -1 }), /check constraint/, 'eksi fiyat reddedildi');
+await expectError(() => item(O1, vb, { category: 'a'.repeat(61) }), /check constraint/, '60 karakterden uzun kategori reddedildi');
+await expectError(() => item(O1, vb, { name: ' ' }), /check constraint/, 'boş ürün adı reddedildi');
+ok((await item(O1, vb, { name: 'Görselli', image: `${MENU}/x.jpg` })).rows.length === 1, 'kendi menü görseli kabul edildi');
+await expectError(() => item(O1, vb, { image: `https://cdn.siftahgo.app/businesses/${vb2}/menu/x.jpg` }), /check constraint/, 'başka işletmenin menü görseli reddedildi');
+await expectError(() => item(O1, vb, { image: `https://cdn.siftahgo.app/businesses/${vb}/logo/x.jpg` }), /check constraint/, 'menü dışı yol reddedildi');
+await expectError(() => item(O1, vb, { image: 'https://evil.example/x.jpg' }), /check constraint/, 'dış adresli görsel reddedildi');
+ok((await db.query(`select public.is_upload_url('${MENU}/x.jpg') u`)).rows[0].u === true, 'is_upload_url menü yolunu kabul eder');
+// 200 ürün sınırı (şimdiye dek 3 ürün var)
+await db.query(`insert into menu_items (business_id, name, price) select $1, 'Ürün ' || g, 1 from generate_series(1, 197) g`, [vb]);
+await expectError(() => item(O1, vb, { name: '201' }), /200/, '201. ürün reddedildi');
+await db.query(`delete from menu_items where business_id = $1 and name = 'Ürün 1'`, [vb]);
+ok((await item(O1, vb, { name: 'Yeniden 200' })).rows.length === 1, 'ürün silinince yeniden eklenebilir');
+await db.query(`update businesses set subscription_ends_at = now() - interval '1 day' where id = $1`, [vb]);
+await expectError(() => item(O1, vb, { name: 'Süresi bitmiş' }), /row-level security|200/, 'paketi bitince menü yazılamaz');
+await db.query(`update businesses set subscription_ends_at = now() + interval '1 year' where id = $1`, [vb]);
+
+// kupon yorumları
+const k1 = await kup(O1, 'Çorba bedava'), k2 = await kup(O1, 'Tatlı'), k3 = await kup(O1, 'Çay');
+const ka = await kup(O3, 'Randevulu kupon');
+const al = async (uid, k) => (await as(uid, `select * from claim_coupon($1)`, [k])).rows[0];
+const redeem = async (owner, biz, cl) => as(owner, `select redeem_coupon_code($1, $2)`, [biz, cl.code]);
+const cA = await al(M1, k1), cB = await al(M2, k1), cC = await al(M1, k2), cD = await al(M2, k2), cE = await al(M1, k3), cF = await al(M1, ka);
+const review = (uid, id, rating = 5, comment = 'Harika') => as(uid, `select add_coupon_review($1, $2, $3)`, [id, rating, comment]);
+await expectError(() => review(M1, cA.id), /kullan/, 'kasada kullanılmamış kupon değerlendirilemez');
+await redeem(O1, vb, cA); await redeem(O1, vb, cB); await redeem(O1, vb, cC); await redeem(O1, vb, cD); await redeem(O1, vb, cE);
+await redeem(O3, ab, cF);
+await expectError(() => review(M2, cA.id), /bulunamadı/, 'başkasının kuponu değerlendirilemez');
+await expectError(() => review(null, cA.id), /bulunamadı|permission denied/, 'girişsiz kupon değerlendirilemez');
+await expectError(() => review(M1, cF.id), /vitrin/i, 'randevulu işletmenin kuponu burada değerlendirilemez');
+await expectError(() => review(M1, cA.id, 6), /Puan/, 'geçersiz puan reddedildi');
+
+// kupon değerlendirme isteği (kullanımdan 2 saat sonra, bir kez)
+for (const cl of [cA, cB, cD]) await db.query(`update coupon_claims set redeemed_at = now() - interval '3 hours' where id = $1`, [cl.id]);
+await db.query(`update coupon_claims set redeemed_at = now() - interval '3 hours' where id = $1`, [cF.id]);
+await db.query(`update coupon_claims set redeemed_at = now() - interval '1 hour' where id = $1`, [cE.id]);
+await db.query(`insert into push_tokens (token, user_id, platform) values ('ExponentPushToken[m2]', $1, 'android')`, [M2]);
+await expectError(() => as(M1, `select * from claim_coupon_review_requests(10)`), /permission denied/, 'kupon yorum isteklerini istemci alamaz');
+// cC kasada işaretlenip geri alınır
+await db.query(`update coupon_claims set redeemed_at = now() where id = $1`, [cC.id]);
+await as(O1, `select undo_coupon_redeem($1)`, [cC.id]);
+const req = (await db.query(`select * from claim_coupon_review_requests(100)`)).rows;
+const reqIds = req.map((r) => r.id).sort();
+ok(JSON.stringify(reqIds) === JSON.stringify([cA.id, cB.id, cD.id].sort()), `istek: 2 saati geçen vitrin kuponları döner (randevulu, yeni ve geri alınan dönmez): ${req.length}`);
+const reqD = req.find((r) => r.id === cD.id);
+ok(reqD.email === 'm2@x.com' && reqD.business_slug === 'menu-lokanta' && reqD.business_name === 'menu-lokanta' && reqD.customer_name === 'Zeynep Kaya' && reqD.tokens.join() === 'ExponentPushToken[m2]', 'istek satırı: e-posta, işletme, ad ve jetonlar');
+ok((await db.query(`select * from claim_coupon_review_requests(100)`)).rows.length === 0, 'istek ikinci kez dönmez');
+await db.query(`update coupon_claims set redeemed_at = now() - interval '3 hours' where id = $1`, [cE.id]);
+ok((await db.query(`select * from claim_coupon_review_requests(100)`)).rows.map((r) => r.id).join() === cE.id, 'sonradan 2 saati geçen kupon bir kez döner');
+await db.query(`update coupon_claims set review_requested_at = null where id = $1`, [cA.id]);
+await review(M1, cA.id, 5, 'Harika');
+ok((await db.query(`select * from claim_coupon_review_requests(100)`)).rows.length === 0, 'değerlendirilmiş kupon için istek dönmez');
+
+// geçerli yorum
+const rv = (await db.query(`select * from reviews where coupon_claim_id = $1`, [cA.id])).rows[0];
+ok(rv && rv.appointment_id === null && rv.customer_id === M1 && rv.rating === 5 && rv.customer_name === 'Mehmet Y.' && rv.business_id === vb, 'kupon yorumu: randevusuz, kısaltılmış ad');
+ok((await db.query(`select count(*)::int c from inbox where user_id = $1`, [O1])).rows[0].c === 0, 'kupon yorumu inbox\'a satır yazmaz (tetikleyici hata vermez)');
+await expectError(() => review(M1, cA.id, 4), /zaten/, 'aynı kupon ikinci kez değerlendirilemez');
+await review(M2, cB.id, 3, '');
+const vbr = (await db.query(`select rating_avg, rating_count from businesses where id = $1`, [vb])).rows[0];
+ok(Number(vbr.rating_avg) === 4 && vbr.rating_count === 2, `işletme puanı güncellendi: ${vbr.rating_avg}/${vbr.rating_count}`);
+ok((await as(null, `select id from reviews where business_id = $1`, [vb])).rows.length === 2, 'kupon yorumlarını herkes okur');
+await as(O1, `select reply_review($1, 'Teşekkürler')`, [rv.id]);
+ok((await db.query(`select reply from reviews where id = $1`, [rv.id])).rows[0].reply === 'Teşekkürler', 'esnaf kupon yorumuna cevap verir');
+await expectError(() => as(O2, `select reply_review($1, 'x')`, [rv.id]), /cevap veremezsiniz/, 'başka işletme cevap veremez');
+// geri alma: yorum varsa reddedilir, yoksa yorum yazılamaz
+await expectError(() => as(O1, `select undo_coupon_redeem($1)`, [cA.id]), /süre|değerlendirme/, 'yorumlu kupon geri alınamaz (süre ya da yorum)');
+await db.query(`update coupon_claims set redeemed_at = now() where id = $1`, [cA.id]);
+await expectError(() => as(O1, `select undo_coupon_redeem($1)`, [cA.id]), /değerlendirme/, 'yorum yazılmış kuponun kasada kullanımı geri alınamaz');
+ok((await db.query(`select redeemed_at from coupon_claims where id = $1`, [cA.id])).rows[0].redeemed_at !== null, 'reddedilen geri alma kuponu açmaz');
+await db.query(`update coupon_claims set redeemed_at = now() where id = $1`, [cC.id]);
+await as(O1, `select undo_coupon_redeem($1)`, [cC.id]);
+await expectError(() => review(M1, cC.id), /kullan/, 'geri alınan kupon değerlendirilemez');
+// kart, yönetici sayıları, hesap silme
+const apt = (await db.query(`insert into appointments (business_id, customer_id, service_name, customer_name, customer_phone, starts_at, ends_at, status)
+  values ($1,$2,'Saç','Mehmet Yılmaz','05553334455', now() - interval '1 day', now() - interval '1 day' + interval '30 minutes', 'completed') returning id`, [ab, M1])).rows[0].id;
+const mcard = (await as(O3, `select customer_card($1) c`, [apt])).rows[0].c;
+ok(mcard.reviews.count === 1 && Number(mcard.reviews.avg) === 5, 'müşteri kartı randevusuz yorumu sayar');
+ok((await as(ADM, `select admin_stats() s`)).rows[0].s.reviews === (await db.query(`select count(*)::int c from reviews`)).rows[0].c, 'yönetici istatistiği randevusuz yorumları sayar');
+ok((await as(ADM, `select * from admin_activity(100)`)).rows.filter((r) => r.kind === 'review').length >= 2, 'yönetici etkinliği randevusuz yorumu listeler');
+ok(!!(await as(ADM, `select admin_dashboard(current_date - 1, current_date + 1) d`)).rows[0].d, 'yönetici paneli randevusuz yorumla çalışır');
+
+// esnafa yeni yorum haberi
+await expectError(() => as(O1, `select * from claim_coupon_review_notices(10)`), /permission denied/, 'yeni yorum haberlerini istemci alamaz');
+await db.query(`insert into push_tokens (token, user_id, platform) values ('ExponentPushToken[o1]', $1, 'ios')`, [O1]);
+const nt = (await db.query(`select * from claim_coupon_review_notices(100)`)).rows;
+const ntA = nt.find((r) => r.customer_name === 'Mehmet Y.');
+ok(nt.length === 2 && ntA.email === 'o1@x.com' && ntA.rating === 5 && ntA.business_slug === 'menu-lokanta' && ntA.tokens.join() === 'ExponentPushToken[o1]', 'yeni yorum esnafa bir kez döner (e-posta, puan, jeton)');
+ok((await db.query(`select * from claim_coupon_review_notices(100)`)).rows.length === 0, 'yeni yorum haberi ikinci kez dönmez');
+await review(M2, cD.id, 2, 'Soğuktu');
+ok((await db.query(`select * from claim_coupon_review_notices(100)`)).rows.length === 1, 'sonradan gelen yorum ayrıca döner');
+// randevu yorumları haber listesine girmez
+await db.query(`insert into reviews (business_id, appointment_id, customer_id, customer_name, rating) values ($1,$2,$3,'Mehmet Y.',4)`, [ab, apt, M1]);
+ok((await db.query(`select * from claim_coupon_review_notices(100)`)).rows.length === 0, 'randevu yorumu kupon yorum haberine girmez');
+await as(M2, `select delete_my_account()`);
+ok((await db.query(`select count(*)::int c from reviews where coupon_claim_id in ($1, $2) and customer_name = 'Eski üye'`, [cB.id, cD.id])).rows[0].c === 2, 'hesap silme kupon yorumundaki adı Eski üye yapar');
+await expectError(() => db.query(`insert into reviews (business_id, customer_name, rating) values ($1,'x',5)`, [vb]), /check constraint/, 'yorum randevu ya da kupona bağlı olmalı');
+await expectError(() => db.query(`insert into reviews (business_id, appointment_id, coupon_claim_id, customer_name, rating) values ($1,$2,$3,'x',5)`, [ab, apt, cE.id]), /check constraint|unique/, 'yorum hem randevuya hem kupona bağlı olamaz');
+
+// vitrin sahibi elle randevu giremez; randevulu sahibi girer
+await expectError(() => as(O1, `insert into appointments (business_id, service_name, customer_name, customer_phone, starts_at, ends_at) values ($1,'x','x','x',now() + interval '1 day',now() + interval '1 day 1 hour')`, [vb]), /row-level security/, 'vitrin sahibi doğrudan randevu ekleyemez');
+ok((await as(O3, `insert into appointments (business_id, service_name, customer_name, customer_phone, starts_at, ends_at) values ($1,'x','x','x',now() + interval '1 day',now() + interval '1 day 1 hour') returning id`, [ab])).rows.length === 1, 'randevulu sahibi elle randevu ekler');
+
+// vitrinden randevuluya: fazla aktif personel pasif olur, aktif personeli olmayana varsayılan personel eklenir
+await db.query(`update businesses set plan_id = 'pro' where id = $1`, [vb2]);
+await db.query(`insert into staff (business_id, name, sort_order) values ($1,'S1',1), ($1,'S2',2), ($1,'S3',3)`, [vb2]);
+await db.query(`update businesses set plan_id = 'vitrin' where id = $1`, [vb2]);
+await as(ADM, `select admin_set_business_type($1, 'appointment')`, [vb2]);
+const vs2 = (await db.query(`select name, is_active from staff where business_id = $1 order by sort_order`, [vb2])).rows;
+ok(vs2.length === 3 && vs2.filter((s) => s.is_active).map((s) => s.name).join() === 'S1', 'baslangic\'a geçince fazla aktif personel pasif olur (ilk kalır)');
+const vb4 = await mk(O4, 'menu-pasif', 'showcase');
+await db.query(`update businesses set approval_status = 'approved', plan_id = 'vitrin', subscription_ends_at = now() + interval '1 year' where id = $1`, [vb4]);
+await db.query(`insert into staff (business_id, name, is_active) values ($1,'Eski', false)`, [vb4]);
+await as(ADM, `select admin_set_business_type($1, 'appointment')`, [vb4]);
+const vs4 = (await db.query(`select name, is_active from staff where business_id = $1 order by created_at`, [vb4])).rows;
+ok(vs4.length === 2 && vs4.filter((s) => s.is_active).length === 1 && vs4.find((s) => s.is_active).name === 'Vitrin Dört', 'aktif personeli olmayan işletmeye varsayılan personel eklenir');
+
+// davet ödülü işletme türüne göre
+const R1 = '00000000-0000-0000-0000-0000000000b1', S1 = '00000000-0000-0000-0000-0000000000b2';
+const R2 = '00000000-0000-0000-0000-0000000000b3', S2 = '00000000-0000-0000-0000-0000000000b4';
+for (const [id, n] of [[R1, 'r1'], [S1, 's1'], [R2, 'r2'], [S2, 's2']]) await db.exec(`insert into auth.users values ('${id}', '${n}@x.com', '{"full_name":"${n}","role":"business"}')`);
+const rb1 = await mk(R1, 'davet-randevulu', 'appointment'), sb1 = await mk(S1, 'davet-vitrin-yeni', 'showcase');
+const rb2 = await mk(R2, 'davet-vitrin', 'showcase'), sb2 = await mk(S2, 'davet-randevulu-yeni', 'appointment');
+await db.query(`update businesses set approval_status = 'approved' where id in ($1,$2,$3,$4)`, [rb1, sb1, rb2, sb2]);
+for (const [who, ref, plan] of [[S1, rb1, 'vitrin'], [S2, rb2, 'baslangic']]) {
+  const code = (await db.query(`select referral_code from businesses where id = $1`, [ref])).rows[0].referral_code;
+  await as(who, `select apply_referral($1)`, [code]);
+  const p = (await as(who, `select * from create_payment($1)`, [plan])).rows[0];
+  await db.query(`select activate_subscription($1, $2)`, [p.merchant_oid, p.amount]);
+}
+ok((await db.query(`select plan_id from businesses where id = $1`, [rb1])).rows[0].plan_id === 'baslangic', 'vitrin davetiyle gelince randevulu davet edene baslangic ödülü');
+ok((await db.query(`select plan_id from businesses where id = $1`, [rb2])).rows[0].plan_id === 'vitrin', 'randevulu davetiyle gelince vitrin davet edene vitrin ödülü');
+}
+
 console.log(failures ? `\n${failures} TEST BAŞARISIZ` : '\nTÜM TESTLER GEÇTİ');
 process.exit(failures ? 1 : 0);

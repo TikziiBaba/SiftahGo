@@ -1,7 +1,7 @@
 import { SUPPORT_CATEGORIES } from "@/lib/constants";
 import { formatMoney } from "@/lib/coupons";
 import { formatDate, formatTime } from "@/lib/format";
-import type { DelayNotice, WaitlistNotice } from "@/lib/push";
+import type { CouponReviewNotice, CouponReviewRequest, DelayNotice, WaitlistNotice } from "@/lib/push";
 import type { AppointmentStatus, SupportCategory, SupportStatus } from "@/lib/types";
 
 /** claim_notifications satırı */
@@ -195,6 +195,32 @@ export function buildWaitlistEmail(n: WaitlistNotice & { email: string }, appUrl
     ],
     action: { label: "Boş saatleri gör", href: `${appUrl}/${n.business_slug}?gun=${n.day}#randevu` },
     footer: "Bu e-posta SiftahGo bekleme listesine yazıldığınız için gönderildi.",
+  });
+}
+
+/** Vitrin müşterisine: kuponu kullandıktan 2 saat sonra "Nasıldı?" */
+export function buildCouponReviewRequestEmail(n: CouponReviewRequest & { email: string }, appUrl: string) {
+  return render(n.email, {
+    subject: `Nasıldı? ${n.business_name}`,
+    title: "Nasıldı?",
+    intro: `Merhaba ${n.customer_name.split(" ")[0]}, ${n.business_name} işletmesinde kuponunuzu kullandınız. Deneyiminizi puanlarsanız diğer müşterilere yardımcı olursunuz.`,
+    rows: [["İşletme", n.business_name]],
+    action: { label: "Puan ver", href: `${appUrl}/${n.business_slug}` },
+    footer: "Bu e-posta SiftahGo kuponunuzu kullandığınız için gönderildi.",
+  });
+}
+
+/** Vitrin esnafına: yeni kupon değerlendirmesi */
+export function buildCouponReviewNoticeEmail(n: CouponReviewNotice & { email: string }, appUrl: string) {
+  return render(n.email, {
+    subject: `Yeni değerlendirme: ${n.business_name} ${"★".repeat(n.rating)}${"☆".repeat(5 - n.rating)}`,
+    title: "Yeni değerlendirme",
+    intro: `${n.customer_name}, ${n.business_name} işletmenizi değerlendirdi.`,
+    rows: [
+      ["Puan", `${"★".repeat(n.rating)}${"☆".repeat(5 - n.rating)}`],
+      ...(n.comment ? [["Yorum", n.comment] as [string, string]] : []),
+    ],
+    action: { label: "Yorumlar", href: `${appUrl}/panel/yorumlar` },
   });
 }
 

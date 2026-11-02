@@ -160,7 +160,8 @@ export type StaffService = { staff_id: string; service_id: string };
 export type Review = {
   id: string;
   business_id: string;
-  appointment_id: string;
+  // Vitrin kupon yorumunda randevu yoktur
+  appointment_id: string | null;
   customer_id: string | null;
   customer_name: string;
   rating: number;

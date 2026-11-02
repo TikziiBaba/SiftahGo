@@ -38,6 +38,28 @@ export type DelayNotice = {
   tokens: string[];
 };
 
+/** claim_coupon_review_requests satırı: vitrin müşterisine "Nasıldı?" (id kupon kodu satırı) */
+export type CouponReviewRequest = {
+  id: string;
+  email: string | null;
+  customer_name: string;
+  business_name: string;
+  business_slug: string;
+  tokens: string[];
+};
+
+/** claim_coupon_review_notices satırı: vitrin esnafına yeni kupon yorumu (id yorum) */
+export type CouponReviewNotice = {
+  id: string;
+  email: string | null;
+  rating: number;
+  comment: string;
+  customer_name: string;
+  business_name: string;
+  business_slug: string;
+  tokens: string[];
+};
+
 type Ticket = { status: "ok"; id: string } | { status: "error"; message: string; details?: { error?: string } };
 type Message = { to: string; title: string; body: string; data: Record<string, unknown> };
 
@@ -181,4 +203,58 @@ export async function sendDelayPushes(supabase: SupabaseClient, notices: DelayNo
   }
   if (dead.length) await supabase.rpc("drop_push_tokens", { p_tokens: dead });
   return { sent };
+}
+
+async function sendMessages(supabase: SupabaseClient, messages: Message[], label: string) {
+  let sent = 0;
+  const dead: string[] = [];
+  for (let i = 0; i < messages.length; i += BATCH) {
+    const batch = messages.slice(i, i + BATCH);
+    try {
+      const tickets = await postToExpo(batch);
+      tickets.forEach((t, j) => {
+        if (t.status === "ok") sent++;
+        else if (t.details?.error === "DeviceNotRegistered") dead.push(batch[j].to);
+      });
+    } catch (e) {
+      console.error(`${label} gönderilemedi`, e instanceof Error ? e.message : String(e));
+    }
+  }
+  if (dead.length) await supabase.rpc("drop_push_tokens", { p_tokens: dead });
+  return { sent };
+}
+
+/**
+ * Vitrin müşterisine "Nasıldı?" gönderir. Tekrar denenmez. Dokununca işletme sayfası açılır: eski uygulamalar da
+ * "waitlist" türünü slug ile işletme sayfasına yönlendirdiği için yeni bir tür eklenmedi.
+ */
+export function sendCouponReviewRequestPushes(supabase: SupabaseClient, notices: CouponReviewRequest[]) {
+  return sendMessages(
+    supabase,
+    notices.flatMap((n) =>
+      (n.tokens ?? []).map((to) => ({
+        to,
+        title: "Nasıldı?",
+        body: `${n.business_name} · Kuponunuzu kullandınız, puan vermek için dokunun`,
+        data: { kind: "waitlist", recipient: "customer", slug: n.business_slug },
+      })),
+    ),
+    "Kupon değerlendirme isteği",
+  );
+}
+
+/** Vitrin esnafına "Yeni değerlendirme" gönderir; dokununca Yorumlar açılır (kind "reviewed"). */
+export function sendCouponReviewNoticePushes(supabase: SupabaseClient, notices: CouponReviewNotice[]) {
+  return sendMessages(
+    supabase,
+    notices.flatMap((n) =>
+      (n.tokens ?? []).map((to) => ({
+        to,
+        title: `Yeni değerlendirme: ${"★".repeat(n.rating)}${"☆".repeat(5 - n.rating)}`,
+        body: [n.customer_name, n.comment.slice(0, 120)].filter(Boolean).join(" · "),
+        data: { kind: "reviewed", recipient: "business" },
+      })),
+    ),
+    "Kupon yorumu bildirimi",
+  );
 }

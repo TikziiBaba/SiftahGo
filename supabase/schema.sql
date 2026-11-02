@@ -11,6 +11,7 @@
 drop trigger if exists on_auth_user_created on auth.users;
 
 drop table if exists
+  public.menu_items,
   public.coupon_code_attempts,
   public.coupon_claims,
   public.coupons,
@@ -81,7 +82,8 @@ begin
         'report_customer_late', 'report_business_delay', 'claim_delay_notices',
         'coupon_price', 'coupon_invalid_reason', 'coupon_valid_at', 'coupon_claim_used', 'coupon_claim_state',
         'coupon_redeem_problem', 'coupon_lookup', 'save_coupon', 'set_coupon_active', 'delete_coupon',
-        'claim_coupon', 'find_coupon_code', 'redeem_coupon_code', 'undo_coupon_redeem', 'my_coupons', 'business_coupons'
+        'claim_coupon', 'find_coupon_code', 'redeem_coupon_code', 'undo_coupon_redeem', 'my_coupons', 'business_coupons',
+        'enforce_menu_limit', 'add_coupon_review', 'claim_coupon_review_requests', 'claim_coupon_review_notices'
       )
   loop
     execute 'drop function if exists ' || r.sig || ' cascade';
@@ -104,7 +106,7 @@ returns boolean
 language sql immutable set search_path = ''
 as $$
   select coalesce(
-    p_url ~ '^https://cdn\.siftahgo\.app/businesses/[0-9a-f-]{36}/(logo|cover|gallery)/[A-Za-z0-9._-]+$',
+    p_url ~ '^https://cdn\.siftahgo\.app/businesses/[0-9a-f-]{36}/(logo|cover|gallery|menu)/[A-Za-z0-9._-]+$',
     false
   );
 $$;
@@ -413,6 +415,8 @@ create table public.coupon_claims (
   code           text not null check (code ~ '^[0-9]{6}$'),
   redeemed_at    timestamptz,
   appointment_id uuid references public.appointments (id) on delete set null,
+  -- Vitrinde kasada kullanımdan 2 saat sonra müşteriye "Nasıldı?" haberi gittiği an (claim_coupon_review_requests).
+  review_requested_at timestamptz,
   created_at     timestamptz not null default now(),
   unique (coupon_id, customer_id),
   unique (business_id, code)
@@ -436,11 +440,13 @@ create table public.coupon_code_attempts (
 );
 create index coupon_code_attempts_idx on public.coupon_code_attempts (business_id, created_at);
 
--- Müşteri değerlendirmesi: tamamlanan her randevu için bir tane (add_review ile eklenir).
+-- Müşteri değerlendirmesi: tamamlanan her randevu için bir tane (add_review ile eklenir). Vitrin işletmesinde randevu
+-- olmadığından kasada kullanılan her kupon için bir tane (add_coupon_review; appointment_id boş, coupon_claim_id dolu).
 create table public.reviews (
   id             uuid primary key default gen_random_uuid(),
   business_id    uuid not null references public.businesses (id) on delete cascade,
-  appointment_id uuid not null unique references public.appointments (id) on delete cascade,
+  appointment_id uuid unique references public.appointments (id) on delete cascade,
+  coupon_claim_id uuid unique references public.coupon_claims (id) on delete cascade,
   customer_id    uuid references public.profiles (id) on delete set null,
   customer_name  text not null,
   rating         smallint not null check (rating between 1 and 5),
@@ -448,11 +454,34 @@ create table public.reviews (
   -- İşletmenin herkese açık cevabı (reply_review).
   reply          text not null default '' check (length(reply) <= 1000),
   replied_at     timestamptz,
-  created_at     timestamptz not null default now()
+  -- Kupon yorumunda esnafa "yeni değerlendirme" haberi gittiği an (claim_coupon_review_notices).
+  owner_notified_at timestamptz,
+  created_at     timestamptz not null default now(),
+  check (num_nonnulls(appointment_id, coupon_claim_id) = 1)
 );
 create index reviews_business_idx on public.reviews (business_id, created_at desc);
 -- Müşteri kartı (customer_card) ve hesap silme müşterinin yorumlarını arar.
 create index reviews_customer_idx on public.reviews (customer_id, created_at desc);
+
+-- Menü (yalnızca 'menu' özelliği olan paket yazabilir: Vitrin). Bir işletmede en fazla 200 ürün (enforce_menu_limit).
+-- Görsel yalnızca işletmenin kendi menü klasöründen olabilir.
+create table public.menu_items (
+  id          uuid primary key default gen_random_uuid(),
+  business_id uuid not null references public.businesses (id) on delete cascade,
+  category    text not null default '' check (length(category) <= 60),
+  name        text not null check (length(trim(name)) > 0 and length(name) <= 100),
+  description text not null default '' check (length(description) <= 300),
+  price       numeric(10, 2) not null check (price >= 0),
+  image_url   text,
+  is_active   boolean not null default true,
+  sort_order  int not null default 0,
+  created_at  timestamptz not null default now(),
+  constraint menu_items_image_check check (
+    image_url is null
+    or (public.is_upload_url(image_url) and image_url like '%/businesses/' || business_id || '/menu/%')
+  )
+);
+create index menu_items_business_idx on public.menu_items (business_id, sort_order, created_at);
 
 -- PayTR ödemeleri
 create table public.payments (
@@ -1997,6 +2026,8 @@ declare
   a public.appointments;
   v_owner uuid;
 begin
+  -- Kupon yorumunda randevu yok (inbox randevuya bağlıdır); esnafa claim_coupon_review_notices haber verir.
+  if new.appointment_id is null then return null; end if;
   select * into a from public.appointments where id = new.appointment_id;
   select owner_id into v_owner from public.businesses where id = new.business_id;
   perform public.inbox_insert(v_owner, 'reviewed', 'business', a);
@@ -2660,7 +2691,17 @@ begin
       plan_id = case when plan_id is null then null when p_type = 'showcase' then 'vitrin' else 'baslangic' end
   where id = b.id;
 
-  if p_type = 'appointment' and not exists (select 1 from public.staff where business_id = b.id) then
+  -- Başlangıç 1 personelle sınırlı: fazla aktif personel pasif olur (apply_subscription ile aynı kural, en eskiler kalır).
+  if p_type = 'appointment' and b.plan_id is not null then
+    update public.staff set is_active = false
+    where id in (
+      select id from public.staff
+      where business_id = b.id and is_active
+      order by sort_order, created_at
+      offset (select staff_limit from public.plans where id = 'baslangic')
+    );
+  end if;
+  if p_type = 'appointment' and not exists (select 1 from public.staff where business_id = b.id and is_active) then
     select nullif(trim(full_name), '') into v_owner_name from public.profiles where id = b.owner_id;
     insert into public.staff (business_id, name) values (b.id, coalesce(v_owner_name, b.name));
   end if;
@@ -3986,6 +4027,9 @@ begin
     raise exception 'Bu işlem için yetkiniz yok.';
   end if;
   if cl.redeemed_at is null then raise exception 'Bu kupon kasada kullanılmış olarak işaretlenmemiş.'; end if;
+  if exists (select 1 from public.reviews r where r.coupon_claim_id = cl.id) then
+    raise exception 'Müşteri bu kupon için değerlendirme yazdı; kullanım geri alınamaz.';
+  end if;
   if now() - cl.redeemed_at > interval '10 minutes' then
     raise exception 'Geri alma süresi (10 dakika) geçti.';
   end if;
@@ -4066,6 +4110,153 @@ begin
   order by c.created_at desc;
 end;
 $$;
+
+-- Menüde en fazla 200 ürün. İşletme satırı kilitlenir; aynı anda eklenen ürünler sınırı aşamaz.
+create function public.enforce_menu_limit()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  perform 1 from public.businesses where id = new.business_id for update;
+  if (select count(*) from public.menu_items where business_id = new.business_id) >= 200 then
+    raise exception 'Menüde en fazla 200 ürün olabilir.';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger menu_items_limit
+  before insert on public.menu_items
+  for each row execute function public.enforce_menu_limit();
+
+-- Vitrin müşterisi kasada kullanılan kuponu değerlendirir: kupon başına bir kez, yalnızca vitrin işletmelerinde
+-- (randevulu işletmenin kupon randevusu add_review ile değerlendirilir). Yorumdan sonra kullanım geri alınamaz (undo_coupon_redeem).
+create function public.add_coupon_review(p_claim_id uuid, p_rating int, p_comment text default '')
+returns void
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  cl     public.coupon_claims;
+  v_name text;
+  v_type text;
+begin
+  select * into cl from public.coupon_claims where id = p_claim_id and customer_id = auth.uid() for update;
+  if not found then raise exception 'Kupon bulunamadı.'; end if;
+  if cl.redeemed_at is null then
+    raise exception 'Kuponu kasada kullandıktan sonra değerlendirebilirsiniz.';
+  end if;
+  select business_type into v_type from public.businesses where id = cl.business_id;
+  if v_type is distinct from 'showcase' then
+    raise exception 'Kupon yorumu yalnızca vitrin işletmeleri için; randevunuzu değerlendirin.';
+  end if;
+  if p_rating is null or p_rating not between 1 and 5 then
+    raise exception 'Puan 1 ile 5 arasında olmalı.';
+  end if;
+
+  -- "Ahmet Yılmaz" -> "Ahmet Y."
+  select coalesce(nullif(trim(full_name), ''), 'Müşteri') into v_name from public.profiles where id = cl.customer_id;
+  if position(' ' in v_name) > 0 then
+    v_name := split_part(v_name, ' ', 1) || ' ' || left(split_part(v_name, ' ', 2), 1) || '.';
+  end if;
+
+  insert into public.reviews (business_id, coupon_claim_id, customer_id, customer_name, rating, comment)
+  values (cl.business_id, cl.id, cl.customer_id, v_name, p_rating, left(trim(coalesce(p_comment, '')), 1000));
+exception
+  when unique_violation then
+    raise exception 'Bu kuponu zaten değerlendirdiniz.';
+end;
+$$;
+
+-- Sunucu (/api/notifications) vitrin müşterisine "Nasıldı?" haberi için alır: kasada kullanımdan 2 saat geçmiş,
+-- değerlendirilmemiş kuponlar. Bir kupon bir kez döner (review_requested_at). Geri alınan kullanım redeemed_at'i boşaltır.
+-- Dönen id kupon kodu satırıdır; tokens müşterinin telefonları.
+create function public.claim_coupon_review_requests(p_limit int default 50)
+returns table (
+  id            uuid,
+  email         text,
+  customer_name text,
+  business_name text,
+  business_slug text,
+  tokens        text[]
+)
+language plpgsql volatile security definer set search_path = ''
+as $$
+#variable_conflict use_column
+begin
+  return query
+  with picked as (
+    select cl.id from public.coupon_claims cl
+    join public.businesses b on b.id = cl.business_id
+    where cl.redeemed_at is not null
+      and cl.redeemed_at <= now() - interval '2 hours'
+      and cl.review_requested_at is null
+      and cl.customer_id is not null
+      and b.business_type = 'showcase'
+      and not exists (select 1 from public.reviews r where r.coupon_claim_id = cl.id)
+    order by cl.redeemed_at
+    limit p_limit
+    for update of cl skip locked
+  ), claimed as (
+    update public.coupon_claims cl
+    set review_requested_at = now()
+    from picked
+    where cl.id = picked.id
+    returning cl.*
+  )
+  select
+    c.id, u.email::text, p.full_name, b.name, b.slug,
+    coalesce((select array_agg(t.token) from public.push_tokens t where t.user_id = c.customer_id), '{}')
+  from claimed c
+  join public.businesses b on b.id = c.business_id
+  join public.profiles p on p.id = c.customer_id
+  left join auth.users u on u.id = c.customer_id;
+end;
+$$;
+
+revoke execute on function public.claim_coupon_review_requests(int) from public, anon, authenticated;
+
+-- Sunucu işletme sahibine "Yeni değerlendirme" haberi için kupon yorumlarını alır; bir yorum bir kez döner
+-- (owner_notified_at). Randevu yorumları inbox ile gider, burada yer almaz. id yorumun id'si.
+create function public.claim_coupon_review_notices(p_limit int default 50)
+returns table (
+  id            uuid,
+  email         text,
+  rating        int,
+  comment       text,
+  customer_name text,
+  business_name text,
+  business_slug text,
+  tokens        text[]
+)
+language plpgsql volatile security definer set search_path = ''
+as $$
+#variable_conflict use_column
+begin
+  return query
+  with picked as (
+    select r.id from public.reviews r
+    where r.coupon_claim_id is not null and r.owner_notified_at is null
+    order by r.created_at
+    limit p_limit
+    for update skip locked
+  ), claimed as (
+    update public.reviews r
+    set owner_notified_at = now()
+    from picked
+    where r.id = picked.id
+    returning r.*
+  )
+  select
+    c.id, u.email::text, c.rating::int, c.comment, c.customer_name, b.name, b.slug,
+    coalesce((select array_agg(t.token) from public.push_tokens t where t.user_id = b.owner_id), '{}')
+  from claimed c
+  join public.businesses b on b.id = c.business_id
+  left join auth.users u on u.id = b.owner_id
+  order by c.created_at;
+end;
+$$;
+
+revoke execute on function public.claim_coupon_review_notices(int) from public, anon, authenticated;
 
 -- Keşfet "Bugün müsait": listedeki işletmelerden (en fazla 60) bugün en kısa hizmetine boş saati olanlar.
 create function public.available_today(p_ids uuid[])
@@ -4266,6 +4457,16 @@ create policy "kupon kodu: müşteri okur" on public.coupon_claims
 create policy "kupon kodu: sahibi okur" on public.coupon_claims
   for select using (public.is_business_owner(business_id));
 
+-- Menü: herkes yayındaki işletmenin aktif ürünlerini okur; sahibi hepsini okur ve (paketinde 'menu' varsa) yazar.
+alter table public.menu_items enable row level security;
+create policy "menü: herkes aktifi okur" on public.menu_items
+  for select using (is_active and public.is_bookable(business_id));
+create policy "menü: sahibi okur" on public.menu_items
+  for select using (public.is_business_owner(business_id));
+create policy "menü: sahibi yazar" on public.menu_items
+  for all using (public.is_business_owner(business_id) and public.plan_has_feature(business_id, 'menu'))
+  with check (public.is_business_owner(business_id) and public.plan_has_feature(business_id, 'menu'));
+
 alter table public.waitlist enable row level security;
 
 -- Müşteri listeye join_waitlist ile yazılır; kendi kayıtlarını görür ve siler.
@@ -4377,7 +4578,8 @@ create policy "randevu: müşteri ve işletme okur" on public.appointments
 create policy "randevu: işletme manuel ekler" on public.appointments
   for insert with check (
     public.is_business_owner(business_id)
-    and exists (select 1 from public.businesses b where b.id = business_id and b.subscription_ends_at > now())
+    and exists (select 1 from public.businesses b
+                where b.id = business_id and b.subscription_ends_at > now() and b.business_type = 'appointment')
   );
 create policy "randevu: işletme günceller" on public.appointments
   for update using (public.is_business_owner(business_id))

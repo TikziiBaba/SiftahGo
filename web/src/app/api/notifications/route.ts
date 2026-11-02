@@ -1,8 +1,27 @@
 import { timingSafeEqual } from "node:crypto";
 import { COMPANY } from "@/lib/company";
 import { emailConfigured, sendEmail } from "@/lib/email";
-import { buildDelayEmail, buildEmail, buildSupportEmail, buildWaitlistEmail, type QueuedNotification, type QueuedSupportEmail } from "@/lib/notification-email";
-import { sendDelayPushes, sendQueuedPushes, sendWaitlistPushes, type DelayNotice, type WaitlistNotice } from "@/lib/push";
+import {
+  buildCouponReviewNoticeEmail,
+  buildCouponReviewRequestEmail,
+  buildDelayEmail,
+  buildEmail,
+  buildSupportEmail,
+  buildWaitlistEmail,
+  type QueuedNotification,
+  type QueuedSupportEmail,
+} from "@/lib/notification-email";
+import {
+  sendCouponReviewNoticePushes,
+  sendCouponReviewRequestPushes,
+  sendDelayPushes,
+  sendQueuedPushes,
+  sendWaitlistPushes,
+  type CouponReviewNotice,
+  type CouponReviewRequest,
+  type DelayNotice,
+  type WaitlistNotice,
+} from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // Kuyruktaki randevu bildirimlerini (anlık bildirim ve e-posta) gönderir. Zamanlanmış görev
@@ -46,8 +65,20 @@ export async function GET(request: Request) {
   const delays = (delayData ?? []) as DelayNotice[];
   const delayPush = await sendDelayPushes(supabase, delays);
 
+  // Vitrin kupon yorumları: müşteriye "Nasıldı?", esnafa "Yeni değerlendirme". Alınan haber tekrar denenmez.
+  const { data: reviewRequestData, error: reviewRequestError } = await supabase.rpc("claim_coupon_review_requests", { p_limit: 50 });
+  if (reviewRequestError) console.error("Kupon değerlendirme istekleri alınamadı", reviewRequestError.message);
+  const couponRequests = (reviewRequestData ?? []) as CouponReviewRequest[];
+  const { data: reviewNoticeData, error: reviewNoticeError } = await supabase.rpc("claim_coupon_review_notices", { p_limit: 50 });
+  if (reviewNoticeError) console.error("Kupon yorum haberleri alınamadı", reviewNoticeError.message);
+  const reviewNotices = (reviewNoticeData ?? []) as CouponReviewNotice[];
+  const couponReviewPush = {
+    requests: await sendCouponReviewRequestPushes(supabase, couponRequests),
+    notices: await sendCouponReviewNoticePushes(supabase, reviewNotices),
+  };
+
   if (!emailConfigured()) {
-    return Response.json({ push, waitlistPush, delayPush, error: "RESEND_API_KEY ve EMAIL_FROM tanımlı değil." }, { status: 503 });
+    return Response.json({ push, waitlistPush, delayPush, couponReviewPush, error: "RESEND_API_KEY ve EMAIL_FROM tanımlı değil." }, { status: 503 });
   }
 
   const { data, error } = await supabase.rpc("claim_notifications", { p_limit: 20 });
@@ -97,6 +128,30 @@ export async function GET(request: Request) {
     }
   }
 
+  for (const r of couponRequests) {
+    if (!r.email) continue;
+    if (sent + failed > 0) await new Promise((res) => setTimeout(res, 600));
+    try {
+      await sendEmail(`coupon-review-request-${r.id}`, buildCouponReviewRequestEmail({ ...r, email: r.email }, appUrl));
+      sent++;
+    } catch (e) {
+      console.error("Kupon değerlendirme e-postası gönderilemedi", r.id, e instanceof Error ? e.message : String(e));
+      failed++;
+    }
+  }
+
+  for (const r of reviewNotices) {
+    if (!r.email) continue;
+    if (sent + failed > 0) await new Promise((res) => setTimeout(res, 600));
+    try {
+      await sendEmail(`coupon-review-notice-${r.id}`, buildCouponReviewNoticeEmail({ ...r, email: r.email }, appUrl));
+      sent++;
+    } catch (e) {
+      console.error("Kupon yorum e-postası gönderilemedi", r.id, e instanceof Error ? e.message : String(e));
+      failed++;
+    }
+  }
+
   // Destek talepleri: kullanıcının mesajı destek adresine, ekibin yanıtı kullanıcıya.
   const { data: supportData, error: supportError } = await supabase.rpc("claim_support_emails", { p_limit: 10 });
   if (supportError) console.error("Destek e-postaları alınamadı", supportError.message);
@@ -120,11 +175,14 @@ export async function GET(request: Request) {
     reviewRequests: reviewRequests ?? 0,
     waitlist: waitlist.length,
     delays: delays.length,
+    couponReviewRequests: couponRequests.length,
+    couponReviewNotices: reviewNotices.length,
     support: support.length,
     sent,
     failed,
     push,
     waitlistPush,
     delayPush,
+    couponReviewPush,
   });
 }
