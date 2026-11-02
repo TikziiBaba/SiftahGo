@@ -73,7 +73,7 @@ begin
         'auto_block_no_show', 'get_report_summary', 'join_waitlist', 'waitlist_on_free_slot', 'claim_waitlist',
         'use_package_session', 'available_today', 'nearby_businesses', 'apply_referral', 'my_referrals',
         'log_error', 'protect_appointment_columns', 'admin_dashboard', 'admin_activity', 'delete_my_account',
-        'admin_review_business', 'needs_confirmation', 'customer_card', 'is_upload_url', 'is_upload_urls',
+        'admin_review_business', 'admin_set_business_type', 'needs_confirmation', 'customer_card', 'is_upload_url', 'is_upload_urls',
         'protect_profile_columns', 'admin_suspend_business', 'admin_lift_suspension', 'lift_suspension',
         'lift_due_suspensions', 'request_freeze', 'admin_reject_freeze_request',
         'support_add_message', 'support_check_rate', 'open_support_ticket', 'reply_support_ticket',
@@ -143,12 +143,14 @@ create table public.plans (
   price       numeric(10, 2) not null check (price > 0),
   staff_limit int check (staff_limit > 0), -- boş = sınırsız
   -- 'customers', 'reports', 'announcement' (duyuru bandı), 'links' (WhatsApp/Instagram/web kısayolları),
-  -- 'theme' (sayfa rengi), 'coupons' (kupon)
+  -- 'theme' (sayfa rengi), 'coupons' (kupon), 'menu' (menü; yalnızca Vitrin)
   features    text[] not null default '{}',
   sort_order  int not null default 0
 );
 
+-- 'vitrin': randevu almayan işletmelerin (business_type = 'showcase') tek paketi; randevulu işletmeler alamaz.
 insert into public.plans (id, name, price, staff_limit, features, sort_order) values
+  ('vitrin', 'Vitrin', 149, 1, '{coupons,announcement,links,menu}', 0),
   ('baslangic', 'Başlangıç', 349, 1, '{}', 1),
   ('esnaf', 'Esnaf', 649, 5, '{customers,reports,announcement,links,coupons}', 2),
   ('pro', 'Pro', 999, null, '{customers,reports,announcement,links,theme,coupons}', 3);
@@ -165,6 +167,9 @@ create table public.businesses (
                      )),
   name               text not null check (length(trim(name)) > 0 and length(name) <= 100),
   category           text not null default 'diger' check (length(category) <= 40),
+  -- 'appointment': randevulu işletme. 'showcase': vitrin (lokanta, market gibi); randevu almaz, personeli olmaz.
+  -- Eklemede seçilir; sonradan yalnızca admin_set_business_type değiştirir (protect_business_columns).
+  business_type      text not null default 'appointment' check (business_type in ('appointment', 'showcase')),
   description        text not null default '' check (length(description) <= 2000),
   phone              text not null default '' check (length(phone) <= 30),
   city               text not null default '' check (length(city) <= 60),
@@ -771,7 +776,7 @@ select
 from auth.users u
 on conflict (id) do nothing;
 
--- Yeni işletmeye varsayılan çalışma saatleri ve bir personel ekle. Ücretsiz deneme onayla başlar (admin_review_business).
+-- Yeni işletmeye varsayılan çalışma saatleri ve (vitrin değilse) bir personel ekle. Ücretsiz deneme onayla başlar (admin_review_business).
 create function public.business_after_insert()
 returns trigger
 language plpgsql security definer set search_path = ''
@@ -786,8 +791,10 @@ begin
   select nullif(trim(full_name), '') into v_owner_name
   from public.profiles where id = new.owner_id;
 
-  insert into public.staff (business_id, name)
-  values (new.id, coalesce(v_owner_name, new.name));
+  if new.business_type = 'appointment' then
+    insert into public.staff (business_id, name)
+    values (new.id, coalesce(v_owner_name, new.name));
+  end if;
 
   update public.profiles set role = 'business' where id = new.owner_id;
   return new;
@@ -1129,6 +1136,7 @@ begin
 
   select * into b from public.businesses where id = p_business_id and public.is_bookable(id);
   if not found then raise exception 'Bu işletme şu an online randevu almıyor.'; end if;
+  if b.business_type = 'showcase' then raise exception 'Bu işletme randevu almıyor.'; end if;
 
   if exists (
     select 1 from public.blocked_customers bc
@@ -1399,6 +1407,7 @@ begin
   end if;
 
   select * into b from public.businesses where id = a.business_id;
+  if b.business_type = 'showcase' then raise exception 'Bu işletme randevu almıyor.'; end if;
 
   -- Kuponlu randevunun yeni saati de kuponun gün ve saat aralığında olmalı; kupon randevuda kalır.
   if a.coupon_claim_id is not null and exists (
@@ -1503,6 +1512,7 @@ $$;
 -- bunları sadece refresh_business_rating, apply_subscription ve admin_* fonksiyonları yazar.
 -- Tek istisna: reddedilen başvuru yeniden gönderilebilir (approval_status 'rejected' -> 'pending').
 -- Yönetici de işletmeyi doğrudan (RLS ile) aynı kurallarla düzenler; işletmenin sahibini değiştiremez.
+-- İşletme türü eklemede seçilir, sonradan yalnızca admin_set_business_type değiştirir.
 -- Kayıt tarihi de elle yazılamaz (yönetimdeki kayıt tarihi ve dönem istatistikleri buna dayanır).
 -- Saat dilimi geçerli olmalı: geçersiz değer tüm işletmelerin ortak işlerini (hatırlatma, bekleme listesi) bozar.
 create function public.protect_business_columns()
@@ -1543,6 +1553,7 @@ begin
       new.referral_code := old.referral_code;
       new.referred_by := old.referred_by;
       new.referral_rewarded_at := old.referral_rewarded_at;
+      new.business_type := old.business_type;
       if old.approval_status = 'rejected' and new.approval_status = 'pending' then
         new.submitted_at := now();
       else
@@ -1600,16 +1611,24 @@ as $$
 declare
   v_business uuid;
   v_status text;
+  v_type text;
   v_plan public.plans;
   v_oid text;
   v_amount numeric;
 begin
-  select id, approval_status into v_business, v_status from public.businesses where owner_id = auth.uid();
+  select id, approval_status, business_type into v_business, v_status, v_type from public.businesses where owner_id = auth.uid();
   if v_business is null then raise exception 'Önce işletmenizi oluşturun.'; end if;
   -- Reddedilebilecek başvurudan para alınmaz.
   if v_status <> 'approved' then raise exception 'Başvurunuz onaylanınca paket seçebilirsiniz.'; end if;
   select * into v_plan from public.plans where id = p_plan_id;
   if not found then raise exception 'Paket bulunamadı.'; end if;
+  -- Vitrin işletmesi yalnızca Vitrin paketini, randevulu işletme Vitrin dışındakileri alır.
+  if v_type = 'showcase' and v_plan.id <> 'vitrin' then
+    raise exception 'Vitrin işletmeleri yalnızca Vitrin paketini alabilir.';
+  end if;
+  if v_type <> 'showcase' and v_plan.id = 'vitrin' then
+    raise exception 'Vitrin paketi randevu almayan işletmeler içindir.';
+  end if;
   if p_months is null or p_months not in (1, 12) then raise exception 'Geçersiz ödeme dönemi.'; end if;
   -- Her deneme PayTR'de ödeme açar; arka arkaya istekle kayıt şişirilmesin.
   if (select count(*) from public.payments p
@@ -1691,7 +1710,8 @@ begin
     select * into ref from public.businesses where id = b.referred_by;
     if found then
       perform public.apply_subscription(b.id, pay.plan_id, 30);
-      perform public.apply_subscription(ref.id, coalesce(ref.plan_id, pay.plan_id), 30);
+      perform public.apply_subscription(ref.id, coalesce(ref.plan_id,
+        case when ref.business_type = 'showcase' then 'vitrin' when pay.plan_id = 'vitrin' then 'baslangic' else pay.plan_id end), 30);
     end if;
   end if;
 end;
@@ -2254,6 +2274,9 @@ begin
   if not exists (select 1 from public.businesses where id = p_business_id and approval_status = 'approved') then
     raise exception 'Önce başvuruyu onaylayın.';
   end if;
+  if (p_plan_id = 'vitrin') <> exists (select 1 from public.businesses where id = p_business_id and business_type = 'showcase') then
+    raise exception 'Vitrin paketi yalnızca vitrin işletmelerine verilir; vitrin işletmesine başka paket verilemez.';
+  end if;
 
   insert into public.payments (business_id, plan_id, merchant_oid, amount, status, paid_at)
   values (
@@ -2577,7 +2600,8 @@ revoke execute on function public.claim_support_emails(int) from public, anon, a
 revoke execute on function public.finish_support_email(uuid, text) from public, anon, authenticated;
 
 -- İşletme başvurusunu onaylar ya da reddeder (ret sebebi zorunlu, işletme sahibine gösterilir).
--- Onayda işletmenin hiç aboneliği olmadıysa 2 ay ücretsiz deneme başlar: Pro paketin tüm özellikleri.
+-- Onayda işletmenin hiç aboneliği olmadıysa 2 ay ücretsiz deneme başlar: randevulu işletmeye Pro paketin tüm özellikleri,
+-- vitrin işletmesine Vitrin paketi.
 create function public.admin_review_business(p_business_id uuid, p_approve boolean, p_note text default '')
 returns void
 language plpgsql volatile security definer set search_path = ''
@@ -2593,7 +2617,8 @@ begin
   if p_approve then
     update public.businesses
     set approval_status = 'approved', approval_note = '', reviewed_at = now(), reviewed_by = auth.uid(),
-        plan_id = case when subscription_ends_at is null then 'pro' else plan_id end,
+        plan_id = case when subscription_ends_at is null
+                       then (case when business_type = 'showcase' then 'vitrin' else 'pro' end) else plan_id end,
         trial_ends_at = case when subscription_ends_at is null then now() + interval '2 months' else trial_ends_at end,
         subscription_ends_at = coalesce(subscription_ends_at, now() + interval '2 months')
     where id = p_business_id;
@@ -2602,6 +2627,42 @@ begin
     update public.businesses
     set approval_status = 'rejected', approval_note = left(trim(p_note), 500), reviewed_at = now(), reviewed_by = auth.uid()
     where id = p_business_id;
+  end if;
+end;
+$$;
+
+-- Yönetici işletmenin türünü değiştirir (randevulu <-> vitrin). Yaklaşan aktif randevusu olan işletme vitrine çevrilemez.
+-- Hizmetler ve personel silinmez; planı olan işletmenin planı türe göre vitrin ya da baslangic olur, süre aynı kalır.
+-- Vitrinden randevuluya dönen işletmenin personeli yoksa varsayılan personel eklenir (aksi halde randevu alamaz).
+create function public.admin_set_business_type(p_business_id uuid, p_type text)
+returns void
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  b            public.businesses;
+  v_owner_name text;
+begin
+  if not public.is_admin() then raise exception 'Yetkiniz yok.'; end if;
+  if p_type is null or p_type not in ('appointment', 'showcase') then raise exception 'Geçersiz işletme türü.'; end if;
+  select * into b from public.businesses where id = p_business_id for update;
+  if not found then raise exception 'İşletme bulunamadı.'; end if;
+  if b.business_type = p_type then return; end if;
+
+  if p_type = 'showcase' and exists (
+    select 1 from public.appointments a
+    where a.business_id = b.id and a.status in ('pending', 'confirmed') and a.starts_at > now()
+  ) then
+    raise exception 'Yaklaşan randevuları olan işletme vitrine çevrilemez; önce randevuları iptal edin.';
+  end if;
+
+  update public.businesses
+  set business_type = p_type,
+      plan_id = case when plan_id is null then null when p_type = 'showcase' then 'vitrin' else 'baslangic' end
+  where id = b.id;
+
+  if p_type = 'appointment' and not exists (select 1 from public.staff where business_id = b.id) then
+    select nullif(trim(full_name), '') into v_owner_name from public.profiles where id = b.owner_id;
+    insert into public.staff (business_id, name) values (b.id, coalesce(v_owner_name, b.name));
   end if;
 end;
 $$;
@@ -3355,6 +3416,7 @@ begin
   end if;
   select * into b from public.businesses where id = p_business_id and public.is_bookable(id);
   if not found then raise exception 'Bu işletme şu an online randevu almıyor.'; end if;
+  if b.business_type = 'showcase' then raise exception 'Bu işletme randevu almıyor.'; end if;
   v_today := (now() at time zone b.timezone)::date;
   if p_day is null or p_day < v_today or p_day > v_today + b.booking_days then
     raise exception 'Bu gün için bekleme listesine yazılamazsınız.';
@@ -3698,7 +3760,7 @@ revoke execute on function public.coupon_claim_state(public.coupon_claims) from 
 revoke execute on function public.coupon_redeem_problem(public.coupon_claims) from public, anon, authenticated;
 revoke execute on function public.coupon_lookup(uuid, text) from public, anon, authenticated;
 
--- Esnaf kupon açar (p_id boş) ya da düzenler. Kuponu Esnaf ve Pro paketleri açabilir. İlk alımdan sonra indirim, gün-saat
+-- Esnaf kupon açar (p_id boş) ya da düzenler. Kuponu Esnaf, Pro ve Vitrin paketleri açabilir. İlk alımdan sonra indirim, gün-saat
 -- ve hizmetler değişmez; bitiş yalnızca uzatılır, sınır yalnızca yükseltilir (esnaf müşteriye söz vermiştir).
 create function public.save_coupon(
   p_id uuid, p_title text, p_type text, p_value numeric, p_starts date, p_ends date,
@@ -3720,7 +3782,8 @@ begin
   select * into b from public.businesses where owner_id = auth.uid();
   if not found then raise exception 'Bu işlem için yetkiniz yok.'; end if;
   if b.approval_status <> 'approved' or not public.plan_has_feature(b.id, 'coupons') then
-    raise exception 'Kupon açmak için Esnaf veya Pro paketi gerekir.';
+    raise exception '%', case when b.business_type = 'showcase' then 'Kupon açmak için Vitrin paketinizin geçerli olması gerekir.'
+                              else 'Kupon açmak için Esnaf veya Pro paketi gerekir.' end;
   end if;
   v_today := (now() at time zone b.timezone)::date;
 
@@ -4018,6 +4081,7 @@ as $$
     limit 1
   ) s
   where b.id = any (p_ids[1:60])
+    and b.business_type = 'appointment'
     and public.is_bookable(b.id)
     and exists (select 1 from public.get_available_slots(b.id, s.id, (now() at time zone b.timezone)::date));
 $$;

@@ -787,7 +787,7 @@ ok((await as(null, `select id from businesses`)).rows.length === 0, 'yönetici a
 
 await as(ADM, `update plans set price = 999, staff_limit = 10 where id = 'pro'`);
 await as(ADM, `insert into plans (id, name, price, staff_limit, sort_order) values ('kurumsal', 'Kurumsal', 1999, null, 4)`);
-ok((await as(null, `select price::int p from plans where id = 'pro'`)).rows[0].p === 999 && (await as(null, `select id from plans`)).rows.length === 4, 'yönetici paket fiyatını değiştirdi ve yeni paket ekledi');
+ok((await as(null, `select price::int p from plans where id = 'pro'`)).rows[0].p === 999 && (await as(null, `select id from plans`)).rows.length === 5, 'yönetici paket fiyatını değiştirdi ve yeni paket ekledi');
 await expectError(() => as(ADM, `update plans set price = 0 where id = 'pro'`), /check constraint/, 'sıfır fiyat reddedildi');
 
 // davet: yeni işletme (Rıza) Ahmet Berber'in koduyla gelir; kod ve davet eden istemciden yazılamaz
@@ -1721,6 +1721,95 @@ ok(Number(rp2.price) === 80, 'durdurulan kuponun alınmış kodu randevuda kulla
 await as(P8, `select reschedule_appointment($1, $2)`, [rp2.id, `${monday}T06:30:00Z`]);
 ok((await aptRow(rp2.id)).starts_at.toISOString().slice(11, 16) === '06:30', 'durdurulan kuponun kodlu randevusu ertelenir');
 
+}
+
+// --- Vitrin: randevusuz işletme türü
+{
+const VS = '00000000-0000-0000-0000-0000000000e1'; // vitrin sahibi
+const VR = '00000000-0000-0000-0000-0000000000e2'; // randevulu işletme sahibi
+const VM = '00000000-0000-0000-0000-0000000000e3'; // müşteri
+await db.exec(`
+  insert into auth.users values ('${VS}', 'vs@x.com', '{"full_name":"Vitrin Sahibi","role":"business"}');
+  insert into auth.users values ('${VR}', 'vr@x.com', '{"full_name":"Randevulu Sahibi","role":"business"}');
+  insert into auth.users values ('${VM}', 'vm@x.com', '{"full_name":"Vitrin Müşterisi"}');
+`);
+const vp = (await db.query(`select price, staff_limit, features from plans where id = 'vitrin'`)).rows[0];
+ok(vp && Number(vp.price) === 149 && vp.staff_limit === 1 && [...vp.features].sort().join() === 'announcement,coupons,links,menu', 'vitrin paketi: 149 ₺, 1 personel, kupon-duyuru-kısayol-menü');
+
+const v = (await as(VS, `insert into businesses (owner_id, slug, name, city, category, business_type) values ($1,'yesil-lokanta','Yeşil','Sivas','lokanta','showcase') returning id`, [VS])).rows[0].id;
+ok((await db.query(`select count(*)::int c from staff where business_id=$1`, [v])).rows[0].c === 0, 'vitrinde personel yok');
+ok((await db.query(`select count(*)::int c from working_hours where business_id=$1`, [v])).rows[0].c === 7, 'vitrinde çalışma saatleri var');
+await as(VS, `update businesses set business_type='appointment' where id=$1`, [v]);
+ok((await db.query(`select business_type from businesses where id=$1`, [v])).rows[0].business_type === 'showcase', 'sahibi işletme türünü değiştiremez (sessizce korunur)');
+await expectError(() => as(VR, `insert into businesses (owner_id, slug, name, business_type) values ($1,'gecersiz-tur','X','diger')`, [VR]), /check constraint/, 'geçersiz işletme türü reddedildi');
+const r = (await as(VR, `insert into businesses (owner_id, slug, name, city, category) values ($1,'randevulu-berber','Randevulu','Sivas','berber') returning id`, [VR])).rows[0].id;
+ok((await db.query(`select business_type from businesses where id=$1`, [r])).rows[0].business_type === 'appointment', 'tür verilmezse randevulu');
+ok((await db.query(`select count(*)::int c from staff where business_id=$1`, [r])).rows[0].c === 1, 'randevulu işletmede personel var');
+
+// onay: vitrin -> vitrin paketi + 2 ay deneme; randevulu -> pro
+await as(ADM, `select admin_review_business($1, true)`, [v]);
+await as(ADM, `select admin_review_business($1, true)`, [r]);
+const va = (await db.query(`select plan_id, trial_ends_at, subscription_ends_at from businesses where id=$1`, [v])).rows[0];
+const vdays = (va.trial_ends_at - Date.now()) / 864e5;
+ok(va.plan_id === 'vitrin' && vdays > 58 && vdays < 63 && va.subscription_ends_at.getTime() === va.trial_ends_at.getTime(), `vitrin onayı: vitrin paketi, 2 ay deneme (${vdays.toFixed(1)} gün)`);
+ok((await db.query(`select plan_id from businesses where id=$1`, [r])).rows[0].plan_id === 'pro', 'randevulu işletme onayında yine pro');
+
+// denemedeki vitrin kupon açabilir
+const vgun = (await db.query(`select to_char((now() at time zone 'Europe/Istanbul')::date, 'YYYY-MM-DD') d, to_char((now() at time zone 'Europe/Istanbul')::date + 10, 'YYYY-MM-DD') e`)).rows[0];
+ok((await as(VS, `select save_coupon(null, 'Çorba bedava', 'percent', 10, $1::date, $2::date, '{}', null, null, null, '{}') id`, [vgun.d, vgun.e])).rows[0].id != null, 'denemedeki vitrin işletmesi kupon açar');
+
+// ödeme
+await expectError(() => as(VS, `select * from create_payment('esnaf')`), /Vitrin/, 'vitrin başka paket alamaz');
+await expectError(() => as(VR, `select * from create_payment('vitrin')`), /randevu/i, 'randevulu işletme vitrin paketi alamaz');
+const vpay = (await as(VS, `select * from create_payment('vitrin', 12)`)).rows[0];
+ok(Number(vpay.amount) === 1490 && vpay.plan_name === 'Vitrin', `vitrin yıllık tutarı 1490: ${vpay.amount}`);
+await db.query(`select activate_subscription($1, 1490)`, [vpay.merchant_oid]);
+ok((await db.query(`select plan_id from businesses where id=$1`, [v])).rows[0].plan_id === 'vitrin', 'vitrin ödemesi paketi korur');
+await expectError(() => as(ADM, `select admin_grant_subscription($1, 'esnaf', 30)`, [v]), /Vitrin/, 'yönetici vitrin işletmesine başka paket veremez');
+await expectError(() => as(ADM, `select admin_grant_subscription($1, 'vitrin', 30)`, [r]), /Vitrin/, 'yönetici randevulu işletmeye vitrin paketi veremez');
+
+// randevu yolları vitrinde kapalı
+const vsvc = (await as(VS, `insert into services (business_id, name, duration_minutes, price) values ($1,'Çorba',30,50) returning id`, [v])).rows[0].id;
+const vgunsonra = (await db.query(`select to_char((now() at time zone 'Europe/Istanbul')::date + 1, 'YYYY-MM-DD') d`)).rows[0].d;
+await expectError(() => as(VM, `select book_appointment($1,$2,null,now() + interval '2 days','Cem Yılmaz','05551112233')`, [v, vsvc]), /randevu almıyor/, 'vitrinde randevu alınamaz');
+await expectError(() => as(VM, `select join_waitlist($1,$2::date)`, [v, vgunsonra]), /randevu almıyor/, 'vitrinde bekleme listesine yazılınamaz');
+const vappt = (await db.query(`insert into appointments (business_id, service_id, customer_id, service_name, customer_name, customer_phone, starts_at, ends_at, status)
+  values ($1,$2,$3,'Çorba','Cem','05551112233', now() + interval '2 days', now() + interval '2 days 30 minutes', 'confirmed') returning id`, [v, vsvc, VM])).rows[0].id;
+await expectError(() => as(VS, `select reschedule_appointment($1, now() + interval '3 days')`, [vappt]), /randevu almıyor/, 'vitrinde randevu ertelenemez');
+await db.query(`delete from appointments where id=$1`, [vappt]);
+
+// yönetici tür değiştirme
+await expectError(() => as(VS, `select admin_set_business_type($1,'appointment')`, [v]), /Yetkiniz/, 'işletme sahibi türü değiştiremez');
+await expectError(() => as(ADM, `select admin_set_business_type($1,'diger')`, [v]), /Geçersiz/, 'geçersiz tür reddedildi');
+await db.query(`update working_hours set is_open = true, open_time = '00:00', close_time = '23:59' where business_id=$1`, [r]);
+await db.query(`update businesses set min_notice_minutes = 0 where id=$1`, [r]);
+const rsvc = (await as(VR, `insert into services (business_id, name, duration_minutes, price) values ($1,'Saç',30,100) returning id`, [r])).rows[0].id;
+const nowH = (await db.query(`select extract(hour from now() at time zone 'Europe/Istanbul')::int h`)).rows[0].h;
+if (nowH < 23) ok((await as(null, `select * from available_today($1)`, [[r]])).rows.length === 1, 'randevulu işletme bugün müsait');
+const rappt = (await db.query(`insert into appointments (business_id, service_id, customer_id, service_name, customer_name, customer_phone, starts_at, ends_at, status)
+  values ($1,$2,$3,'Saç','Cem','05551112233', now() + interval '2 days', now() + interval '2 days 30 minutes', 'confirmed') returning id`, [r, rsvc, VM])).rows[0].id;
+await expectError(() => as(ADM, `select admin_set_business_type($1,'showcase')`, [r]), /randevu/, 'yaklaşan aktif randevusu olan işletme vitrine çevrilemez');
+await db.query(`update appointments set status = 'cancelled' where id=$1`, [rappt]);
+const before = (await db.query(`select subscription_ends_at from businesses where id=$1`, [r])).rows[0].subscription_ends_at;
+await as(ADM, `select admin_set_business_type($1,'showcase')`, [r]);
+const after = (await db.query(`select business_type, plan_id, subscription_ends_at from businesses where id=$1`, [r])).rows[0];
+ok(after.business_type === 'showcase' && after.plan_id === 'vitrin' && after.subscription_ends_at.getTime() === before.getTime(), 'vitrine çevirme: tür ve paket değişir, süre aynı kalır');
+ok((await db.query(`select count(*)::int c from services where business_id=$1`, [r])).rows[0].c === 1
+  && (await db.query(`select count(*)::int c from staff where business_id=$1`, [r])).rows[0].c === 1, 'çevirmede hizmet ve personel silinmez');
+ok((await as(null, `select * from available_today($1)`, [[r]])).rows.length === 0, 'vitrin "bugün müsait"te çıkmaz');
+ok((await as(null, `select id from businesses where id=$1`, [r])).rows.length === 1, 'vitrin sayfası herkese görünür');
+await db.query(`update businesses set latitude = 39.75, longitude = 37.02 where id in ($1, $2)`, [r, v]);
+ok((await as(null, `select id from nearby_businesses(39.75, 37.02)`)).rows.length === 2, 'vitrin "yakınımda"da çıkar');
+
+// vitrinden randevuluya: personeli olmayan işletmeye varsayılan personel eklenir
+await as(ADM, `select admin_set_business_type($1,'appointment')`, [v]);
+const back = (await db.query(`select business_type, plan_id from businesses where id=$1`, [v])).rows[0];
+ok(back.business_type === 'appointment' && back.plan_id === 'baslangic', 'randevuluya çevirme: paket baslangic');
+const vst = (await db.query(`select name from staff where business_id=$1`, [v])).rows;
+ok(vst.length === 1 && vst[0].name === 'Vitrin Sahibi', 'personeli olmayan işletmeye varsayılan personel eklendi');
+await as(ADM, `select admin_set_business_type($1,'showcase')`, [v]);
+await as(ADM, `select admin_set_business_type($1,'appointment')`, [v]);
+ok((await db.query(`select count(*)::int c from staff where business_id=$1`, [v])).rows[0].c === 1, 'tekrar çevirmede personel çoğalmaz');
 }
 
 console.log(failures ? `\n${failures} TEST BAŞARISIZ` : '\nTÜM TESTLER GEÇTİ');
