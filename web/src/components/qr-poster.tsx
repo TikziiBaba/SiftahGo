@@ -35,12 +35,13 @@ export function QrSvg({ value, logo, className }: { value: string; logo?: string
 }
 
 const STEPS = ["Kodu okutun", "Saati seçin", "Randevunuz hazır"];
+const SHOWCASE_STEPS = ["Kodu okutun", "Menüyü görün", "Kuponu alın"];
 
 /**
  * Cama asılacak A4 afiş. Ölçüler afiş genişliğine göre (cqw) verildiği için ekrandaki küçük önizlemede de baskıda
  * da (210 x 297 mm) aynı görünür. Koyu bant ve renkler baskıda da çıksın diye print-color-adjust: exact.
  */
-export function QrPoster({ business: b, link }: { business: PosterBusiness; link: string }) {
+export function QrPoster({ business: b, link, showcase = false }: { business: PosterBusiness; link: string; showcase?: boolean }) {
   const place = [b.district, b.city].filter(Boolean).join(", ");
   return (
     <div className="@container relative flex aspect-[210/297] w-full flex-col overflow-hidden bg-white text-[#0b2e2b] [-webkit-print-color-adjust:exact] [print-color-adjust:exact] print:aspect-auto print:h-[297mm] print:w-[210mm]">
@@ -61,12 +62,22 @@ export function QrPoster({ business: b, link }: { business: PosterBusiness; link
       <div className="flex min-h-0 flex-1 flex-col items-center justify-evenly px-[7cqw] text-center">
         <div>
           <p className="inline-block rounded-full bg-[#ccfbf1] px-[3cqw] py-[0.9cqw] text-[2.6cqw] font-semibold uppercase tracking-[0.25em] text-[#115e59]">
-            Online randevu
+            {showcase ? "Menü ve kuponlar" : "Online randevu"}
           </p>
           <p className="mt-[2cqw] text-[6.6cqw] font-extrabold leading-[1.04] tracking-tight">
-            Sıra beklemeyin,
-            <br />
-            randevunuzu alın.
+            {showcase ? (
+              <>
+                Menüye göz atın,
+                <br />
+                kuponunuzu alın.
+              </>
+            ) : (
+              <>
+                Sıra beklemeyin,
+                <br />
+                randevunuzu alın.
+              </>
+            )}
           </p>
         </div>
 
@@ -78,7 +89,7 @@ export function QrPoster({ business: b, link }: { business: PosterBusiness; link
         </div>
 
         <ol className="grid w-full grid-cols-3 gap-[3cqw]">
-          {STEPS.map((s, i) => (
+          {(showcase ? SHOWCASE_STEPS : STEPS).map((s, i) => (
             <li key={s} className="flex flex-col items-center gap-[1.5cqw]">
               <span className="grid size-[7cqw] place-items-center rounded-full bg-[#2dd4bf] text-[3.6cqw] font-bold text-[#134e4a]">{i + 1}</span>
               <span className="text-[3cqw] font-medium leading-tight">{s}</span>
@@ -95,7 +106,7 @@ export function QrPoster({ business: b, link }: { business: PosterBusiness; link
           {b.phone && <p className="mt-[0.8cqw] text-[3.2cqw] text-[#115e59]">Telefon: {b.phone}</p>}
         </div>
         <p className="shrink-0 text-right text-[2.6cqw] leading-snug text-[#115e59]">
-          7/24 online randevu
+          {showcase ? "7/24 açık sayfa" : "7/24 online randevu"}
           <br />
           <b className="text-[3.2cqw] text-[#134e4a]">{SITE_NAME}</b>
         </p>

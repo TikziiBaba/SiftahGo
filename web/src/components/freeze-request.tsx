@@ -9,7 +9,7 @@ import type { FreezeRequest } from "@/lib/types";
 const day = (d: string) => formatDate(d, { weekday: undefined, year: "numeric", month: "short" });
 
 /** İşletme sahibi askıya alamaz; dondurma talebi açar, yönetici uygular ya da gerekçeyle reddeder. */
-export function FreezeRequestSection({ businessId, suspended }: { businessId: string; suspended: boolean }) {
+export function FreezeRequestSection({ businessId, suspended, showcase = false }: { businessId: string; suspended: boolean; showcase?: boolean }) {
   const [last, setLast] = useState<FreezeRequest | null | undefined>(undefined);
   const [reason, setReason] = useState("");
   const [startsOn, setStartsOn] = useState(todayStr());
@@ -50,7 +50,7 @@ export function FreezeRequestSection({ businessId, suspended }: { businessId: st
     <section>
       <h2 className="text-xl font-bold">Sayfayı dondurma talebi</h2>
       <p className="mt-1 text-sm text-ink-3">
-        Bir süre hizmet veremeyecekseniz talep açın. Ekibimiz uygulayınca sayfanız görünmez, randevu alınmaz ve dondurulan süre aboneliğinize eklenir.
+        Bir süre hizmet veremeyecekseniz talep açın. Ekibimiz uygulayınca sayfanız görünmez{showcase ? "" : ", randevu alınmaz"} ve dondurulan süre aboneliğinize eklenir.
       </p>
       <div className="card mt-4 space-y-4 p-5">
         {last && (

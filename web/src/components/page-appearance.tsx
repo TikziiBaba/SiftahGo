@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Check, ExternalLink, Link2, Loader2, Lock, Megaphone, Palette, type LucideIcon } from "lucide-react";
 import { useBusiness } from "@/components/panel-context";
 import { createClient } from "@/lib/supabase/client";
-import { ACCENTS, isSubscribed } from "@/lib/constants";
+import { ACCENTS, isShowcase, isSubscribed } from "@/lib/constants";
 import { errorMessage } from "@/lib/format";
 
 /** "@ad", "instagram.com/ad/" gibi girişlerden yalnızca kullanıcı adını alır. */
@@ -77,7 +77,7 @@ export function PageAppearance() {
 
       <form onSubmit={save} className="card mt-4 divide-y divide-line">
         <Part icon={Megaphone} title="Duyuru bandı" plan="Esnaf" locked={!has("announcement")}
-          text="Sayfanızın üstünde öne çıkar: tatil günleri, kampanyalar, yeni hizmetler.">
+          text={`Sayfanızın üstünde öne çıkar: tatil günleri, kampanyalar, ${isShowcase(business) ? "yeni ürünler" : "yeni hizmetler"}.`}>
           <textarea
             rows={2}
             maxLength={160}

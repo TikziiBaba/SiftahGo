@@ -148,7 +148,7 @@ export default function SubscriptionPage() {
             )}
             {!subscribed && (
               <p className="text-sm text-ink-3">
-                Paket seçene kadar sayfanız yayında görünmez{showcase ? "" : " ve randevu alınamaz"}. {showcase ? "Bilgiler" : "Ayarlar"}’dan bilgilerinizi şimdiden doldurabilirsiniz.
+                Paket seçene kadar sayfanız yayında görünmez{showcase ? "" : " ve randevu alınamaz"}. {showcase ? "Bilgiler’den" : "Ayarlar’dan"} bilgilerinizi şimdiden doldurabilirsiniz.
               </p>
             )}
           </div>

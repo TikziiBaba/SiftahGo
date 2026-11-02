@@ -94,7 +94,7 @@ export default function QrPage() {
           <h2 className="font-semibold">Cam afişi</h2>
           <p className="mt-1 text-sm text-ink-3">A4 boyutunda, işletmenize özel. Yazdırıp camınıza dışarıdan okunacak şekilde asın.</p>
           <div className="mt-4 overflow-hidden rounded-lg shadow-lg ring-1 ring-line">
-            <QrPoster business={business} link={url} />
+            <QrPoster business={business} link={url} showcase={isShowcase(business)} />
           </div>
           <a href={`/${business.slug}/afis`} target="_blank" rel="noreferrer" className="btn btn-primary mt-4 w-full">
             <Printer className="size-4" /> Afişi yazdır

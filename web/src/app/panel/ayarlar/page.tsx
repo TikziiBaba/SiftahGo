@@ -280,7 +280,7 @@ export default function SettingsPage() {
 
       {!showcase && <BlockedCustomers businessId={business.id} />}
 
-      <FreezeRequestSection businessId={business.id} suspended={business.is_suspended} />
+      <FreezeRequestSection businessId={business.id} suspended={business.is_suspended} showcase={showcase} />
     </div>
   );
 }

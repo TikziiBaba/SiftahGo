@@ -5,6 +5,7 @@ import { Check, Copy, Gift, Loader2, Share2 } from "lucide-react";
 import { useBusiness } from "@/components/panel-context";
 import { ScrambleText } from "@/components/scramble-text";
 import { createClient } from "@/lib/supabase/client";
+import { isShowcase } from "@/lib/constants";
 import { errorMessage, formatDate } from "@/lib/format";
 
 type Referral = { name: string; created_at: string; rewarded_at: string | null };
@@ -36,7 +37,7 @@ export function ReferralCard({ hasPaid }: { hasPaid: boolean }) {
   }
 
   async function share() {
-    const text = `SiftahGo'da online randevu sayfanı aç; davet kodum ${business.referral_code} ile ilk ödemende ikimize de 1 ay hediye:`;
+    const text = `SiftahGo'da ${isShowcase(business) ? "işletme sayfanı aç" : "online randevu sayfanı aç"}; davet kodum ${business.referral_code} ile ilk ödemende ikimize de 1 ay hediye:`;
     if (navigator.share) await navigator.share({ title: "SiftahGo daveti", text, url: link() }).catch(() => {});
     else copy("link");
   }
