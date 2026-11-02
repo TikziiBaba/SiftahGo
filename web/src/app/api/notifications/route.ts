@@ -1,8 +1,8 @@
 import { timingSafeEqual } from "node:crypto";
 import { COMPANY } from "@/lib/company";
 import { emailConfigured, sendEmail } from "@/lib/email";
-import { buildEmail, buildSupportEmail, buildWaitlistEmail, type QueuedNotification, type QueuedSupportEmail } from "@/lib/notification-email";
-import { sendQueuedPushes, sendWaitlistPushes, type WaitlistNotice } from "@/lib/push";
+import { buildDelayEmail, buildEmail, buildSupportEmail, buildWaitlistEmail, type QueuedNotification, type QueuedSupportEmail } from "@/lib/notification-email";
+import { sendDelayPushes, sendQueuedPushes, sendWaitlistPushes, type DelayNotice, type WaitlistNotice } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // Kuyruktaki randevu bildirimlerini (anlık bildirim ve e-posta) gönderir. Zamanlanmış görev
@@ -40,8 +40,14 @@ export async function GET(request: Request) {
   const waitlist = (waitlistData ?? []) as WaitlistNotice[];
   const waitlistPush = await sendWaitlistPushes(supabase, waitlist);
 
+  // Gecikme haberi: müşteri "geç kalacağım" ya da işletme "gecikmemiz var" dedi. Alınan haber tekrar denenmez.
+  const { data: delayData, error: delayError } = await supabase.rpc("claim_delay_notices", { p_limit: 50 });
+  if (delayError) console.error("Gecikme haberleri alınamadı", delayError.message);
+  const delays = (delayData ?? []) as DelayNotice[];
+  const delayPush = await sendDelayPushes(supabase, delays);
+
   if (!emailConfigured()) {
-    return Response.json({ push, waitlistPush, error: "RESEND_API_KEY ve EMAIL_FROM tanımlı değil." }, { status: 503 });
+    return Response.json({ push, waitlistPush, delayPush, error: "RESEND_API_KEY ve EMAIL_FROM tanımlı değil." }, { status: 503 });
   }
 
   const { data, error } = await supabase.rpc("claim_notifications", { p_limit: 20 });
@@ -79,6 +85,18 @@ export async function GET(request: Request) {
     }
   }
 
+  for (const d of delays) {
+    if (d.recipient !== "customer" || !d.email) continue;
+    if (sent + failed > 0) await new Promise((r) => setTimeout(r, 600));
+    try {
+      await sendEmail(`delay-${d.id}`, buildDelayEmail({ ...d, email: d.email }, appUrl));
+      sent++;
+    } catch (e) {
+      console.error("Gecikme e-postası gönderilemedi", d.id, e instanceof Error ? e.message : String(e));
+      failed++;
+    }
+  }
+
   // Destek talepleri: kullanıcının mesajı destek adresine, ekibin yanıtı kullanıcıya.
   const { data: supportData, error: supportError } = await supabase.rpc("claim_support_emails", { p_limit: 10 });
   if (supportError) console.error("Destek e-postaları alınamadı", supportError.message);
@@ -101,10 +119,12 @@ export async function GET(request: Request) {
     reminders: reminders ?? 0,
     reviewRequests: reviewRequests ?? 0,
     waitlist: waitlist.length,
+    delays: delays.length,
     support: support.length,
     sent,
     failed,
     push,
     waitlistPush,
+    delayPush,
   });
 }

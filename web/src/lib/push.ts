@@ -1,6 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatTime } from "@/lib/format";
 
 /** claim_push satırı */
 type QueuedPush = {
@@ -21,6 +21,20 @@ export type WaitlistNotice = {
   customer_name: string;
   business_name: string;
   business_slug: string;
+  tokens: string[];
+};
+
+/** claim_delay_notices satırı: gecikme haberi (business: müşteri gecikiyor, customer: işletme gecikiyor) */
+export type DelayNotice = {
+  id: string;
+  recipient: "customer" | "business";
+  minutes: number;
+  email: string | null;
+  customer_name: string;
+  business_name: string;
+  business_slug: string;
+  service_name: string;
+  starts_at: string;
   tokens: string[];
 };
 
@@ -128,6 +142,41 @@ export async function sendWaitlistPushes(supabase: SupabaseClient, notices: Wait
       });
     } catch (e) {
       console.error("Bekleme listesi bildirimi gönderilemedi", e instanceof Error ? e.message : String(e));
+    }
+  }
+  if (dead.length) await supabase.rpc("drop_push_tokens", { p_tokens: dead });
+  return { sent };
+}
+
+/**
+ * Gecikme haberini işletme sahibinin (müşteri gecikiyor) ya da müşterinin (işletme gecikiyor) telefonuna
+ * gönderir. Tekrar denenmez; dokununca esnaf takvime, müşteri Randevularım'a düşer.
+ */
+export async function sendDelayPushes(supabase: SupabaseClient, notices: DelayNotice[]) {
+  const messages: Message[] = notices.flatMap((n) => {
+    const time = formatTime(n.starts_at);
+    const forBusiness = n.recipient === "business";
+    return (n.tokens ?? []).map((to) => ({
+      to,
+      title: forBusiness ? "Müşteri gecikiyor" : "Randevunuzda gecikme var",
+      body: forBusiness
+        ? `${n.customer_name} · ${time} randevusuna yaklaşık ${n.minutes} dk gecikecek`
+        : `${n.business_name} · ${time} randevunuz yaklaşık ${n.minutes} dk gecikebilir`,
+      data: { kind: "delay", recipient: n.recipient, startsAt: n.starts_at },
+    }));
+  });
+  let sent = 0;
+  const dead: string[] = [];
+  for (let i = 0; i < messages.length; i += BATCH) {
+    const batch = messages.slice(i, i + BATCH);
+    try {
+      const tickets = await postToExpo(batch);
+      tickets.forEach((t, j) => {
+        if (t.status === "ok") sent++;
+        else if (t.details?.error === "DeviceNotRegistered") dead.push(batch[j].to);
+      });
+    } catch (e) {
+      console.error("Gecikme bildirimi gönderilemedi", e instanceof Error ? e.message : String(e));
     }
   }
   if (dead.length) await supabase.rpc("drop_push_tokens", { p_tokens: dead });

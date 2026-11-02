@@ -1,6 +1,6 @@
 import { SUPPORT_CATEGORIES } from "@/lib/constants";
 import { formatDate, formatPrice, formatTime } from "@/lib/format";
-import type { WaitlistNotice } from "@/lib/push";
+import type { DelayNotice, WaitlistNotice } from "@/lib/push";
 import type { AppointmentStatus, SupportCategory, SupportStatus } from "@/lib/types";
 
 /** claim_notifications satırı */
@@ -194,6 +194,23 @@ export function buildWaitlistEmail(n: WaitlistNotice & { email: string }, appUrl
     ],
     action: { label: "Boş saatleri gör", href: `${appUrl}/${n.business_slug}?gun=${n.day}#randevu` },
     footer: "Bu e-posta SiftahGo bekleme listesine yazıldığınız için gönderildi.",
+  });
+}
+
+/** İşletme gecikeceğini bildirdi: randevusu yaklaşan müşteriye. */
+export function buildDelayEmail(n: DelayNotice & { email: string }, appUrl: string) {
+  const when = `${formatDate(n.starts_at)}, ${formatTime(n.starts_at)}`;
+  return render(n.email, {
+    subject: `Randevunuzda gecikme var: ${n.business_name}, ${when}`,
+    title: "Randevunuzda gecikme var",
+    intro: `Merhaba ${n.customer_name.split(" ")[0]}, ${n.business_name} randevunuza yaklaşık ${n.minutes} dakika gecikebileceğini bildirdi. Randevu saatiniz değişmedi.`,
+    rows: [
+      ["İşletme", n.business_name],
+      ["Hizmet", n.service_name],
+      ["Tarih", when],
+      ["Tahmini gecikme", `${n.minutes} dakika`],
+    ],
+    action: { label: "İşletme sayfası", href: `${appUrl}/${n.business_slug}` },
   });
 }
 

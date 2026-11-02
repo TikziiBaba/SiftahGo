@@ -105,6 +105,7 @@ function handleTap(response: Notifications.NotificationResponse | null, business
       kind: typeof data.kind === 'string' ? data.kind : undefined,
       recipient: data.recipient,
       appointmentId: typeof data.appointmentId === 'string' ? data.appointmentId : undefined,
+      startsAt: typeof data.startsAt === 'string' ? data.startsAt : undefined,
       slug: typeof data.slug === 'string' ? data.slug : undefined,
       day: typeof data.day === 'string' ? data.day : undefined,
       businessAccount,
