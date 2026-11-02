@@ -74,5 +74,12 @@
       "Cam afişi artık A3, isteğe göre A4 olarak yazdırılıyor.",
       "Fatura numaralarınızı ödeme geçmişinde görebilirsiniz."
     ]
+  },
+  {
+    "id": 11,
+    "date": "2026-11-02",
+    "items": [
+      "Müşteri hesabınızla, yeni hesap açmadan işletme başvurusu yapabilirsiniz (Hesap > İşletmeni ekle)."
+    ]
   }
 ]

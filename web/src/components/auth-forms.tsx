@@ -224,19 +224,63 @@ export function SignupForm() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [checkEmail, setCheckEmail] = useState(false);
+  // Bu e-postayla hesap var: yeni hesap açılmaz, giriş yapıp devam edilir.
+  const [exists, setExists] = useState(false);
+  // E-posta onayı bekleniyor: onay başka cihazda yapılsa da bu ekran kendiliğinden giriş yapar.
+  const [waiting, setWaiting] = useState<{ userId: string; ticket: string } | null>(null);
   const captcha = useCaptcha();
 
   const target = role === "business" ? "/panel" : safeNext(params.get("next")) ?? "/hesabim";
+  const loginHref = role === "business" ? "/giris?next=/panel" : "/giris";
+
+  // Giriş yapmış kullanıcı yeni hesap açmaz: işletme başvurusu aynı hesapla yapılır.
+  useEffect(() => {
+    createClient().auth.getSession().then(({ data: { session } }) => {
+      if (session) router.replace(params.get("rol") === "isletme" || params.get("davet") ? "/panel" : "/hesabim");
+    });
+  }, [router, params]);
+
+  useEffect(() => {
+    if (!waiting) return;
+    let active = true;
+    const started = Date.now();
+    const check = async () => {
+      if (!active) return;
+      const res = await fetch("/api/auth/signup-status", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(waiting),
+      }).catch(() => null);
+      const result = res?.ok ? ((await res.json()) as { confirmed: boolean; tokenHash?: string }) : null;
+      if (!active) return;
+      if (result?.confirmed && result.tokenHash) {
+        const { error } = await createClient().auth.verifyOtp({ type: "magiclink", token_hash: result.tokenHash });
+        if (!error) {
+          router.replace(target);
+          router.refresh();
+        }
+        return;
+      }
+      if (Date.now() - started < 30 * 60 * 1000) timer = setTimeout(check, 4000);
+    };
+    let timer = setTimeout(check, 4000);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [waiting, target, router]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError("");
+    setExists(false);
+    const ticket = crypto.randomUUID();
     const { data, error } = await createClient().auth.signUp({
       email: form.email,
       password: form.password,
       options: {
-        data: { full_name: form.full_name.trim(), phone: form.phone.trim(), role },
+        data: { full_name: form.full_name.trim(), phone: form.phone.trim(), role, login_ticket: ticket },
         emailRedirectTo: `${location.origin}/auth/callback?next=${encodeURIComponent(target)}`,
         captchaToken: captcha.token,
       },
@@ -246,7 +290,15 @@ export function SignupForm() {
       captcha.retry();
       return setError(errorMessage(error));
     }
-    if (!data.session) return setCheckEmail(true);
+    // Kayıtlı e-postada Supabase hata vermez, kimliksiz kullanıcı döner.
+    if (data.user && !data.user.identities?.length) {
+      captcha.retry();
+      return setExists(true);
+    }
+    if (!data.session) {
+      if (data.user) setWaiting({ userId: data.user.id, ticket });
+      return setCheckEmail(true);
+    }
     router.replace(target);
     router.refresh();
   }
@@ -257,7 +309,11 @@ export function SignupForm() {
         <MailCheck className="mx-auto size-12 text-accent" />
         <h2 className="mt-3 text-lg font-semibold">E-postanızı kontrol edin</h2>
         <p className="mt-2 text-sm text-ink-2">
-          <b>{form.email}</b> adresine bir doğrulama bağlantısı gönderdik. Bağlantıya tıkladıktan sonra hesabınız açılacak.
+          <b>{form.email}</b> adresine bir doğrulama bağlantısı gönderdik. Bağlantıyı telefonunuzda da açabilirsiniz; onaylayınca bu ekranda
+          kendiliğinden giriş yapılır.
+        </p>
+        <p className="mt-4 flex items-center justify-center gap-2 text-sm text-ink-3">
+          <Loader2 className="size-4 animate-spin" /> Onay bekleniyor
         </p>
       </div>
     );
@@ -298,6 +354,12 @@ export function SignupForm() {
       <Field id="password" label="Şifre" icon={Lock} type="password" required minLength={6} autoComplete="new-password" placeholder="En az 6 karakter" value={form.password} onChange={set("password")} />
       {captcha.widget}
       {error && <FormError>{error}</FormError>}
+      {exists && (
+        <FormError>
+          Bu e-postayla zaten hesabınız var. <Link href={loginHref} className="font-medium underline">Giriş yapın</Link>
+          {role === "business" ? "; işletme başvurunuzu aynı hesapla yaparsınız." : "."}
+        </FormError>
+      )}
       <Submit busy={busy} ready={captcha.ready}>{role === "business" ? "İşletme Hesabı Aç" : "Hesap Aç"}</Submit>
       <p className="text-center text-2xs leading-relaxed text-ink-3">
         Hesap açarak <Link href="/yasal/kullanim-kosullari" className="underline underline-offset-2 hover:text-ink">hizmet şartlarını</Link> kabul
@@ -305,8 +367,8 @@ export function SignupForm() {
         işlenir.
       </p>
       <p className="text-center text-sm text-ink-3">
-        Zaten hesabın var mı?{" "}
-        <Link href="/giris" className="font-medium text-accent hover:underline">Giriş yap</Link>
+        {role === "business" ? "Müşteri hesabın varsa yeni hesap açma:" : "Zaten hesabın var mı?"}{" "}
+        <Link href={loginHref} className="font-medium text-accent hover:underline">Giriş yap</Link>
       </p>
     </form>
   );

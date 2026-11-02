@@ -2102,5 +2102,12 @@ await db.query(`delete from businesses where id = $1`, [fb]);
 const fkept = (await db.query(`select business_id, business_name from payments where id = $1`, [fpay.id])).rows[0];
 ok(fkept.business_id === null && fkept.business_name === 'Fatura Berber', 'işletme silinince ödeme kaydı kalır');
 
+// Müşteri hesabı yeni hesap açmadan işletme başvurusu yapar
+const UP2 = 'aaaaaaaa-0000-4000-8000-000000000021';
+await db.exec(`insert into auth.users values ('${UP2}', 'up2@x.com', '{"full_name":"Müşteri Esnaf"}')`);
+ok((await db.query(`select role from profiles where id = $1`, [UP2])).rows[0].role === 'customer', 'kayıt müşteri olarak açılır');
+await as(UP2, `insert into businesses (owner_id, slug, name, city, category) values ($1, 'musteriden-esnaf', 'Yeni Dükkân', 'Sivas', 'berber')`, [UP2]);
+ok((await db.query(`select role from profiles where id = $1`, [UP2])).rows[0].role === 'business', 'başvuruyla hesap işletmeye döner');
+
 console.log(failures ? `\n${failures} TEST BAŞARISIZ` : '\nTÜM TESTLER GEÇTİ');
 process.exit(failures ? 1 : 0);

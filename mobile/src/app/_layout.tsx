@@ -102,7 +102,8 @@ function RootStack({ fontsReady }: { fontsReady: boolean }) {
         </Stack.Protected>
 
         <Stack.Protected guard={!!session}>
-          <Stack.Protected guard={needsSetup}>
+          {/* Müşteri hesabı da aynı hesapla işletme başvurusu yapar. */}
+          <Stack.Protected guard={needsSetup || !isBusiness}>
             <Stack.Screen name="kurulum" options={{ headerShown: false }} />
           </Stack.Protected>
           <Stack.Protected guard={!needsSetup}>

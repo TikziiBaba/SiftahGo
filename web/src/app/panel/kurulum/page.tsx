@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useContext, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, Hourglass, Loader2, LogOut, RefreshCw } from "lucide-react";
@@ -22,6 +23,7 @@ export default function SetupPage() {
         ) : (
           <ApplicationForm business={business} done={refresh} />
         )}
+        <Link href="/hesabim" className="btn btn-ghost mx-auto mt-4 flex">Hesabıma dön</Link>
         <LogoutButton />
       </div>
     </main>

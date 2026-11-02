@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Glow, Wordmark } from '@/components/brand';
 import { OptionSheet, SelectField } from '@/components/pickers';
+import { router } from 'expo-router';
 import { Banner, Button, Field, Group, ListRow, SectionTitle, styles, Text } from '@/components/ui';
 import { signOut, useAuth } from '@/lib/auth';
 import { categoriesFor, CITIES, RESERVED_SLUGS, SITE_DOMAIN } from '@/lib/constants';
@@ -92,7 +93,11 @@ function ApplicationForm({ business }: { business: Business | null }) {
       <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + 16 }]} keyboardShouldPersistTaps="handled">
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <Wordmark />
-          <Button title="Çıkış" variant="ghost" size="sm" onPress={() => signOut()} />
+          {router.canGoBack() ? (
+            <Button title="Vazgeç" variant="ghost" size="sm" onPress={() => router.back()} />
+          ) : (
+            <Button title="Çıkış" variant="ghost" size="sm" onPress={() => signOut()} />
+          )}
         </View>
         <View style={{ gap: 6, marginVertical: 8 }}>
           <Text variant="display">{business ? 'Başvurunuzu düzeltin' : 'İşletmenizi oluşturalım'}</Text>

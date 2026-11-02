@@ -181,11 +181,9 @@ function AccountView() {
             <p className="text-ink-3">Randevuların, favorilerin ve hesabın burada.</p>
           </div>
           <div className="flex w-full flex-wrap gap-2 sm:w-auto [&>*]:flex-1 sm:[&>*]:flex-none">
-            {profile?.role === "business" && (
-              <Link href="/panel" className="btn btn-secondary">
-                <Store className="size-4" /> İşletme Paneli
-              </Link>
-            )}
+            <Link href="/panel" className="btn btn-secondary">
+              <Store className="size-4" /> {profile?.role === "business" ? "İşletme Paneli" : "İşletmeni ekle"}
+            </Link>
             <Link href="/kesfet" className="btn btn-primary">
               <Compass className="size-4" /> Randevu al
             </Link>

@@ -112,6 +112,9 @@ export default function AccountScreen() {
               onPress={() => router.push({ pathname: '/isletme/[slug]', params: { slug: business.slug } })}
             />
           ) : null}
+          {!isBusiness ? (
+            <ListRow icon="storefront-outline" title="İşletmeni ekle" subtitle="Aynı hesapla işletme başvurusu yapın" onPress={() => router.push('/kurulum')} />
+          ) : null}
           <ListRow icon="ticket-outline" title="Kuponlarım" subtitle="Aldığınız kuponlar ve kodları" onPress={() => router.push('/kuponlarim')} />
           <ListRow
             icon="help-buoy-outline"
