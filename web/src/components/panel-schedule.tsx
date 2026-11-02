@@ -112,13 +112,15 @@ export function DayCalendar({
                           borderLeft: `3px solid ${color}`,
                           ["--tw-ring-color" as string]: `color-mix(in oklab, ${color} 35%, transparent)`,
                         }}
-                        title={`${formatTime(r.starts_at)} ${r.customer_name} · ${r.service_name} · ${STATUS[r.status].label}`}
+                        title={`${formatTime(r.starts_at)} ${r.customer_name} · ${r.service_name} · ${STATUS[r.status].label}${delayLabel(r) ? ` · ${delayLabel(r)}` : ""}`}
                       >
                         <span className="block truncate font-semibold text-ink">
                           {formatTime(r.starts_at)} {r.customer_name}
+                          {h <= 34 && delayLabel(r) && <span className="ml-1 font-medium text-warn">· {delayLabel(r)}</span>}
                         </span>
-                        {h > 34 && <span className="block truncate text-ink-3">{r.service_name}</span>}
-                        {h > 50 && delayLabel(r) && <span className="block truncate font-medium text-warn">{delayLabel(r)}</span>}
+                        {/* Rozet her blok boyunda görünür: kısa blokta ilk satıra sığar, orta blokta hizmet satırının yerini alır. */}
+                        {h > 34 && delayLabel(r) && <span className="block truncate font-medium text-warn">{delayLabel(r)}</span>}
+                        {h > 34 && (!delayLabel(r) || h > 50) && <span className="block truncate text-ink-3">{r.service_name}</span>}
                       </button>
                     );
                   })}
