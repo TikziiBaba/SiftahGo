@@ -30,10 +30,6 @@ export default function PrivacyPage() {
         <li><strong>Değerlendirmeler:</strong> puanınız, yorumunuz ve randevuda yazdığınız ad.</li>
         <li><strong>Favoriler ve bekleme listesi:</strong> favorilere eklediğiniz işletmeler; bekleme listesine yazıldığınız işletme ve gün.</li>
         <li>
-          <strong>Kupon kayıtları:</strong> aldığınız kuponlar, kupon kodunuz ve kuponu kullandığınız zaman. Kuponu aldığınız işletme kodu girdiğinde
-          adınızı görür.
-        </li>
-        <li>
           <strong>İşletmenin tuttuğu kayıtlar:</strong> randevu aldığınız işletmenin sizin hakkınızda yazdığı not ve size sattığı seans paketi
           (kalan seans). Bu bilgileri yalnızca o işletme görür.
         </li>
@@ -46,6 +42,10 @@ export default function PrivacyPage() {
       </ul>
       <h3>Tüm kullanıcılar</h3>
       <ul>
+        <li>
+          <strong>Kupon kayıtları:</strong> aldığınız kuponlar, kupon kodunuz ve kuponu kullandığınız zaman. Kuponu aldığınız işletme, kasada girdiği
+          kuponu ve adınızı görür.
+        </li>
         <li>Hesap ve oturum bilgileri, Google ile girişte Google’ın paylaştığı ad ve e-posta.</li>
         <li>İşlem güvenliği kayıtları: IP adresi, tarayıcı ve cihaz bilgisi, giriş zamanları.</li>
         <li>Uygulamada bildirim izni verdiyseniz cihazınızın bildirim adresi (push token).</li>
@@ -94,7 +94,7 @@ export default function PrivacyPage() {
       <h2>4. Kimlere aktarılır</h2>
       <ul>
         <li><strong>Randevu aldığınız işletme:</strong> randevu bilgileriniz, iletişim bilgileriniz, notunuz ve yukarıda açıklanan iptal/gelmeme sayılarınız.</li>
-        <li><strong>Kuponu aldığınız işletme:</strong> kupon kodunuz, adınız ve kuponu kullandığınız zaman. İndirim işletmede uygulanır.</li>
+        <li><strong>Kuponu aldığınız işletme:</strong> kasada girdiği kupon, adınız ve kuponun kullanıldığı zaman. İndirimi işletme uygular.</li>
         <li><strong>Ödeme kuruluşu:</strong> PayTR Ödeme ve Elektronik Para Kuruluşu A.Ş. (ödeme işlemleri).</li>
         <li>
           <strong>Altyapı hizmet sağlayıcıları:</strong> Supabase (veritabanı ve kimlik doğrulama), Vercel (web barındırma), Cloudflare (görsel

@@ -78,8 +78,8 @@ export default function TermsPage() {
 
       <h2>7. Kuponlar</h2>
       <ul>
-        <li>Kuponu İşletme hazırlar. İndirimi İşletme kendi yerinde, hizmet sırasında uygular.</li>
-        <li>{SITE_NAME} kupon için ödeme almaz ve indirimi kendisi uygulamaz.</li>
+        <li>Kuponu İşletme hazırlar. İndirimi İşletme uygular ve indirimli tutarı İşletme tahsil eder.</li>
+        <li>{SITE_NAME} indirimli fiyatı gösterir ve randevuda kaydeder; bunun için ödeme almaz.</li>
         <li>Kuponun şartlarına uygun olarak yerine getirilmesinden İşletme sorumludur.</li>
       </ul>
 
