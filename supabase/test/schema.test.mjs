@@ -1242,10 +1242,14 @@ await as(MUSTERI, `select report_customer_late($1, 15)`, [aptYakin]);
 await expectError(() => as(MUSTERI, `select report_customer_late($1, 5)`, [aptYakin]), /en fazla 3/, 'bir randevuya en fazla 3 müşteri haberi');
 ok((await gRow(aptYakin)).customer_late_count === 3 && (await gRow(aptYakin)).customer_late_minutes === 15, 'son haberin dakikası tutulur');
 await expectError(() => as(MUSTERI, `select report_customer_late($1, 5)`, [aptIptal]), /gecikme haberi/i, 'iptal edilmiş randevuya haber verilemez');
+const aptBitmis = await gApt(bosPersonel, MUSTERI, -2);
+await expectError(() => as(MUSTERI, `select report_customer_late($1, 5)`, [aptBitmis]), /gecikme haberi verilemez/i, 'bitmiş randevuya müşteri gecikme haberi veremez');
 
 // report_business_delay
+const aptElle = await gApt(personel, null, 2.75);
 await expectError(() => as(SAHIP, `select report_business_delay($1, 20)`, [personel]), /10, 15, 30 veya 45/, 'geçersiz işletme gecikme süresi reddedildi');
 ok((await as(SAHIP, `select report_business_delay($1, 15) n`, [personel])).rows[0].n === 2, '3 saat içindeki iki randevuya haber verildi');
+ok((await gRow(aptElle)).business_delay_minutes === null && (await gRow(aptElle)).business_delay_count === 0, 'hesabı olmayan (elle eklenen) müşteri sayılmaz');
 ok((await gRow(aptYakin)).business_delay_minutes === 15 && (await gRow(aptIki)).business_delay_minutes === 15 && (await gRow(aptIki)).business_delay_count === 1, 'işletme gecikmesi kaydedildi');
 for (const id of [aptDort, aptIptal, aptDiger]) ok((await gRow(id)).business_delay_minutes === null, 'kapsam dışı randevu (4 saat sonra, iptal, başka personel) etkilenmedi');
 await expectError(() => as(BASKA_SAHIP, `select report_business_delay($1, 15)`, [personel]), /yetki/i, 'başka işletme gecikme haberi veremez');

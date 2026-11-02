@@ -126,7 +126,7 @@ end;
 $$;
 
 -- İşletme "gecikmemiz var" der (10, 15, 30 veya 45 dakika): o personelin önümüzdeki 3 saat içindeki aktif
--- randevularına, haber sayısı 3'ü geçmemişse. Saatler değişmez. Haber verilen randevu sayısını döndürür.
+-- randevularına (hesabı olmayan, elle eklenen müşteriler hariç), haber sayısı 3'ü geçmemişse. Saatler değişmez. Haber verilen randevu sayısını döndürür.
 create or replace function public.report_business_delay(p_staff_id uuid, p_minutes int)
 returns int
 language plpgsql volatile security definer set search_path = ''
@@ -149,6 +149,7 @@ begin
     where a.staff_id = p_staff_id
       and a.status in ('pending', 'confirmed')
       and a.starts_at >= now() and a.starts_at <= now() + interval '3 hours'
+      and a.customer_id is not null
       and a.business_delay_count < 3
     returning a.id
   )
