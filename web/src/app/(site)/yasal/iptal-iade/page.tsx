@@ -24,7 +24,7 @@ export default function RefundPage() {
         <li>Paketler otomatik yenilenmez; devam etmek istemiyorsanız yeni ödeme yapmamanız yeterlidir. İptal için ayrıca bir işlem gerekmez.</li>
         <li>
           Paket, ödemenin onaylanmasıyla hemen başlar ve elektronik ortamda anında ifa edilir. Bu nedenle ödeme sonrasında paket bedeli
-          <strong> nakit olarak iade edilmez</strong>. Satın almadan önce 2 ay ücretsiz deneme ile tüm Pro özelliklerini deneyebilirsiniz.
+          <strong> nakit olarak iade edilmez</strong>. Satın almadan önce 2 ay ücretsiz deneme ile randevulu işletmeler tüm Pro özelliklerini, vitrin işletmeleri Vitrin paketini deneyebilir.
         </li>
         <li>
           Başka pakete geçtiğinizde yeni paket hemen başlar ve satın aldığınız süre (30 veya 365 gün) kalan sürenizin üzerine eklenir; kalan

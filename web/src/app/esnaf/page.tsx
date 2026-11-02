@@ -871,7 +871,7 @@ function Faq() {
     ],
     [
       "Ücret ne kadar, taahhüt var mı?",
-      "İlk 2 ay ücretsizdir; deneme boyunca Pro paketin tüm özelliklerini kullanırsınız. Paketler aylık (30 gün) veya yıllık (365 gün, 10 ay fiyatına) alınır; taahhüt ve otomatik yenileme yoktur. İstediğiniz zaman paket değiştirebilir veya bırakabilirsiniz. Ödeme PayTR güvencesiyle kartla alınır.",
+      "İlk 2 ay ücretsizdir; deneme boyunca randevulu işletmeler Pro paketin tüm özelliklerini, vitrin işletmeleri Vitrin paketini kullanır. Paketler aylık (30 gün) veya yıllık (365 gün, 10 ay fiyatına) alınır; taahhüt ve otomatik yenileme yoktur. İstediğiniz zaman paket değiştirebilir veya bırakabilirsiniz. Ödeme PayTR güvencesiyle kartla alınır.",
     ],
     [
       "Müşterilerim ücret ödüyor mu?",
