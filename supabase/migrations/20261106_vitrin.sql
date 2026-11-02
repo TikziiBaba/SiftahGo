@@ -146,6 +146,7 @@ declare
   pay public.payments;
   b   public.businesses;
   ref public.businesses;
+  v_plan text;
 begin
   select * into pay from public.payments where merchant_oid = p_merchant_oid for update;
   if not found then raise exception 'Ödeme bulunamadı: %', p_merchant_oid; end if;
@@ -156,23 +157,26 @@ begin
 
   update public.payments set status = 'paid', paid_at = now() where id = pay.id;
   select * into b from public.businesses where id = pay.business_id for update;
-  if b.plan_id is distinct from pay.plan_id and b.subscription_ends_at > now()
+  -- Ödeme sonrası yönetici türü değiştirmişse paket türe uyar: vitrin yalnızca vitrin işletmesinin paketidir.
+  v_plan := case when b.business_type = 'showcase' then 'vitrin'
+                 when pay.plan_id = 'vitrin' then 'baslangic' else pay.plan_id end;
+  if b.plan_id is distinct from v_plan and b.subscription_ends_at > now()
      and b.subscription_ends_at is distinct from b.trial_ends_at then
     update public.businesses
     set subscription_ends_at = now() + (subscription_ends_at - now())
           * ((select p.price from public.plans p where p.id = b.plan_id)
-             / (select p.price from public.plans p where p.id = pay.plan_id))::float8
+             / (select p.price from public.plans p where p.id = v_plan))::float8
     where id = b.id;
   end if;
-  perform public.apply_subscription(pay.business_id, pay.plan_id, case when pay.months = 12 then 365 else 30 end);
+  perform public.apply_subscription(pay.business_id, v_plan, case when pay.months = 12 then 365 else 30 end);
 
   if b.referred_by is not null and b.referral_rewarded_at is null then
     update public.businesses set referral_rewarded_at = now() where id = b.id;
     select * into ref from public.businesses where id = b.referred_by;
     if found then
-      perform public.apply_subscription(b.id, pay.plan_id, 30);
+      perform public.apply_subscription(b.id, v_plan, 30);
       perform public.apply_subscription(ref.id, coalesce(ref.plan_id,
-        case when ref.business_type = 'showcase' then 'vitrin' when pay.plan_id = 'vitrin' then 'baslangic' else pay.plan_id end), 30);
+        case when ref.business_type = 'showcase' then 'vitrin' when v_plan = 'vitrin' then 'baslangic' else v_plan end), 30);
     end if;
   end if;
 end;
@@ -602,6 +606,13 @@ begin
       plan_id = case when plan_id is null then null when p_type = 'showcase' then 'vitrin' else 'baslangic' end
   where id = b.id;
 
+  -- Gece yarısını aşan saatler (vitrinde serbest) randevuda geçersiz: kapanış gün sonuna çekilir.
+  if p_type = 'appointment' then
+    update public.working_hours
+    set open_time = least(open_time, '23:00'), close_time = '23:59'
+    where business_id = b.id and close_time < open_time;
+  end if;
+
   -- Başlangıç 1 personelle sınırlı: fazla aktif personel pasif olur (apply_subscription ile aynı kural, en eskiler kalır).
   if p_type = 'appointment' and b.plan_id is not null then
     update public.staff set is_active = false
@@ -750,17 +761,21 @@ language plpgsql volatile security definer set search_path = ''
 as $$
 declare
   cl     public.coupon_claims;
-  v_name text;
-  v_type text;
+  v_name  text;
+  v_type  text;
+  v_owner uuid;
 begin
   select * into cl from public.coupon_claims where id = p_claim_id and customer_id = auth.uid() for update;
   if not found then raise exception 'Kupon bulunamadı.'; end if;
   if cl.redeemed_at is null then
     raise exception 'Kuponu kasada kullandıktan sonra değerlendirebilirsiniz.';
   end if;
-  select business_type into v_type from public.businesses where id = cl.business_id;
+  select business_type, owner_id into v_type, v_owner from public.businesses where id = cl.business_id;
   if v_type is distinct from 'showcase' then
     raise exception 'Kupon yorumu yalnızca vitrin işletmeleri için; randevunuzu değerlendirin.';
+  end if;
+  if v_owner = auth.uid() then
+    raise exception 'Kendi işletmenizi değerlendiremezsiniz.';
   end if;
   if p_rating is null or p_rating not between 1 and 5 then
     raise exception 'Puan 1 ile 5 arasında olmalı.';
@@ -868,3 +883,32 @@ $$;
 revoke execute on function public.claim_coupon_review_notices(int) from public, anon, authenticated;
 
 commit;
+
+-- ---------------------------------------------------------------------
+-- Vitrinde gece yarısını aşan çalışma saati (ör. 18:00-01:00); randevulu işletme sıkı kalır.
+-- Dakikada bir çalışan haber sorguları için kısmi dizinler.
+-- ---------------------------------------------------------------------
+alter table public.working_hours drop constraint working_hours_check;
+alter table public.working_hours add constraint working_hours_check check (close_time <> open_time);
+
+create function public.enforce_working_hours()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  if new.close_time < new.open_time
+     and (select business_type from public.businesses where id = new.business_id) is distinct from 'showcase' then
+    raise exception 'Kapanış saati açılıştan sonra olmalı.';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger working_hours_check_overnight
+  before insert or update of open_time, close_time on public.working_hours
+  for each row execute function public.enforce_working_hours();
+
+create index reviews_coupon_notice_idx on public.reviews (created_at)
+  where coupon_claim_id is not null and owner_notified_at is null;
+create index coupon_claims_review_request_idx on public.coupon_claims (redeemed_at)
+  where redeemed_at is not null and review_requested_at is null;

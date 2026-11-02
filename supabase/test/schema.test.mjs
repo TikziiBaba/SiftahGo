@@ -1997,6 +1997,44 @@ for (const [who, ref, plan] of [[S1, rb1, 'vitrin'], [S2, rb2, 'baslangic']]) {
 }
 ok((await db.query(`select plan_id from businesses where id = $1`, [rb1])).rows[0].plan_id === 'baslangic', 'vitrin davetiyle gelince randevulu davet edene baslangic ödülü');
 ok((await db.query(`select plan_id from businesses where id = $1`, [rb2])).rows[0].plan_id === 'vitrin', 'randevulu davetiyle gelince vitrin davet edene vitrin ödülü');
+
+// gece yarısını aşan saat: yalnızca vitrinde
+const N1 = '00000000-0000-0000-0000-0000000000aa', N2 = '00000000-0000-0000-0000-0000000000ab', N3 = '00000000-0000-0000-0000-0000000000ac';
+for (const [id, n] of [[N1, 'n1'], [N2, 'n2'], [N3, 'n3']]) await db.exec(`insert into auth.users values ('${id}', '${n}@x.com', '{"full_name":"${n}","role":"business"}')`);
+const nb1 = await mk(N1, 'gece-vitrin', 'showcase'), nb2 = await mk(N2, 'gece-randevulu', 'appointment');
+await as(N1, `update working_hours set open_time = '18:00', close_time = '01:00' where business_id = $1 and weekday = 1`, [nb1]);
+const gece = (await db.query(`select to_char(open_time, 'HH24:MI') o, to_char(close_time, 'HH24:MI') c from working_hours where business_id = $1 and weekday = 1`, [nb1])).rows[0];
+ok(gece.o === '18:00' && gece.c === '01:00', 'vitrin işletmesi gece yarısını aşan saat kaydeder');
+await expectError(() => as(N1, `update working_hours set open_time = '10:00', close_time = '10:00' where business_id = $1 and weekday = 2`, [nb1]), /working_hours_check/, 'vitrinde eşit açılış ve kapanış reddedilir');
+await expectError(() => as(N2, `update working_hours set open_time = '18:00', close_time = '01:00' where business_id = $1 and weekday = 1`, [nb2]), /Kapanış saati/, 'randevulu işletmede kapanış açılıştan önce olamaz');
+await expectError(() => as(N2, `update working_hours set open_time = '10:00', close_time = '10:00' where business_id = $1 and weekday = 1`, [nb2]), /working_hours_check/, 'randevulu işletmede eşit saat reddedilir');
+await as(ADM, `select admin_set_business_type($1, 'appointment')`, [nb1]);
+const gece2 = (await db.query(`select to_char(open_time, 'HH24:MI') o, to_char(close_time, 'HH24:MI') c from working_hours where business_id = $1 and weekday = 1`, [nb1])).rows[0];
+ok(gece2.o === '18:00' && gece2.c === '23:59', 'randevuluya çevirmede gece yarısını aşan kapanış 23:59 olur');
+await as(ADM, `select admin_set_business_type($1, 'showcase')`, [nb1]);
+
+// ödemeden sonra tür değişirse paket türe uyar
+await db.query(`update businesses set approval_status = 'approved', plan_id = 'pro', subscription_ends_at = now() + interval '20 days' where id = $1`, [nb2]);
+const payA = (await as(N2, `select * from create_payment('esnaf')`)).rows[0];
+await as(ADM, `select admin_set_business_type($1, 'showcase')`, [nb2]);
+await db.query(`select activate_subscription($1, $2)`, [payA.merchant_oid, payA.amount]);
+ok((await db.query(`select plan_id from businesses where id = $1`, [nb2])).rows[0].plan_id === 'vitrin', 'randevulu ödemesi sonrası vitrine çevrilen işletme vitrin paketinde kalır');
+await db.query(`update businesses set approval_status = 'approved', plan_id = 'vitrin', subscription_ends_at = now() + interval '20 days' where id = $1`, [nb1]);
+const payB = (await as(N1, `select * from create_payment('vitrin')`)).rows[0];
+await as(ADM, `select admin_set_business_type($1, 'appointment')`, [nb1]);
+await db.query(`select activate_subscription($1, $2)`, [payB.merchant_oid, payB.amount]);
+ok((await db.query(`select plan_id from businesses where id = $1`, [nb1])).rows[0].plan_id === 'baslangic', 'vitrin ödemesi sonrası randevuluya çevrilen işletme baslangic olur');
+await as(ADM, `select admin_set_business_type($1, 'showcase')`, [nb1]);
+
+// sahibi kendi işletmesinin kuponunu değerlendiremez
+await db.query(`update businesses set approval_status = 'approved', plan_id = 'vitrin', subscription_ends_at = now() + interval '1 year' where id = $1`, [nb1]);
+const kn2 = await kup(N1, 'Kendi kuponum 2');
+const ownClaim = (await db.query(`insert into coupon_claims (coupon_id, business_id, customer_id, code, redeemed_at) values ($1, $2, $3, '999999', now()) returning id`, [kn2, nb1, N1])).rows[0].id;
+await expectError(() => review(N1, ownClaim), /Kendi işletmenizi/, 'işletme sahibi kendi kuponunu değerlendiremez');
+
+// dakikada bir çalışan sorgular için kısmi dizinler
+const idx = (await db.query(`select indexname from pg_indexes where schemaname = 'public' and indexname in ('reviews_coupon_notice_idx', 'coupon_claims_review_request_idx')`)).rows;
+ok(idx.length === 2, 'kupon haberi sorguları için kısmi dizinler var');
 }
 
 console.log(failures ? `\n${failures} TEST BAŞARISIZ` : '\nTÜM TESTLER GEÇTİ');
