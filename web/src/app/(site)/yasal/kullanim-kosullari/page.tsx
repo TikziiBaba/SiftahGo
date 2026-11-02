@@ -76,45 +76,52 @@ export default function TermsPage() {
         </li>
       </ul>
 
-      <h2>7. İçerik ve değerlendirmeler</h2>
+      <h2>7. Kuponlar</h2>
+      <ul>
+        <li>Kuponu İşletme hazırlar. İndirimi İşletme kendi yerinde, hizmet sırasında uygular.</li>
+        <li>{SITE_NAME} kupon için ödeme almaz ve indirimi kendisi uygulamaz.</li>
+        <li>Kuponun şartlarına uygun olarak yerine getirilmesinden İşletme sorumludur.</li>
+      </ul>
+
+      <h2>8. İçerik ve değerlendirmeler</h2>
       <p>
         {SITE_NAME}; hukuka, bu koşullara veya genel ahlaka aykırı sayfa, görsel ve yorumları kaldırabilir. Gerçek bir randevuya dayanan
         değerlendirmeler İşletme’nin isteğiyle silinmez; İşletme değerlendirmeye cevap yazabilir.
       </p>
 
-      <h2>8. Askıya alma ve fesih</h2>
+      <h2>9. Askıya alma ve fesih</h2>
       <p>
         Bu koşullara aykırı davranan, sahte randevu oluşturan, Platform’un çalışmasını bozmaya çalışan veya başkalarının haklarını ihlal eden
         hesaplar uyarılmadan askıya alınabilir veya kapatılabilir. Kullanıcı hesabını dilediği zaman kapatabilir.
       </p>
 
-      <h2>9. Sorumluluk</h2>
+      <h2>10. Sorumluluk</h2>
       <p>
         {SITE_NAME}, Platform’un kesintisiz ve hatasız çalışması için makul özeni gösterir; ancak bakım, altyapı sağlayıcılarından kaynaklanan arızalar
         veya mücbir sebeplerle oluşan kesintilerden doğan dolaylı zararlardan sorumlu değildir. İşletme ile Müşteri arasındaki hizmetten doğan
         uyuşmazlıklarda taraflar birbirine karşı sorumludur. Kanunen sınırlandırılamayan sorumluluklar saklıdır.
       </p>
 
-      <h2>10. Fikri haklar</h2>
+      <h2>11. Fikri haklar</h2>
       <p>
         Platform’un yazılımı, tasarımı ve {SITE_NAME} markası Platform işleticisine ({COMPANY.name}) aittir. İşletmeler yükledikleri içeriğin sahibi olarak kalır ve bu içeriğin
         Platform’da ve tanıtımında gösterilmesine izin verir.
       </p>
 
-      <h2>11. Değişiklikler</h2>
+      <h2>12. Değişiklikler</h2>
       <p>
         Bu koşullar güncellenebilir. Güncel metin bu sayfada yayımlanır; önemli değişiklikler hesaplı kullanıcılara e-posta veya uygulama bildirimiyle
         duyurulur. Değişiklikten sonra Platform’u kullanmaya devam etmek, yeni koşulların kabulü anlamına gelir.
       </p>
 
-      <h2>12. Uygulanacak hukuk ve uyuşmazlıklar</h2>
+      <h2>13. Uygulanacak hukuk ve uyuşmazlıklar</h2>
       <p>
         Bu koşullara Türkiye Cumhuriyeti hukuku uygulanır. Tüketici sıfatıyla yapılan başvurularda, parasal sınırlar içinde yerleşim yerinizdeki
         Tüketici Hakem Heyeti, sınırı aşan uyuşmazlıklarda Tüketici Mahkemeleri yetkilidir. Diğer uyuşmazlıklarda Platform işleticisinin yerleşim yeri
         mahkemeleri ve icra daireleri yetkilidir.
       </p>
 
-      <h2>13. İletişim</h2>
+      <h2>14. İletişim</h2>
       <p>
         {COMPANY.name} · {COMPANY.address} · <a href={`mailto:${COMPANY.email}`}>{COMPANY.email}</a> · {COMPANY.phone}
       </p>
