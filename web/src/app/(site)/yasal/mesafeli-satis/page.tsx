@@ -28,7 +28,7 @@ export default function DistanceSalesPage() {
       <h3>3. Hizmetin temel nitelikleri</h3>
       <ul>
         <li>
-          <strong>Paket:</strong> İşletme sayfasının yayında kalması, online randevu alınması ve paket içeriğindeki özelliklerin (personel sayısı,
+          <strong>Paket:</strong> İşletme sayfasının yayında kalması, randevulu paketlerde online randevu alınması ve paket içeriğindeki özelliklerin (personel sayısı,
           müşteri defteri, raporlar, sayfa özelleştirme vb.) seçilen dönem boyunca (aylık pakette 30 gün, yıllık pakette 365 gün)
           kullanılması. Paket içerikleri ve fiyatları{" "}
           <Link href="/esnaf#fiyatlar">Fiyatlar</Link> bölümünde ve panelin Abonelik sayfasında yazılıdır.
@@ -97,6 +97,7 @@ export default function DistanceSalesPage() {
         Alıcı, ödeme sırasında verdiği bilgilerin doğru olduğunu ve kullandığı kartın kendisine ait olduğunu veya kart sahibinin onayıyla
         kullandığını kabul eder. Kartın yetkisiz kullanımı nedeniyle bankanın ödemeyi geri alması halinde ilgili paket geri alınır.
       </p>
+      <h3>Madde 6/A · Kuponlar</h3>
       <p>
         Kuponu İşletme hazırlar, indirimi İşletme uygular ve indirimli tutarı İşletme tahsil eder. Kuponun şartlarına uygun olarak yerine
         getirilmesinden İşletme sorumludur; Satıcı bunun için ödeme almaz.

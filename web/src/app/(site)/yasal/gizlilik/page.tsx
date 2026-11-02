@@ -27,7 +27,7 @@ export default function PrivacyPage() {
       <ul>
         <li><strong>Kimlik ve iletişim:</strong> ad soyad, telefon ve hesabınızın e-posta adresi (randevu bildirimleri yalnızca bu adrese gider).</li>
         <li><strong>Randevu bilgileri:</strong> işletme, hizmet, personel, tarih ve saat, randevu notu, randevunun durumu (onay, iptal, gelmeme) ve iptal edenin kim olduğu.</li>
-        <li><strong>Değerlendirmeler:</strong> puanınız, yorumunuz ve randevuda yazdığınız ad.</li>
+        <li><strong>Değerlendirmeler:</strong> puanınız, yorumunuz ve randevuda veya kupon kullanırken yazdığınız ad.</li>
         <li><strong>Favoriler ve bekleme listesi:</strong> favorilere eklediğiniz işletmeler; bekleme listesine yazıldığınız işletme ve gün.</li>
         <li>
           <strong>İşletmenin tuttuğu kayıtlar:</strong> randevu aldığınız işletmenin sizin hakkınızda yazdığı not ve size sattığı seans paketi
@@ -82,7 +82,7 @@ export default function PrivacyPage() {
           bu engeli kaldırabilir. <em>Hukuki sebep: veri sorumlusunun ve işletmelerin meşru menfaati (m. 5/2-f).</em>
         </li>
         <li>
-          Randevudan sonra “Hizmet nasıldı?” değerlendirme isteği gönderilmesi ve değerlendirmelerin işletme sayfasında yayımlanması.
+          Randevudan (vitrin işletmelerinde kupon kullanımından) sonra “Hizmet nasıldı?” değerlendirme isteği gönderilmesi ve değerlendirmelerin işletme sayfasında yayımlanması.
           Vitrin işletmelerinde değerlendirme randevuya değil, kullanılmış bir kupona bağlıdır.
           <em> Hukuki sebep: meşru menfaat (m. 5/2-f) ve verinin ilgili kişinin kendisi tarafından alenileştirilmesi (m. 5/2-d).</em>
         </li>
