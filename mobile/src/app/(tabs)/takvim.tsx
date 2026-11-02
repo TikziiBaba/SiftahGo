@@ -5,6 +5,7 @@ import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-nat
 
 import { AppointmentSheet, FlaggedNote, type AgendaRow } from '@/components/appointment-sheet';
 import { Glow } from '@/components/brand';
+import { BusinessDelayButton, delayLabel } from '@/components/delay-actions';
 import { InboxBell } from '@/components/inbox-bell';
 import { RevealCell } from '@/components/motion';
 import { CalendarSheet } from '@/components/pickers';
@@ -67,7 +68,8 @@ function Agenda({ business }: { business: Business }) {
   const [rows, setRows] = useState<{ day: string; list: AgendaRow[]; hours: WorkingHour | null; off: Interval[] } | null>(null);
   const [showCancelled, setShowCancelled] = useState(false);
   const [pending, setPending] = useState<AgendaRow[]>([]);
-  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [staff, setStaff] = useState<{ id: string; name: string }[]>([]);
+  const [counts, setCounts]= useState<Record<string, number>>({});
   const [refreshing, setRefreshing] = useState(false);
   const [selected, setSelected] = useState<AgendaRow | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -79,7 +81,7 @@ function Agenda({ business }: { business: Business }) {
 
   const load = useCallback(async () => {
     const { from, to } = dayBounds(day);
-    const [a, p, w, h, off] = await Promise.all([
+    const [a, p, w, h, off, st] = await Promise.all([
       supabase.from('appointments').select('*, staff(name)').eq('business_id', business.id).gte('starts_at', from).lt('starts_at', to).order('starts_at'),
       supabase
         .from('appointments')
@@ -100,7 +102,9 @@ function Agenda({ business }: { business: Business }) {
       supabase.from('working_hours').select('*').eq('business_id', business.id).eq('weekday', isoWeekday(day)).maybeSingle(),
       // Personele özel izinde diğer personel çalışır; yalnızca tüm işletmenin izni boş sayılmaz.
       supabase.from('time_off').select('starts_at, ends_at').eq('business_id', business.id).is('staff_id', null).lt('starts_at', to).gt('ends_at', from),
+      supabase.from('staff').select('id, name').eq('business_id', business.id).eq('is_active', true).order('sort_order').order('created_at'),
     ]);
+    setStaff((st.data ?? []) as { id: string; name: string }[]);
     const perDay: Record<string, number> = {};
     for (const r of (w.data ?? []) as { starts_at: string }[]) perDay[dayOf(r.starts_at)] = (perDay[dayOf(r.starts_at)] ?? 0) + 1;
     setRows({ day, list: (a.data ?? []) as AgendaRow[], hours: h.data as WorkingHour | null, off: (off.data ?? []) as Interval[] });
@@ -224,6 +228,14 @@ function Agenda({ business }: { business: Business }) {
           {item.staff ? ` · ${item.staff.name}` : ''} · {formatPrice(item.price)}
         </Text>
         <FlaggedNote row={item} />
+        {delayLabel(item) ? (
+          <View style={styles.rowCenter}>
+            <Ionicons name="time-outline" size={13} color={colors.warning} />
+            <Text variant="caption" tone="warning" numberOfLines={1} style={{ flex: 1 }}>
+              {delayLabel(item)}
+            </Text>
+          </View>
+        ) : null}
         {item.note ? (
           <Text variant="caption" tone="secondary" numberOfLines={1} style={{ fontStyle: 'italic' }}>
             “{item.note}”
@@ -337,6 +349,13 @@ function Agenda({ business }: { business: Business }) {
             )}
 
             <SectionTitle title={active.length ? `Randevular · ${active.length}` : 'Randevular'} />
+            {day === today && staff.length > 0 && (
+              <View style={styles.wrap}>
+                {staff.map((m) => (
+                  <BusinessDelayButton key={m.id} staff={m} onDone={load} />
+                ))}
+              </View>
+            )}
           </View>
         }
         ListEmptyComponent={

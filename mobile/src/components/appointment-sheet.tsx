@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useState } from 'react';
 import { Alert, Linking, View } from 'react-native';
 
+import { delayLabel } from '@/components/delay-actions';
 import { ReschedulePicker } from '@/components/reschedule-picker';
 import { Sheet } from '@/components/sheet';
 import { Badge, Banner, Button, Card, Chip, Field, StatusBadge, styles, SwitchRow, Text } from '@/components/ui';
@@ -162,7 +163,10 @@ export function AppointmentSheet({
       )}
       {a && !moving && (
         <>
-          <StatusBadge status={a.status} />
+          <View style={styles.wrap}>
+            <StatusBadge status={a.status} />
+            {delayLabel(a) ? <Badge label={delayLabel(a)!} icon="time-outline" fg={colors.warning} bg={colors.warningTint} /> : null}
+          </View>
           {a.customer_flagged && (
             <Banner
               tone="danger"

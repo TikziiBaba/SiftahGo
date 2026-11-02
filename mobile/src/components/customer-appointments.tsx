@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useState } from 'react';
 import { FlatList, Linking, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { Glow } from '@/components/brand';
+import { CustomerLateButton, delayLabel } from '@/components/delay-actions';
 import { HoldButton } from '@/components/hold-button';
 import { InboxBell } from '@/components/inbox-bell';
 import { RevealCell } from '@/components/motion';
@@ -146,6 +147,7 @@ export function CustomerAppointments({ userId, header = true }: { userId: string
             onCancel={() => cancel(item)}
             onReschedule={() => setMoving(item)}
             onReview={() => setReviewing(item)}
+            onLate={load}
           />
         )}
       />
@@ -186,6 +188,7 @@ function AppointmentCard({
   onCancel,
   onReschedule,
   onReview,
+  onLate,
 }: {
   item: Row;
   upcoming: boolean;
@@ -193,6 +196,7 @@ function AppointmentCard({
   onCancel: () => unknown;
   onReschedule: () => void;
   onReview: () => void;
+  onLate: () => void;
 }) {
   const b = item.businesses;
   const d = shortDay(dayOf(item.starts_at));
@@ -228,12 +232,13 @@ function AppointmentCard({
             {item.service_name}
             {Number(item.price) > 0 ? ` · ${formatPrice(item.price)}` : ''}
           </Text>
-          <View style={{ marginTop: 2 }}>
+          <View style={[styles.wrap, { marginTop: 2 }]}>
             {item.rejected ? (
               <Badge label="Onaylanmadı" icon={STATUS.cancelled.icon} fg={STATUS.cancelled.fg} bg={STATUS.cancelled.bg} />
             ) : (
               <StatusBadge status={item.status} />
             )}
+            {delayLabel(item, 'customer') ? <Badge label={delayLabel(item, 'customer')!} icon="time-outline" fg={colors.warning} bg={colors.warningTint} /> : null}
           </View>
         </View>
       </Pressable>
@@ -254,6 +259,7 @@ function AppointmentCard({
               ) : null}
             </View>
           ) : null}
+          <CustomerLateButton appointment={item} onDone={onLate} />
           <View style={{ flexDirection: 'row', gap: 8 }}>
             {item.service_id ? (
               <Button title="Saati değiştir" icon="time-outline" variant="secondary" size="sm" style={{ flex: 1 }} onPress={onReschedule} />
