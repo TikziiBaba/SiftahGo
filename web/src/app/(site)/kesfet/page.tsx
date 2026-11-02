@@ -86,7 +86,7 @@ async function findBusinesses({ q, category, city, today, sort }: Filters) {
   });
   let query = supabase
     .from("businesses")
-    .select("id, slug, name, category, city, district, logo_url, cover_url, rating_avg, rating_count")
+    .select("id, slug, name, category, city, district, logo_url, cover_url, rating_avg, rating_count, business_type")
     .eq("is_published", true)
     .order(sort === "yeni" ? "created_at" : sort === "yorum" ? "rating_count" : "rating_score", { ascending: false })
     .order("created_at", { ascending: false })

@@ -44,6 +44,12 @@ export function NearbyResults({
           p_query: query.replace(/[%_\\]/g, "") || null,
         });
         let rows = (data ?? []) as Nearby[];
+        // nearby_businesses işletme türünü vermez: vitrin kartı "Menüyü gör" yazsın diye ayrıca okunur.
+        if (!error && rows.length) {
+          const { data: types } = await supabase.from("businesses").select("id, business_type").in("id", rows.map((r) => r.id));
+          const showcase = new Set((types ?? []).filter((t) => t.business_type === "showcase").map((t) => t.id as string));
+          rows = rows.map((r) => (showcase.has(r.id) ? { ...r, business_type: "showcase" as const } : r));
+        }
         if (!error && today && rows.length) {
           const { data: open } = await supabase.rpc("available_today", { p_ids: rows.map((r) => r.id) });
           const ids = new Set((open ?? []) as string[]);

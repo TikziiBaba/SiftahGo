@@ -242,7 +242,7 @@ function HeroVisual() {
 /* ------------------------------------------------------------------ */
 /* Raflar: bugün boş saati olanlar ve yeni katılanlar (her ziyarette farklı) */
 /* ------------------------------------------------------------------ */
-const CARD_FIELDS = "id, slug, name, category, city, district, logo_url, cover_url, rating_avg, rating_count";
+const CARD_FIELDS = "id, slug, name, category, city, district, logo_url, cover_url, rating_avg, rating_count, business_type";
 
 async function getShelves(): Promise<{ today: BusinessCardData[]; newest: BusinessCardData[] }> {
   "use cache";
@@ -385,7 +385,7 @@ async function getFeatured(): Promise<BusinessCardData[]> {
   try {
     const { data } = await createSupabase(url, key)
       .from("businesses")
-      .select("id, slug, name, category, city, district, logo_url, cover_url, rating_avg, rating_count")
+      .select(CARD_FIELDS)
       .eq("is_published", true)
       .order("rating_score", { ascending: false })
       .order("created_at", { ascending: false })

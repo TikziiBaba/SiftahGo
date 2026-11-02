@@ -29,6 +29,7 @@ export function ShopShortcuts({
   whatsapp,
   instagram,
   website,
+  showcase = false,
 }: {
   businessId: string;
   slug: string;
@@ -38,6 +39,8 @@ export function ShopShortcuts({
   whatsapp: string;
   instagram: string;
   website: string;
+  /** Randevusuz işletme: "Randevu al" düğmesi yok. */
+  showcase?: boolean;
 }) {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
@@ -89,9 +92,11 @@ export function ShopShortcuts({
   return (
     // Telefonda tek satırda yana kayar, geniş ekranda alt satıra iner.
     <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
-      <a href="#randevu" className="btn btn-primary shrink-0 py-2 lg:hidden">
-        <CalendarCheck className="size-4" /> Randevu al
-      </a>
+      {!showcase && (
+        <a href="#randevu" className="btn btn-primary shrink-0 py-2 lg:hidden">
+          <CalendarCheck className="size-4" /> Randevu al
+        </a>
+      )}
       {items.map((s) => (
         <a
           key={s.label}

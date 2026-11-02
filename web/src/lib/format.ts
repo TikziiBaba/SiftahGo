@@ -19,6 +19,38 @@ export function isoWeekday(day: string) {
   return w === 0 ? 7 : w;
 }
 
+const WEEKDAY_NO: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
+const minutes = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+
+/**
+ * İşletme şu an açık mı; açıksa kapanış saati ("HH:mm"). Kapanış açılıştan önce ya da eşitse saat gece yarısını
+ * aşar: o gün açılır, ertesi günün sabahına kadar sürer (gece 01.00'e kadar açık gibi).
+ */
+export function isOpenNow(
+  hours: { weekday: number; is_open: boolean; open_time: string; close_time: string }[],
+  timezone = TZ,
+  at = new Date(),
+): { open: boolean; until: string | null } {
+  const p = new Intl.DateTimeFormat("en-US", { timeZone: timezone, weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(at);
+  const part = (t: string) => p.find((x) => x.type === t)?.value ?? "";
+  const day = WEEKDAY_NO[part("weekday")];
+  const now = Number(part("hour")) * 60 + Number(part("minute"));
+  const row = (d: number) => hours.find((h) => h.weekday === d && h.is_open);
+
+  const today = row(day);
+  if (today) {
+    const start = minutes(today.open_time);
+    const end = minutes(today.close_time);
+    if (end > start ? now >= start && now < end : now >= start) return { open: true, until: today.close_time.slice(0, 5) };
+  }
+  // Dünden taşan gece saati
+  const yesterday = row(day === 1 ? 7 : day - 1);
+  if (yesterday && minutes(yesterday.close_time) <= minutes(yesterday.open_time) && now < minutes(yesterday.close_time)) {
+    return { open: true, until: yesterday.close_time.slice(0, 5) };
+  }
+  return { open: false, until: null };
+}
+
 /** Gün + "HH:mm" -> ISO zaman damgası */
 export function toIso(day: string, time: string) {
   return new Date(`${day}T${time.slice(0, 5)}:00${OFFSET}`).toISOString();

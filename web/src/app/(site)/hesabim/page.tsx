@@ -27,6 +27,7 @@ import { CookieSettingsButton } from "@/components/cookie-consent";
 import { CustomerLateButton, delayLabel } from "@/components/delay-actions";
 import { formatMoney } from "@/lib/coupons";
 import { MyCoupons } from "@/components/my-coupons";
+import { ReviewForm } from "@/components/review-form";
 import { HoldButton } from "@/components/hold-button";
 import { RescheduleDialog } from "@/components/reschedule-dialog";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
@@ -437,7 +438,7 @@ function AppointmentCard({
       )}
       {reviewing && (
         <ReviewForm
-          appointmentId={row.id}
+          submit={(rating, comment) => createClient().rpc("add_review", { p_appointment_id: row.id, p_rating: rating, p_comment: comment })}
           onDone={() => {
             setReviewing(false);
             onReviewed?.();
@@ -445,40 +446,6 @@ function AppointmentCard({
         />
       )}
     </li>
-  );
-}
-
-function ReviewForm({ appointmentId, onDone }: { appointmentId: string; onDone: () => void }) {
-  const [rating, setRating] = useState(0);
-  const [comment, setComment] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!rating) return setError("Lütfen puan verin.");
-    setBusy(true);
-    const { error } = await createClient().rpc("add_review", { p_appointment_id: appointmentId, p_rating: rating, p_comment: comment });
-    setBusy(false);
-    if (error) return setError(errorMessage(error));
-    onDone();
-  }
-
-  return (
-    <form onSubmit={submit} className="mt-4 space-y-3 border-t border-line pt-4">
-      <div className="flex gap-1" role="radiogroup" aria-label="Puan">
-        {[1, 2, 3, 4, 5].map((i) => (
-          <button key={i} type="button" role="radio" aria-checked={rating === i} aria-label={`${i} yıldız`} onClick={() => setRating(i)}>
-            <Star className={`size-7 ${i <= rating ? "fill-amber-400 text-amber-400" : "text-ink-3"}`} />
-          </button>
-        ))}
-      </div>
-      <textarea rows={2} maxLength={1000} className="input" placeholder="Deneyiminizi kısaca anlatın (isteğe bağlı)" value={comment} onChange={(e) => setComment(e.target.value)} />
-      {error && <p className="text-sm text-bad">{error}</p>}
-      <button disabled={busy} className="btn btn-primary">
-        {busy && <Loader2 className="size-4 animate-spin" />} Gönder
-      </button>
-    </form>
   );
 }
 

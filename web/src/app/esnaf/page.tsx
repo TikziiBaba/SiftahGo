@@ -24,6 +24,7 @@ import {
   BASE_FEATURES,
   CATEGORIES,
   PLAN_FEATURES,
+  SHOWCASE_BASE_FEATURES,
   SITE_DOMAIN,
 } from "@/lib/constants";
 import { formatPrice } from "@/lib/format";
@@ -50,6 +51,7 @@ export default function BusinessHome() {
         <Audiences />
         <Suspense fallback={<div className="h-[40rem]" />}>
           <Pricing />
+          <ShowcasePlan />
         </Suspense>
         <Facts />
         <Suspense fallback={<div className="h-[36rem]" />}>
@@ -669,7 +671,8 @@ async function getPlans(): Promise<Plan[]> {
 }
 
 async function Pricing() {
-  const plans = await getPlans();
+  // Vitrin paketi randevusuz işletmelerindir; aşağıdaki ayrı bölümde anlatılır.
+  const plans = (await getPlans()).filter((p) => p.id !== "vitrin");
   if (plans.length === 0) return null;
   return (
     <section className="mx-auto max-w-6xl px-4 py-28 md:py-36">
@@ -728,7 +731,7 @@ async function Pricing() {
                         {f}
                       </li>
                     ))}
-                    {Object.entries(PLAN_FEATURES).map(([k, label]) => {
+                    {Object.entries(PLAN_FEATURES).filter(([k]) => k !== "menu").map(([k, label]) => {
                       const on = plan.features.includes(k);
                       return (
                         <li
@@ -762,6 +765,55 @@ async function Pricing() {
           );
         })}
       </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Randevusuz işletmeler için Vitrin paketi                              */
+/* ------------------------------------------------------------------ */
+async function ShowcasePlan() {
+  const plan = (await getPlans()).find((p) => p.id === "vitrin");
+  if (!plan) return null;
+  return (
+    <section className="mx-auto max-w-6xl px-4 pb-28">
+      <Reveal>
+        <GlowCard className="bezel">
+          <div className="bezel-core relative grid gap-8 overflow-hidden p-7 md:grid-cols-2 md:p-10">
+            <div className="absolute -right-16 -top-16 size-56 rounded-full bg-brand-400/20 blur-3xl" />
+            <div className="relative">
+              <span className="eyebrow">Vitrin paketi</span>
+              <h2 className="mt-5 text-3xl font-semibold leading-tight tracking-[-0.03em] md:text-4xl">
+                Randevuyla çalışmıyor musunuz?
+              </h2>
+              <p className="mt-4 leading-relaxed text-ink-2">
+                Lokanta, kafe, fırın, market ya da mağaza: menünüzü ve ürünlerinizi sayfanızda gösterin, kupon tanımlayın,
+                müşteriniz kodu kasada göstersin. Randevu sistemi olmadan, yalnızca ihtiyacınız olan kadar.
+              </p>
+              <p className="mt-6">
+                <span className="text-5xl font-semibold tracking-tighter">{formatPrice(plan.price)}</span>
+                <span className="text-ink-3"> / ay</span>
+              </p>
+              <p className="mt-1 text-sm text-ink-3">İlk 2 ay ücretsiz, taahhüt yok.</p>
+            </div>
+            <div className="relative flex flex-col">
+              <ul className="flex-1 space-y-3 text-sm">
+                {[...SHOWCASE_BASE_FEATURES, ...plan.features.filter((k) => k !== "menu").flatMap((k) => PLAN_FEATURES[k] ?? [])].map((f) => (
+                  <li key={f} className="flex gap-2.5 text-ink-2">
+                    <Check className="mt-0.5 size-4 shrink-0 text-brand-300" /> {f}
+                  </li>
+                ))}
+              </ul>
+              <Link href="/kayit?rol=isletme" className="group btn btn-primary relative mt-8 w-full py-2 pl-5 pr-1.5">
+                <span className="flex-1 text-center">Vitrin ile başla</span>
+                <span className="btn-icon">
+                  <ArrowUpRight className="size-4" />
+                </span>
+              </Link>
+            </div>
+          </div>
+        </GlowCard>
+      </Reveal>
     </section>
   );
 }

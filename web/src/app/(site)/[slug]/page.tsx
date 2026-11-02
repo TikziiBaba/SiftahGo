@@ -11,10 +11,11 @@ import { SiteFooter, SiteHeader } from "@/components/site-header";
 import { BookingWidget } from "@/components/booking-widget";
 import { Morph } from "@/components/business-card";
 import { ShopCoupons } from "@/components/shop-coupons";
+import { ShowcasePage } from "@/components/showcase-page";
 import { ShopShortcuts } from "@/components/shop-shortcuts";
 import { TrackRecent } from "@/components/track-recent";
 import { createClient } from "@/lib/supabase/server";
-import { accentVars, categoryLabel, isSubscribed, SITE_NAME, SITE_URL, WEEKDAYS } from "@/lib/constants";
+import { accentVars, categoryLabel, isShowcase, isSubscribed, menuLabel, SITE_NAME, SITE_URL, WEEKDAYS } from "@/lib/constants";
 import { formatDate, isoWeekday, todayStr } from "@/lib/format";
 import type { Business, Review, Service, Staff, StaffService, WorkingHour } from "@/lib/types";
 
@@ -86,10 +87,10 @@ async function getBusinessMeta(slug: string) {
   cacheLife("minutes");
   const { data } = await publicClient()
     .from("businesses")
-    .select("slug, name, category, description, district, city, cover_url, logo_url")
+    .select("slug, name, category, description, district, city, cover_url, logo_url, business_type")
     .eq("slug", slug)
     .maybeSingle();
-  return data as Pick<Business, "slug" | "name" | "category" | "description" | "district" | "city" | "cover_url" | "logo_url"> | null;
+  return data as Pick<Business, "slug" | "name" | "category" | "description" | "district" | "city" | "cover_url" | "logo_url" | "business_type"> | null;
 }
 
 // Herkese açık değilse (yayında değil, onay bekliyor, askıda) sahibi ve yönetici kendi oturumuyla görür.
@@ -112,11 +113,15 @@ export async function generateMetadata({ params }: PageProps<"/[slug]">): Promis
   const business = await getBusinessMeta((await params).slug);
   if (!business) return { title: "İşletme sayfası", robots: { index: false } };
   const place = [business.district, business.city].filter(Boolean).join(", ");
-  const title = `${business.name} — Online Randevu`;
+  const showcase = isShowcase(business);
+  const title = showcase ? `${business.name} — ${menuLabel(business.category)} ve Kuponlar` : `${business.name} — Online Randevu`;
   // Aramada "şehir + kategori" yazanlara görünmek için açıklama yoksa bunlarla kurulur.
+  const kind = categoryLabel(business.category).toLocaleLowerCase("tr");
   const description =
     business.description ||
-    `${business.name}${place ? ` (${place})` : ""} ${categoryLabel(business.category).toLocaleLowerCase("tr")} için online randevu alın.`;
+    (showcase
+      ? `${business.name}${place ? ` (${place})` : ""} ${kind}: ${menuLabel(business.category).toLocaleLowerCase("tr")}, çalışma saatleri, yol tarifi ve kuponlar.`
+      : `${business.name}${place ? ` (${place})` : ""} ${kind} için online randevu alın.`);
   const image = business.cover_url ?? business.logo_url;
   return {
     title,
@@ -157,6 +162,15 @@ export default function BusinessPage({ params }: PageProps<"/[slug]">) {
   );
 }
 
+// Google'a işletmenin türü: randevulu işletme LocalBusiness; vitrinde kategoriye göre (lokanta ve kafe Restaurant).
+function schemaType(b: Pick<Business, "business_type" | "category">) {
+  if (!isShowcase(b)) return "LocalBusiness";
+  if (b.category === "lokanta" || b.category === "kafe") return "Restaurant";
+  if (b.category === "firin") return "Bakery";
+  if (b.category === "market") return "GroceryStore";
+  return "Store";
+}
+
 async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"] }) {
   // Hizmetler, saatler ve yorumlar hazır sayfaya gömülmesin (getPublicBusiness).
   await connection();
@@ -176,7 +190,7 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
   // Google'ın işletmeyi tanıması için yapısal veri (adres, telefon, saatler, puan).
   const jsonLd = {
     "@context": "https://schema.org",
-    "@type": "LocalBusiness",
+    "@type": schemaType(business),
     name: business.name,
     url: `${SITE_URL}/${business.slug}`,
     description: business.description || undefined,
@@ -205,6 +219,11 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
         ? { "@type": "AggregateRating", ratingValue: Number(business.rating_avg).toFixed(1), reviewCount: business.rating_count }
         : undefined,
   };
+
+  // Randevusuz işletme: menü ve kuponlu ayrı sayfa, randevu kutusu yok.
+  if (isShowcase(business)) {
+    return <ShowcasePage business={business} reviews={reviewList} hours={hourList} features={features} jsonLd={jsonLd} />;
+  }
 
   return (
     <main className="w-full" style={accentVars(accent, { light: true })}>

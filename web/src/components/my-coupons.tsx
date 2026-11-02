@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { Ticket } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Star, Ticket } from "lucide-react";
+import { ReviewForm } from "@/components/review-form";
 import { formatCouponWhen, formatDiscount } from "@/lib/coupons";
 import { createClient } from "@/lib/supabase/client";
 import { errorMessage } from "@/lib/format";
@@ -20,15 +21,33 @@ const STATE: Record<MyCoupon["state"], string> = {
 export function MyCoupons() {
   const [list, setList] = useState<MyCoupon[] | null>(null);
   const [error, setError] = useState("");
+  // Kasada kullanılan vitrin kuponları ve henüz değerlendirilmemiş olanlar (Değerlendir düğmesi için).
+  const [showcaseIds, setShowcaseIds] = useState<Set<string>>(new Set());
+  const [reviewed, setReviewed] = useState<Set<string>>(new Set());
+  const [reviewing, setReviewing] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("my_coupons");
+    if (error) setError(errorMessage(error));
+    const rows = (data ?? []) as MyCoupon[];
+    // Kupon yorumu yalnızca vitrin işletmelerinde yazılır. my_coupons işletme türünü vermez; ayrıca okunur.
+    const used = rows.filter((c) => c.state === "used" && c.redeemed_at);
+    if (used.length) {
+      const [biz, rev] = await Promise.all([
+        supabase.from("businesses").select("id").eq("business_type", "showcase").in("id", [...new Set(used.map((c) => c.business_id))]),
+        supabase.from("reviews").select("coupon_claim_id").in("coupon_claim_id", used.map((c) => c.claim_id)),
+      ]);
+      setShowcaseIds(new Set((biz.data ?? []).map((b) => b.id as string)));
+      setReviewed(new Set((rev.data ?? []).map((r) => r.coupon_claim_id as string)));
+    }
+    setList(rows);
+  }, []);
 
   useEffect(() => {
-    createClient()
-      .rpc("my_coupons")
-      .then(({ data, error }) => {
-        if (error) setError(errorMessage(error));
-        setList((data ?? []) as MyCoupon[]);
-      });
-  }, []);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- kuponlar ilk açılışta yüklenir
+    load();
+  }, [load]);
 
   if (list === null) return <div className="card h-28 animate-pulse" />;
   if (error) return <p className="rounded-xl bg-rose-500/10 p-3 text-sm text-bad">{error}</p>;
@@ -57,6 +76,20 @@ export function MyCoupons() {
             <p className="rounded-lg bg-brand-400/10 px-3 py-1.5 text-lg font-bold tabular-nums tracking-widest text-accent">{c.code}</p>
             <p className="mt-1 text-xs text-ink-3">{STATE[c.state]}</p>
           </div>
+          {c.state === "used" && c.redeemed_at && showcaseIds.has(c.business_id) && !reviewed.has(c.claim_id) && reviewing !== c.claim_id && (
+            <button type="button" onClick={() => setReviewing(c.claim_id)} className="btn btn-primary w-full py-2 sm:w-auto">
+              <Star className="size-4" /> Değerlendir
+            </button>
+          )}
+          {reviewing === c.claim_id && (
+            <ReviewForm
+              submit={(rating, comment) => createClient().rpc("add_coupon_review", { p_claim_id: c.claim_id, p_rating: rating, p_comment: comment })}
+              onDone={() => {
+                setReviewing(null);
+                load();
+              }}
+            />
+          )}
         </li>
       ))}
     </ul>

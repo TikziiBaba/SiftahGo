@@ -20,7 +20,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { CategoryIcon } from "@/lib/category-icons";
-import { categoryLabel } from "@/lib/constants";
+import { categoryLabel, isShowcase } from "@/lib/constants";
+import type { BusinessType } from "@/lib/types";
 import { formatDate, formatTime, untilText } from "@/lib/format";
 import { getRecent, type RecentBusiness } from "@/lib/recent";
 import { loadClient } from "@/lib/supabase/lazy";
@@ -36,7 +37,7 @@ type Appt = {
   service_name: string;
   businesses: Biz | null;
 };
-type Fav = Pick<Biz, "slug" | "name" | "logo_url" | "category" | "district" | "city">;
+type Fav = Pick<Biz, "slug" | "name" | "logo_url" | "category" | "district" | "city"> & { business_type: BusinessType };
 
 /** Yalnızca ziyaretçiye (giriş yapmamış) gösterilir. Sunucuda ve ilk çizimde görünür (arama motorları için). */
 export function GuestOnly({ children }: { children: React.ReactNode }) {
@@ -77,7 +78,7 @@ function MemberDashboard({ account }: { account: Exclude<Account, { kind: "guest
             .limit(50),
           supabase
             .from("favorites")
-            .select("businesses(slug, name, logo_url, category, district, city)")
+            .select("businesses(slug, name, logo_url, category, district, city, business_type)")
             .eq("customer_id", account.id)
             .order("created_at", { ascending: false })
             .limit(12),
@@ -194,7 +195,7 @@ function MemberDashboard({ account }: { account: Exclude<Account, { kind: "guest
       {favs.length > 0 && (
         <Shelf title="Favorilerin" icon={Heart} text="Kalbe dokunduğun işletmeler" more={{ href: "/hesabim?sekme=favoriler", label: "Tümü" }}>
           {favs.map((b) => (
-            <MiniCard key={b.slug} href={`/${b.slug}`} biz={b} sub={[categoryLabel(b.category), b.city].filter(Boolean).join(" · ")} cta="Randevu al" />
+            <MiniCard key={b.slug} href={`/${b.slug}`} biz={b} sub={[categoryLabel(b.category), b.city].filter(Boolean).join(" · ")} cta={isShowcase(b) ? "Menüyü gör" : "Randevu al"} />
           ))}
         </Shelf>
       )}

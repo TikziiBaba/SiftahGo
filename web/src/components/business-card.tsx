@@ -1,16 +1,18 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ViewTransition } from "react";
-import { MapPin, Navigation, Star } from "lucide-react";
+import { ArrowRight, MapPin, Navigation, Star } from "lucide-react";
 import { GlowCard } from "@/components/glow-card";
 import { CategoryIcon } from "@/lib/category-icons";
-import { categoryLabel } from "@/lib/constants";
+import { categoryLabel, isShowcase } from "@/lib/constants";
 import type { Business } from "@/lib/types";
 
 export type BusinessCardData = Pick<
   Business,
   "id" | "slug" | "name" | "category" | "city" | "district" | "logo_url" | "cover_url" | "rating_avg" | "rating_count"
->;
+> &
+  // Boşsa randevulu sayılır; vitrin kartında "Menüyü gör" yazar.
+  Partial<Pick<Business, "business_type">>;
 
 /**
  * Keşfet kartı ile işletme sayfasındaki aynı parçayı (kapak, logo) eşler: sayfa açılırken parça yerine uçar
@@ -87,6 +89,11 @@ export function BusinessCard({ b, distanceKm, morph = false }: { b: BusinessCard
                 </span>
               )}
             </div>
+            {isShowcase(b) && (
+              <span className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-accent-strong">
+                Menüyü gör <ArrowRight className="size-3" />
+              </span>
+            )}
           </div>
         </div>
       </Link>

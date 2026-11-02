@@ -6,7 +6,7 @@ import { ArrowLeft } from "lucide-react";
 import { PrintButton } from "@/components/print-button";
 import { QrPoster } from "@/components/qr-poster";
 import { createClient } from "@/lib/supabase/server";
-import { SITE_URL } from "@/lib/constants";
+import { isShowcase, SITE_URL } from "@/lib/constants";
 import type { Business } from "@/lib/types";
 
 export const metadata: Metadata = {
@@ -29,10 +29,10 @@ async function PosterView({ params }: { params: PageProps<"/[slug]/afis">["param
   const supabase = await createClient();
   const { data } = await supabase
     .from("businesses")
-    .select("name, slug, logo_url, category, district, city, phone")
+    .select("name, slug, logo_url, category, district, city, phone, business_type")
     .eq("slug", slug)
     .maybeSingle();
-  const business = data as Pick<Business, "name" | "slug" | "logo_url" | "category" | "district" | "city" | "phone"> | null;
+  const business = data as Pick<Business, "name" | "slug" | "logo_url" | "category" | "district" | "city" | "phone" | "business_type"> | null;
   if (!business) notFound();
 
   return (
@@ -50,7 +50,7 @@ async function PosterView({ params }: { params: PageProps<"/[slug]/afis">["param
         bastırabilirsiniz.
       </p>
       <div className="w-full max-w-[210mm] shadow-xl ring-1 ring-line print:max-w-none print:shadow-none print:ring-0">
-        <QrPoster business={business} link={`${SITE_URL}/${business.slug}`} />
+        <QrPoster business={business} link={`${SITE_URL}/${business.slug}`} showcase={isShowcase(business)} />
       </div>
     </main>
   );

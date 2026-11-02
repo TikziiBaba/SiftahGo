@@ -9,7 +9,18 @@ import { errorMessage } from "@/lib/format";
 import { useShopCoupons } from "@/lib/use-shop-coupons";
 
 /** Dükkân sayfasındaki kuponlar. "Kuponu al" girişsizse girişe götürür (next ile geri döner); alınan kuponun kodu görünür. */
-export function ShopCoupons({ businessId, slug, services }: { businessId: string; slug: string; services: { id: string; name: string }[] }) {
+export function ShopCoupons({
+  businessId,
+  slug,
+  services,
+  showcase = false,
+}: {
+  businessId: string;
+  slug: string;
+  services: { id: string; name: string }[];
+  /** Randevusuz işletme: kod kasada gösterilir, hizmet listesi yoktur. */
+  showcase?: boolean;
+}) {
   const router = useRouter();
   const { coupons, claims, loggedIn, refresh } = useShopCoupons(businessId);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -35,7 +46,7 @@ export function ShopCoupons({ businessId, slug, services }: { businessId: string
         {coupons.map((c) => {
           const mine = claims.find((x) => x.coupon_id === c.id);
           const soldOut = !mine && c.total_limit !== null && c.claimed_count >= c.total_limit;
-          const names = c.service_ids.flatMap((id) => services.find((s) => s.id === id)?.name ?? []);
+          const names = showcase ? [] : c.service_ids.flatMap((id) => services.find((s) => s.id === id)?.name ?? []);
           return (
             <li key={c.id} className="card flex flex-col gap-1 p-4">
               <p className="font-semibold">{c.title}</p>
@@ -63,7 +74,9 @@ export function ShopCoupons({ businessId, slug, services }: { businessId: string
         })}
       </ul>
       {error && <p className="mt-2 text-sm text-bad">{error}</p>}
-      <p className="mt-2 text-xs text-ink-3">Kodu randevu alırken seçin ya da kasada gösterin.</p>
+      <p className="mt-2 text-xs text-ink-3">
+        {showcase ? "Kasada kodu gösterin. Kuponu kullandıktan sonra işletmeyi Kuponlarım’dan değerlendirebilirsiniz." : "Kodu randevu alırken seçin ya da kasada gösterin."}
+      </p>
     </section>
   );
 }
