@@ -508,6 +508,7 @@ $$;
 alter table public.appointments
   add column list_price numeric(10, 2),
   add column coupon_claim_id uuid references public.coupon_claims (id) on delete set null;
+create index appointments_coupon_claim_idx on public.appointments (coupon_claim_id) where coupon_claim_id is not null;
 
 -- İstemci list_price ve coupon_claim_id yazamaz.
 create or replace function public.protect_appointment_columns()
@@ -564,6 +565,61 @@ begin
       raise exception 'Hizmet bulunamadı.';
     end if;
   end if;
+  return new;
+end;
+$$;
+
+-- Kodu başka randevuya geçmiş randevu yeniden etkinleşirse indirimini ve kupon bağını kaybeder.
+create or replace function public.appointments_before_write()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  v_owner boolean := public.is_business_owner(new.business_id);
+begin
+  if tg_op = 'INSERT' then
+    select h.cancels, h.no_shows into new.prior_cancels, new.prior_no_shows
+    from public.customer_history(new.customer_id, new.customer_phone, new.business_id) h;
+    -- Son 6 ayda 3 iptal veya 2 gelmeme: işletme uyarılır, müşterinin aldığı randevu onaya düşer.
+    new.customer_flagged := new.prior_cancels >= 3 or new.prior_no_shows >= 2;
+    if new.customer_flagged and not v_owner and new.status = 'confirmed' then
+      new.status := 'pending';
+    end if;
+    new.cancelled_by := case when new.status = 'cancelled' then 'business' end;
+    new.rejected := false;
+  else
+    new.prior_cancels := old.prior_cancels;
+    new.prior_no_shows := old.prior_no_shows;
+    new.customer_flagged := old.customer_flagged;
+    new.cancelled_by := case
+      when new.status <> 'cancelled' then null
+      when old.status = 'cancelled' then old.cancelled_by
+      when not v_owner and new.customer_id = auth.uid() then 'customer'
+      else 'business'
+    end;
+    new.rejected := new.status = 'cancelled' and new.cancelled_by = 'business'
+                    and (old.status = 'pending' or (old.status = 'cancelled' and old.rejected));
+    -- Kodu başka randevuya geçmiş (iptal sonrası yeniden alınmış) bir randevu yeniden etkinleşirse (ör. gelmedi ->
+    -- tamamlandı) indirimini ve kupon bağını kaybeder, liste fiyatına döner; hata verilmez, sahibi olanı kaydedebilsin.
+    if new.status in ('pending', 'confirmed', 'completed') and new.status is distinct from old.status
+       and new.coupon_claim_id is not null
+       and not exists (select 1 from public.coupon_claims cl where cl.id = new.coupon_claim_id and cl.appointment_id = new.id) then
+      new.price := coalesce(old.list_price, new.price);
+      new.list_price := null;
+      new.coupon_claim_id := null;
+    end if;
+    -- Saat değişince eski saate ait gecikme haberleri geçersiz: haberler ve sayaçlar sıfırlanır.
+    if new.starts_at is distinct from old.starts_at then
+      new.customer_late_minutes := null;
+      new.customer_late_at := null;
+      new.customer_late_count := 0;
+      new.business_delay_minutes := null;
+      new.business_delay_at := null;
+      new.business_delay_count := 0;
+    end if;
+  end if;
+  -- Açıklamayı yalnızca iptal eden işletme yazar.
+  new.cancel_reason := case when new.cancelled_by = 'business' then trim(new.cancel_reason) else '' end;
   return new;
 end;
 $$;

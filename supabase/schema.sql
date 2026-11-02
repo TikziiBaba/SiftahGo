@@ -421,6 +421,7 @@ create index coupon_claims_appointment_idx on public.coupon_claims (appointment_
 alter table public.appointments
   add column list_price numeric(10, 2),
   add column coupon_claim_id uuid references public.coupon_claims (id) on delete set null;
+create index appointments_coupon_claim_idx on public.appointments (coupon_claim_id) where coupon_claim_id is not null;
 
 -- Kasada yanlış girilen kodlar: işletme başına 10 dakikada 20 yanlış denemeden sonra giriş durur
 -- (coupon_lookup yazar; hata fırlatılsa kayıt geri alınacağı için yanlış kod hata değil boş sonuç döner).
@@ -923,6 +924,15 @@ begin
     end;
     new.rejected := new.status = 'cancelled' and new.cancelled_by = 'business'
                     and (old.status = 'pending' or (old.status = 'cancelled' and old.rejected));
+    -- Kodu başka randevuya geçmiş (iptal sonrası yeniden alınmış) bir randevu yeniden etkinleşirse (ör. gelmedi ->
+    -- tamamlandı) indirimini ve kupon bağını kaybeder, liste fiyatına döner; hata verilmez, sahibi olanı kaydedebilsin.
+    if new.status in ('pending', 'confirmed', 'completed') and new.status is distinct from old.status
+       and new.coupon_claim_id is not null
+       and not exists (select 1 from public.coupon_claims cl where cl.id = new.coupon_claim_id and cl.appointment_id = new.id) then
+      new.price := coalesce(old.list_price, new.price);
+      new.list_price := null;
+      new.coupon_claim_id := null;
+    end if;
     -- Saat değişince eski saate ait gecikme haberleri geçersiz: haberler ve sayaçlar sıfırlanır.
     if new.starts_at is distinct from old.starts_at then
       new.customer_late_minutes := null;

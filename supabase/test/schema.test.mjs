@@ -1649,6 +1649,35 @@ ok(Number(rra2.list_price) === 100 && rra2.coupon_claim_id, 'işletme sahibi lis
 await as(KSAHIP, `update appointments set coupon_claim_id = $2 where id = $1`, [manuel.id, c1.id]);
 ok((await aptRow(manuel.id)).coupon_claim_id === null, 'işletme sahibi randevuya kupon bağlayamaz');
 ok(await dogrudan(P6, `update appointments set price = 0, list_price = 0 where id = $1 returning id`, [rr.id]) === 0 && Number((await aptRow(rr.id)).price) === Number(rr.price), 'müşteri randevu fiyatını yazamaz');
+// kodu başka randevuya geçmiş randevu yeniden etkinleşirse indirimini kaybeder
+const P8 = '00000000-0000-0000-0000-0000000000cf';
+await db.exec(`insert into auth.users values ('${P8}', 'kp8@x.com', '{"full_name":"Randevu Müşteri 8"}');`);
+const Kx = await yeniKupon({ title: 'Yeniden etkinleşme' });
+const pk8 = await pk('5557770008', svc100);
+const ra = (await kitap(P8, svc100, sat(14), Kx, '05557770008')).rows[0].r;
+await as(P8, `select cancel_appointment($1)`, [ra.id]);
+const ra2 = (await kitap(P8, svc100, sat(15), Kx, '05557770008')).rows[0].r;
+await db.query(`update appointments set status = 'completed' where id = $1`, [ra.id]);
+const raEski = await aptRow(ra.id);
+const cx = await claimOf(Kx, P8);
+ok(Number(raEski.price) === 100 && raEski.list_price === null && raEski.coupon_claim_id === null, 'kodu başka randevuya geçen randevu yeniden etkinleşince indirimini kaybeder');
+ok(cx.appointment_id === ra2.id && await myState(P8, cx.id) === 'attached' && await bizUsed(Kx) === 0, 'kod yeni randevuda kalır, eski randevu sayılmaz');
+ok(await pkUsed(pk8) === 1, 'kuponu kalkan randevu paketten seans düşer');
+await as(P8, `select cancel_appointment($1)`, [ra2.id]);
+ok(await myState(P8, cx.id) === 'active', 'yeni randevu iptal olunca kod yalnızca bir kez döner');
+const ra2row = await aptRow(ra2.id);
+ok(Number(ra2row.price) === 80 && ra2row.coupon_claim_id === cx.id, 'iptal edilen randevuda geçmiş fiyat kalır');
+
+// durdurulan kuponun alınmış kodu randevu alır ve ertelenir
+const Kp = await yeniKupon({ title: 'Durdurulacak randevulu', start: '09:00', end: '11:00' });
+const rp = (await kitap(P8, svc100, sat(6), Kp, '05557770008')).rows[0].r;
+await as(P8, `select cancel_appointment($1)`, [rp.id]);
+await as(KSAHIP, `select set_coupon_active($1, false)`, [Kp]);
+const rp2 = (await kitap(P8, svc100, sat(6), Kp, '05557770008')).rows[0].r;
+ok(Number(rp2.price) === 80, 'durdurulan kuponun alınmış kodu randevuda kullanılır');
+await as(P8, `select reschedule_appointment($1, $2)`, [rp2.id, `${monday}T06:30:00Z`]);
+ok((await aptRow(rp2.id)).starts_at.toISOString().slice(11, 16) === '06:30', 'durdurulan kuponun kodlu randevusu ertelenir');
+
 }
 
 console.log(failures ? `\n${failures} TEST BAŞARISIZ` : '\nTÜM TESTLER GEÇTİ');
