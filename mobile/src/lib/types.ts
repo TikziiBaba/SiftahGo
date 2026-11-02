@@ -229,6 +229,9 @@ export type Appointment = {
   customer_email: string | null;
   note: string;
   price: number;
+  // Kuponlu randevuda price indirimli fiyat, list_price indirimsiz hizmet fiyatı
+  list_price: number | null;
+  coupon_claim_id: string | null;
   starts_at: string;
   ends_at: string;
   status: AppointmentStatus;
@@ -273,5 +276,37 @@ export type BlockedCustomer = {
   customer_id: string | null;
   phone_key: string | null;
   customer_name: string;
+  created_at: string;
+};
+
+// Esnaf kuponu (business_coupons satırı). weekdays: 1 = Pazartesi ... 7 = Pazar, boş = her gün; service_ids boş = tüm hizmetler.
+// claimed: alınan, used: kullanılan kupon sayısı. İlk alımdan sonra tür, değer, gün-saat ve hizmetler kilitlenir.
+export type Coupon = {
+  id: string;
+  title: string;
+  discount_type: "percent" | "fixed";
+  discount_value: number;
+  starts_on: string;
+  ends_on: string;
+  weekdays: number[];
+  start_time: string | null;
+  end_time: string | null;
+  total_limit: number | null;
+  service_ids: string[];
+  is_active: boolean;
+  created_at: string;
+  claimed: number;
+  used: number;
+};
+
+// Müşterinin aldığı kupon ve hesabına özel 6 haneli kodu.
+export type CouponClaim = {
+  id: string;
+  coupon_id: string;
+  business_id: string;
+  customer_id: string | null;
+  code: string;
+  redeemed_at: string | null;
+  appointment_id: string | null;
   created_at: string;
 };

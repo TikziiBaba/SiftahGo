@@ -19,6 +19,7 @@ import {
   Settings,
   Sparkles,
   Star,
+  Ticket,
   Users,
   X,
   type LucideIcon,
@@ -56,6 +57,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
     title: "Büyüme",
     items: [
       { href: "/panel/raporlar", label: "Raporlar", icon: BarChart3 },
+      { href: "/panel/kuponlar", label: "Kuponlar", icon: Ticket },
       { href: "/panel/qr", label: "QR kod", icon: QrCode },
     ],
   },
