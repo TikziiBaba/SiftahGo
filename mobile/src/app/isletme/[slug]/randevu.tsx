@@ -1,23 +1,24 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppointmentTicket } from '@/components/appointment-ticket';
 import { Glow } from '@/components/brand';
 import { Logo } from '@/components/business-logo';
-import { Banner, Button, Card, Empty, Field, Loading, styles, Text } from '@/components/ui';
+import { Banner, Button, Card, Empty, Field, Loading, SectionTitle, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
-import { categoryIcon, categoryLabel, type IconName } from '@/lib/constants';
+import { categoryIcon, categoryLabel, isSubscribed, type IconName } from '@/lib/constants';
+import { couponFits, couponPrice, formatDiscount, formatMoney, useShopCoupons } from '@/lib/coupons';
 import { errorMessage, formatDate, formatDuration, formatPrice, formatTime, googleCalendarLink } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 import { supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
 import type { Business, Service } from '@/lib/types';
 
-type Data = { business: Business; service: Service; staffName: string | null };
+type Data = { business: Business; service: Service; staffName: string | null; couponsEnabled: boolean };
 
 export default function BookingScreen() {
   const { slug, service: serviceId, staff: staffId, time } = useLocalSearchParams<{ slug: string; service: string; staff?: string; time: string }>();
@@ -33,6 +34,11 @@ export default function BookingScreen() {
   const [taken, setTaken] = useState(false);
   // Alınan randevunun durumu; sık iptal eden müşteride işletme ayarından bağımsız "pending" olur.
   const [booked, setBooked] = useState<'pending' | 'confirmed' | null>(null);
+  // Sunucunun hesapladığı ödenecek tutar (kuponluysa indirimli)
+  const [bookedPrice, setBookedPrice] = useState<number | null>(null);
+  // Seçim hangi hizmet ve saat için yapıldıysa onunla anılır; hizmet ya da saat değişirse eski seçim geçersiz sayılır.
+  const [pick, setPick] = useState<{ key: string; id: string } | null>(null);
+  const { coupons, claims } = useShopCoupons(data?.business.id ?? '', !!data?.couponsEnabled);
 
   useEffect(() => {
     (async () => {
@@ -41,7 +47,10 @@ export default function BookingScreen() {
       const { data: service } = await supabase.from('services').select('*').eq('id', serviceId).eq('business_id', business.id).maybeSingle();
       if (!service) return setData(null);
       const { data: staff } = staffId ? await supabase.from('staff').select('name').eq('id', staffId).maybeSingle() : { data: null };
-      setData({ business, service, staffName: staff?.name ?? null });
+      // Kuponlar paketle gelir; paket düşerse sunulmaz.
+      const { data: plan } = await supabase.from('plans').select('features').eq('id', business.plan_id ?? '').maybeSingle();
+      const couponsEnabled = isSubscribed(business) && (plan?.features ?? []).includes('coupons');
+      setData({ business, service, staffName: staff?.name ?? null, couponsEnabled });
     })();
   }, [slug, serviceId, staffId]);
 
@@ -57,6 +66,19 @@ export default function BookingScreen() {
   }
 
   const { business, service } = data;
+  // Seçilen hizmet ve saate uyan kuponlar (gösterim için; asıl denetim sunucuda). Kullanılmış ya da başka randevuya
+  // bağlı kod, hakkı biten kupon ve fiyatsız hizmet sunulmaz.
+  const offers =
+    session && Number(service.price) > 0
+      ? coupons.filter((c) => {
+          if (!couponFits(c, service.id, time)) return false;
+          const mine = claims.find((x) => x.coupon_id === c.id);
+          if (mine) return mine.state === 'active';
+          return c.total_limit === null || c.claimed_count < c.total_limit;
+        })
+      : [];
+  const pickKey = `${service.id}|${time}`;
+  const chosen = offers.find((c) => pick?.key === pickKey && pick.id === c.id);
   const errors = {
     name: form.name.trim().length < 2 ? 'Adınızı ve soyadınızı yazın.' : '',
     phone: form.phone.replace(/\D/g, '').length < 10 ? 'Geçerli bir telefon numarası yazın.' : '',
@@ -75,6 +97,7 @@ export default function BookingScreen() {
       p_customer_name: form.name.trim(),
       p_customer_phone: form.phone.trim(),
       p_note: form.note.trim(),
+      ...(chosen && { p_coupon_id: chosen.id }),
     });
     setBusy(false);
     if (error) {
@@ -84,6 +107,7 @@ export default function BookingScreen() {
       return;
     }
     haptic.success();
+    setBookedPrice(Number((result as { price?: number } | null)?.price ?? service.price));
     setBooked((result as { status: 'pending' | 'confirmed' } | null)?.status ?? (business.auto_confirm ? 'confirmed' : 'pending'));
   }
 
@@ -102,7 +126,7 @@ export default function BookingScreen() {
             staffName={data.staffName ?? undefined}
             startsAt={time}
             durationMinutes={service.duration_minutes}
-            price={Number(service.price)}
+            price={bookedPrice ?? Number(service.price)}
             place={location}
             confirmed={booked === 'confirmed'}
           />
@@ -144,13 +168,42 @@ export default function BookingScreen() {
   return (
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Summary data={data} time={time} ends={ends} onChange={() => router.back()} />
+        <Summary data={data} time={time} ends={ends} onChange={() => router.back()} discounted={chosen ? couponPrice(Number(service.price), chosen) : null} />
 
         {taken ? (
           <Banner tone="danger" icon="time-outline" title="Bu saat az önce doldu" text="Başka bir saat seçmek için dokunun." onPress={() => router.back()} />
         ) : error ? (
           <Banner tone="danger" icon="alert-circle-outline" text={error} />
         ) : null}
+
+        {offers.length > 0 && (
+          <>
+            <SectionTitle title="Kupon" />
+            <Card style={{ padding: 0 }}>
+              {[null, ...offers].map((c, i) => {
+                const on = (c?.id ?? '') === (chosen?.id ?? '');
+                return (
+                  <View key={c?.id ?? ''}>
+                    {i > 0 && <View style={{ height: 1, backgroundColor: colors.line }} />}
+                    <Pressable
+                      onPress={() => {
+                        haptic.select();
+                        setPick(c ? { key: pickKey, id: c.id } : null);
+                      }}
+                      accessibilityRole="radio"
+                      aria-checked={on}
+                      style={[styles.rowCenter, { gap: 12, paddingHorizontal: 14, paddingVertical: 12, minHeight: 52 }]}>
+                      <Text variant={on ? 'bodyStrong' : 'body'} style={{ flex: 1 }}>
+                        {c ? `${c.title} · ${formatDiscount(c)}` : 'Kuponsuz'}
+                      </Text>
+                      <Ionicons name={on ? 'radio-button-on' : 'radio-button-off'} size={22} color={on ? colors.brand300 : colors.ink3} />
+                    </Pressable>
+                  </View>
+                );
+              })}
+            </Card>
+          </>
+        )}
 
         {!session ? (
           <Card style={{ gap: 12 }}>
@@ -198,7 +251,11 @@ export default function BookingScreen() {
       </ScrollView>
       <View style={[s.bar, { paddingBottom: Math.max(insets.bottom, 12) + 4 }]}>
         <Button
-          title={Number(service.price) > 0 ? `Randevuyu onayla · ${formatPrice(service.price)}` : 'Randevuyu onayla'}
+          title={
+            Number(service.price) > 0
+              ? `Randevuyu onayla · ${chosen ? formatMoney(couponPrice(Number(service.price), chosen)) : formatPrice(service.price)}`
+              : 'Randevuyu onayla'
+          }
           size="lg"
           onPress={book}
           loading={busy}
@@ -209,7 +266,7 @@ export default function BookingScreen() {
   );
 }
 
-function Summary({ data, time, ends, onChange }: { data: Data; time: string; ends: string; onChange?: () => void }) {
+function Summary({ data, time, ends, onChange, discounted }: { data: Data; time: string; ends: string; onChange?: () => void; discounted: number | null }) {
   const { business, service, staffName } = data;
   return (
     <Card style={{ gap: 14 }}>
@@ -230,7 +287,13 @@ function Summary({ data, time, ends, onChange }: { data: Data; time: string; end
       <Row icon="time-outline" label="Saat" value={`${formatTime(time)} – ${formatTime(ends)}`} />
       <Row icon={categoryIcon(business.category)} label="Hizmet" value={`${service.name} · ${formatDuration(service.duration_minutes)}`} />
       {staffName && <Row icon="person-outline" label="Personel" value={staffName} />}
-      {Number(service.price) > 0 && <Row icon="pricetag-outline" label="Ücret" value={`${formatPrice(service.price)} · işletmede ödenir`} />}
+      {Number(service.price) > 0 && (
+        <Row
+          icon="pricetag-outline"
+          label="Ücret"
+          value={discounted === null ? `${formatPrice(service.price)} · işletmede ödenir` : `${formatMoney(discounted)} (kuponlu, liste fiyatı ${formatPrice(service.price)}) · işletmede ödenir`}
+        />
+      )}
     </Card>
   );
 }

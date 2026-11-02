@@ -110,6 +110,7 @@ function RootStack({ fontsReady }: { fontsReady: boolean }) {
           <Stack.Screen name="profil" options={{ title: 'Profil' }} />
           <Stack.Screen name="bildirimler" options={{ title: 'Bildirimler' }} />
           <Stack.Screen name="randevularim" options={{ title: 'Randevularım' }} />
+          <Stack.Screen name="kuponlarim" options={{ title: 'Kuponlarım' }} />
         </Stack.Protected>
 
         <Stack.Protected guard={isBusiness && approved}>
@@ -126,6 +127,7 @@ function RootStack({ fontsReady }: { fontsReady: boolean }) {
           <Stack.Screen name="yonetim/sayfa" options={{ title: 'Sayfa tasarımı' }} />
           <Stack.Screen name="yonetim/qr" options={{ title: 'QR kod ve bağlantı' }} />
           <Stack.Screen name="yonetim/raporlar" options={{ title: 'Raporlar' }} />
+          <Stack.Screen name="yonetim/kuponlar" options={{ title: 'Kuponlar' }} />
           <Stack.Screen name="yonetim/yorumlar" options={{ title: 'Yorumlar' }} />
           <Stack.Screen name="yonetim/engellenenler" options={{ title: 'Engellenen müşteriler' }} />
           <Stack.Screen name="yonetim/abonelik" options={{ title: 'Abonelik' }} />

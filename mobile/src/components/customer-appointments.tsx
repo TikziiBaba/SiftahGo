@@ -15,7 +15,8 @@ import { useToast } from '@/components/toast';
 import { TopBar, useScrollY } from '@/components/top-bar';
 import { Badge, Button, Card, Empty, ScreenHeader, Segmented, Skeleton, StatusBadge, styles, Text } from '@/components/ui';
 import { STATUS } from '@/lib/constants';
-import { errorMessage, formatDate, formatPrice, formatTime, mapsLink, relativeDay, dayOf, shortDay } from '@/lib/format';
+import { formatMoney } from '@/lib/coupons';
+import { errorMessage, formatDate, formatTime, mapsLink, relativeDay, dayOf, shortDay } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import { colors, radius } from '@/lib/theme';
 import type { Appointment } from '@/lib/types';
@@ -230,7 +231,7 @@ function AppointmentCard({
           </Text>
           <Text variant="caption" tone="muted" numberOfLines={1}>
             {item.service_name}
-            {Number(item.price) > 0 ? ` · ${formatPrice(item.price)}` : ''}
+            {Number(item.price) > 0 ? ` · ${formatMoney(item.price)}` : ''}
           </Text>
           <View style={[styles.wrap, { marginTop: 2 }]}>
             {item.rejected ? (

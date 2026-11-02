@@ -7,7 +7,8 @@ import Svg, { Defs, Line, LinearGradient, Path, Stop } from 'react-native-svg';
 import { useSvgId } from '@/components/brand';
 import { Text } from '@/components/ui';
 import { useAccent } from '@/lib/accent';
-import { formatDate, formatDuration, formatPrice, formatTime } from '@/lib/format';
+import { formatMoney } from '@/lib/coupons';
+import { formatDate, formatDuration, formatTime } from '@/lib/format';
 import { alpha, colors, fonts, radius } from '@/lib/theme';
 
 const CORNER = 24;
@@ -101,7 +102,7 @@ export function AppointmentTicket({
           {/* Büyük harfe çevirme Türkçe "i"yi bilmiyor; etiket hazır yazılı. */}
           <Field label="TARİH" value={formatDate(startsAt)} />
           <Field label="Süre" value={formatDuration(durationMinutes)} />
-          <Field label="Ücret" value={price > 0 ? formatPrice(price) : '—'} />
+          <Field label="Ücret" value={price > 0 ? formatMoney(price) : '—'} />
           {staffName ? <Field label="Personel" value={staffName} /> : null}
           {place ? <Field label="Adres" value={place} wide /> : null}
         </View>

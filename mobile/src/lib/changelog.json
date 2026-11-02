@@ -41,5 +41,13 @@
     "items": [
       "Geç kalacaksanız randevu kartından işletmeye haber verebilirsiniz; işletme de gecikme olduğunda müşterilerine haber verebilir."
     ]
+  },
+  {
+    "id": 7,
+    "date": "2026-11-02",
+    "items": [
+      "İşletmeler artık indirim kuponu açabiliyor; kuponları işletme sayfasından alıp Hesap altındaki Kuponlarım ekranında görebilirsiniz.",
+      "Randevu alırken uygun bir kuponunuz varsa seçip indirimli fiyatı görebilirsiniz."
+    ]
   }
 ]

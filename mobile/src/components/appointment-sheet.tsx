@@ -7,7 +7,8 @@ import { ReschedulePicker } from '@/components/reschedule-picker';
 import { Sheet } from '@/components/sheet';
 import { Badge, Banner, Button, Card, Chip, Field, StatusBadge, styles, SwitchRow, Text } from '@/components/ui';
 import { CANCEL_REASONS, STATUS, type IconName } from '@/lib/constants';
-import { dayOf, errorMessage, formatDate, formatPrice, formatTime, isPast, MONTHS, phoneKey, relativeDay, reminderText, whatsappLink } from '@/lib/format';
+import { formatMoney } from '@/lib/coupons';
+import { dayOf, errorMessage, formatDate, formatTime, isPast, MONTHS, phoneKey, relativeDay, reminderText, whatsappLink } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
 import type { Appointment, AppointmentStatus, CustomerCard, SessionPackage } from '@/lib/types';
@@ -182,7 +183,7 @@ export function AppointmentSheet({
           <Card style={{ gap: 12, backgroundColor: colors.surface2 }}>
             <Info icon="cut-outline" label="Hizmet" value={a.service_name} />
             {a.staff && <Info icon="person-outline" label="Personel" value={a.staff.name} />}
-            <Info icon="pricetag-outline" label="Ücret" value={formatPrice(a.price)} />
+            <Info icon="pricetag-outline" label="Ücret" value={formatMoney(a.price)} />
             <Info icon="call-outline" label="Telefon" value={a.customer_phone} />
             {a.customer_email && <Info icon="mail-outline" label="E-posta" value={a.customer_email} />}
             {a.note ? <Info icon="chatbubble-outline" label="Not" value={a.note} /> : null}

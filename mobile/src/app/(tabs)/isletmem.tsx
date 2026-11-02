@@ -195,6 +195,14 @@ function Hub({ business }: { business: Business }) {
           <ListRow icon="images-outline" title="Görseller" subtitle="Logo, kapak ve galeri" onPress={() => router.push('/yonetim/gorseller')} />
           <ListRow icon="qr-code-outline" title="QR kod ve bağlantı" subtitle="Dükkânınıza asın, sosyal medyada paylaşın" disabled={locked} onPress={() => router.push('/yonetim/qr')} />
           <ListRow
+            icon="ticket-outline"
+            title="Kuponlar"
+            subtitle="İndirim kuponu açın, kasada kodla kullandırın"
+            disabled={locked}
+            right={plan && !plan.features.includes('coupons') ? <Ionicons name="lock-closed" size={14} color={colors.ink3} /> : undefined}
+            onPress={() => router.push('/yonetim/kuponlar')}
+          />
+          <ListRow
             icon="star-outline"
             title="Yorumlar"
             subtitle={business.rating_count > 0 ? `${Number(business.rating_avg).toFixed(1)} puan · ${business.rating_count} değerlendirme` : 'Müşteri puanları ve cevaplarınız'}

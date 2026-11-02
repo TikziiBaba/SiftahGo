@@ -14,6 +14,7 @@ import { TopBar, useScrollY } from '@/components/top-bar';
 import { Banner, Button, Card, Empty, IconButton, ScreenHeader, SectionTitle, Skeleton, Stat, StatusBadge, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { isSubscribed, isTrial, STATUS, WEEKDAYS } from '@/lib/constants';
+import { formatMoney } from '@/lib/coupons';
 import { addDays, dayBounds, dayOf, errorMessage, formatDate, formatDuration, formatPrice, formatTime, isoWeekday, relativeDay, shortDay, toIso, todayStr } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 import { daysLeft } from '@/lib/plan';
@@ -239,7 +240,7 @@ function Agenda({ business }: { business: Business }) {
         </View>
         <Text variant="caption" tone="muted" numberOfLines={1}>
           {item.service_name}
-          {item.staff ? ` · ${item.staff.name}` : ''} · {formatPrice(item.price)}
+          {item.staff ? ` · ${item.staff.name}` : ''} · {formatMoney(item.price)}
         </Text>
         <FlaggedNote row={item} />
         <DelayNote row={item} />

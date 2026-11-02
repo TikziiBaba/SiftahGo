@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Cover } from '@/components/brand';
 import { Logo } from '@/components/business-logo';
 import { CalendarSheet, DayStrip } from '@/components/pickers';
+import { ShopCoupons } from '@/components/shop-coupons';
 import { TopBar, useScrollY } from '@/components/top-bar';
 import { Avatar, Badge, Button, Card, Chip, Empty, IconButton, Loading, PressableScale, SectionTitle, Skeleton, styles, Text } from '@/components/ui';
 import { AccentProvider, useAccent } from '@/lib/accent';
@@ -299,6 +300,9 @@ export default function BusinessScreen() {
                 </Pressable>
               </>
             ) : null}
+
+            {/* Kuponlar paketle gelir; paket düşerse gizlenir (web ile aynı). */}
+            {features.includes('coupons') && <ShopCoupons businessId={business.id} services={services.map((x) => ({ id: x.id, name: x.name }))} />}
 
             <SectionTitle title="Hizmet seçin" />
             {services.length === 0 && <Text tone="muted">Bu işletme henüz hizmet eklememiş.</Text>}
