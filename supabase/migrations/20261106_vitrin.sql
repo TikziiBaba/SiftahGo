@@ -668,6 +668,13 @@ returns trigger
 language plpgsql security definer set search_path = ''
 as $$
 begin
+  -- Ürün başka işletmeye taşınamaz (yoksa hedefin 200 sınırı aşılırdı).
+  if tg_op = 'UPDATE' then
+    if new.business_id is distinct from old.business_id then
+      raise exception 'Ürün başka bir işletmeye taşınamaz.';
+    end if;
+    return new;
+  end if;
   perform 1 from public.businesses where id = new.business_id for update;
   if (select count(*) from public.menu_items where business_id = new.business_id) >= 200 then
     raise exception 'Menüde en fazla 200 ürün olabilir.';
@@ -677,7 +684,7 @@ end;
 $$;
 
 create trigger menu_items_limit
-  before insert on public.menu_items
+  before insert or update of business_id on public.menu_items
   for each row execute function public.enforce_menu_limit();
 
 alter table public.menu_items enable row level security;
@@ -792,6 +799,7 @@ begin
     join public.businesses b on b.id = cl.business_id
     where cl.redeemed_at is not null
       and cl.redeemed_at <= now() - interval '2 hours'
+      and cl.redeemed_at > now() - interval '3 days'
       and cl.review_requested_at is null
       and cl.customer_id is not null
       and b.business_type = 'showcase'

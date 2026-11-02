@@ -203,7 +203,7 @@ export function buildCouponReviewRequestEmail(n: CouponReviewRequest & { email: 
   return render(n.email, {
     subject: `Nasıldı? ${n.business_name}`,
     title: "Nasıldı?",
-    intro: `Merhaba ${n.customer_name.split(" ")[0]}, ${n.business_name} işletmesinde kuponunuzu kullandınız. Deneyiminizi puanlarsanız diğer müşterilere yardımcı olursunuz.`,
+    intro: `Merhaba${n.customer_name.trim() ? ` ${n.customer_name.trim().split(" ")[0]}` : ""}, ${n.business_name} işletmesinde kuponunuzu kullandınız. Deneyiminizi puanlarsanız diğer müşterilere yardımcı olursunuz.`,
     rows: [["İşletme", n.business_name]],
     action: { label: "Puan ver", href: `${appUrl}/${n.business_slug}` },
     footer: "Bu e-posta SiftahGo kuponunuzu kullandığınız için gönderildi.",
@@ -221,6 +221,7 @@ export function buildCouponReviewNoticeEmail(n: CouponReviewNotice & { email: st
       ...(n.comment ? [["Yorum", n.comment] as [string, string]] : []),
     ],
     action: { label: "Yorumlar", href: `${appUrl}/panel/yorumlar` },
+    footer: "Bu e-posta SiftahGo kupon değerlendirmesi için gönderildi.",
   });
 }
 

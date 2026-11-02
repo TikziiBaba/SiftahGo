@@ -1967,6 +1967,21 @@ await as(ADM, `select admin_set_business_type($1, 'appointment')`, [vb4]);
 const vs4 = (await db.query(`select name, is_active from staff where business_id = $1 order by created_at`, [vb4])).rows;
 ok(vs4.length === 2 && vs4.filter((s) => s.is_active).length === 1 && vs4.find((s) => s.is_active).name === 'Vitrin Dört', 'aktif personeli olmayan işletmeye varsayılan personel eklenir');
 
+// menü ürünü başka işletmeye taşınamaz (200 sınırı atlatılamaz)
+await expectError(() => db.query(`update menu_items set business_id = $1 where id = $2`, [vb2, m1]), /taşınamaz/, 'menü ürünü başka işletmeye taşınamaz');
+ok((await db.query(`update menu_items set name = 'Mercimek 2' where id = $1 returning id`, [m1])).rows.length === 1, 'menü ürünü aynı işletmede güncellenir');
+
+// randevulu işletme vitrine çevrilince eski kasa kullanımları için "Nasıldı?" gitmez (3 gün sınırı)
+await db.query(`update businesses set plan_id = 'pro' where id = $1`, [vb4]);
+const kOld = await kup(O4, 'Eski kupon');
+const cOld = await al(M1, kOld);
+await as(O4, `select redeem_coupon_code($1, $2)`, [vb4, cOld.code]);
+await db.query(`update coupon_claims set redeemed_at = now() - interval '5 days' where id = $1`, [cOld.id]);
+await as(ADM, `select admin_set_business_type($1, 'showcase')`, [vb4]);
+ok((await db.query(`select * from claim_coupon_review_requests(100)`)).rows.length === 0, 'vitrine çevrilen işletmenin eski kullanımları için istek gitmez');
+await db.query(`update coupon_claims set redeemed_at = now() - interval '2 days' where id = $1`, [cOld.id]);
+ok((await db.query(`select * from claim_coupon_review_requests(100)`)).rows.length === 1, '3 günden yeni kullanım için istek gider');
+
 // davet ödülü işletme türüne göre
 const R1 = '00000000-0000-0000-0000-0000000000b1', S1 = '00000000-0000-0000-0000-0000000000b2';
 const R2 = '00000000-0000-0000-0000-0000000000b3', S2 = '00000000-0000-0000-0000-0000000000b4';
