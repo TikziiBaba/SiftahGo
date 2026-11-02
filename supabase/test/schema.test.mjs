@@ -1197,5 +1197,88 @@ await expectError(() => as(G, `select reply_support_ticket($1, 'Bir mesaj daha')
 await db.query(`delete from auth.users where id = $1`, [H]);
 ok((await db.query(`select id from support_tickets where user_id = $1`, [H])).rows.length === 0, 'hesap silinince destek talepleri silinir');
 
+// --- Gecikme haberi: kendi işletmesi ve müşterileriyle
+const SAHIP = '00000000-0000-0000-0000-0000000000f1';
+const BASKA_SAHIP = '00000000-0000-0000-0000-0000000000f2';
+const MUSTERI = '00000000-0000-0000-0000-0000000000f3';
+const BASKA = '00000000-0000-0000-0000-0000000000f4';
+await db.exec(`
+  insert into auth.users values ('${SAHIP}', 'gsahip@x.com', '{"full_name":"Gecikme Sahibi","role":"business"}');
+  insert into auth.users values ('${BASKA_SAHIP}', 'gbaska@x.com', '{"full_name":"Başka Sahip","role":"business"}');
+  insert into auth.users values ('${MUSTERI}', 'gmusteri@x.com', '{"full_name":"Gecikmeli Müşteri"}');
+  insert into auth.users values ('${BASKA}', 'gdiger@x.com', '{"full_name":"Başka Müşteri"}');
+  insert into push_tokens (token, user_id, platform) values
+    ('ExponentPushToken[gsahip]', '${SAHIP}', 'android'), ('ExponentPushToken[gmusteri]', '${MUSTERI}', 'android');
+`);
+const gbiz = (await as(SAHIP, `insert into businesses (owner_id, slug, name, city, category) values ($1, 'gecikme-berber', 'Gecikme Berber', 'İstanbul', 'berber') returning id`, [SAHIP])).rows[0].id;
+await as(BASKA_SAHIP, `insert into businesses (owner_id, slug, name, city, category) values ($1, 'baska-berber', 'Başka Berber', 'İstanbul', 'berber')`, [BASKA_SAHIP]);
+await db.query(`update businesses set approval_status = 'approved', plan_id = 'pro', subscription_ends_at = now() + interval '1 year' where owner_id in ($1, $2)`, [SAHIP, BASKA_SAHIP]);
+const personel = (await db.query(`select id from staff where business_id = $1`, [gbiz])).rows[0].id;
+const digerPersonel = (await db.query(`insert into staff (business_id, name) values ($1, 'Diğer') returning id`, [gbiz])).rows[0].id;
+const bosPersonel = (await db.query(`insert into staff (business_id, name) values ($1, 'Boş') returning id`, [gbiz])).rows[0].id;
+const gApt = async (staffId, customerId, startH, status = 'confirmed') => (await db.query(
+  `insert into appointments (business_id, staff_id, customer_id, customer_email, service_name, customer_name, customer_phone, starts_at, ends_at, status)
+   values ($1, $2, $3, $4, 'Saç Kesimi', 'Gecikmeli Müşteri', '05550000000', now() + $5 * interval '1 hour', now() + $5 * interval '1 hour' + interval '30 minutes', $6) returning id`,
+  [gbiz, staffId, customerId, customerId ? 'gmusteri@x.com' : null, startH, status])).rows[0].id;
+const aptYakin = await gApt(personel, MUSTERI, 1);
+const aptIki = await gApt(personel, MUSTERI, 2);
+const aptDort = await gApt(personel, MUSTERI, 4);
+const aptUzak = await gApt(personel, MUSTERI, 6);
+const aptIptal = await gApt(personel, MUSTERI, 2.5, 'cancelled');
+const aptDiger = await gApt(digerPersonel, MUSTERI, 1.5);
+const gRow = async (id) => (await db.query(`select * from appointments where id = $1`, [id])).rows[0];
+
+// report_customer_late
+await expectError(() => as(BASKA, `select report_customer_late($1, 10)`, [aptYakin]), /gecikme haberi/i, 'başkasının randevusu için müşteri gecikme haberi veremez');
+await expectError(() => as(MUSTERI, `select report_customer_late($1, 7)`, [aptYakin]), /5, 10 veya 15/, 'geçersiz gecikme süresi reddedildi');
+await expectError(() => as(MUSTERI, `select report_customer_late($1, 10)`, [aptUzak]), /2 saat/, 'randevudan 2 saatten erken haber verilemez');
+const yakinOnce = await gRow(aptYakin);
+await as(MUSTERI, `select report_customer_late($1, 10)`, [aptYakin]);
+const yakin1 = await gRow(aptYakin);
+ok(yakin1.customer_late_minutes === 10 && yakin1.customer_late_count === 1 && yakin1.customer_late_at, 'müşteri gecikme haberi kaydedildi');
+ok(yakin1.starts_at.getTime() === yakinOnce.starts_at.getTime() && yakin1.ends_at.getTime() === yakinOnce.ends_at.getTime(), 'gecikme haberi randevu saatini değiştirmez');
+await as(MUSTERI, `select report_customer_late($1, 5)`, [aptYakin]);
+await as(MUSTERI, `select report_customer_late($1, 15)`, [aptYakin]);
+await expectError(() => as(MUSTERI, `select report_customer_late($1, 5)`, [aptYakin]), /en fazla 3/, 'bir randevuya en fazla 3 müşteri haberi');
+ok((await gRow(aptYakin)).customer_late_count === 3 && (await gRow(aptYakin)).customer_late_minutes === 15, 'son haberin dakikası tutulur');
+await expectError(() => as(MUSTERI, `select report_customer_late($1, 5)`, [aptIptal]), /gecikme haberi/i, 'iptal edilmiş randevuya haber verilemez');
+
+// report_business_delay
+await expectError(() => as(SAHIP, `select report_business_delay($1, 20)`, [personel]), /10, 15, 30 veya 45/, 'geçersiz işletme gecikme süresi reddedildi');
+ok((await as(SAHIP, `select report_business_delay($1, 15) n`, [personel])).rows[0].n === 2, '3 saat içindeki iki randevuya haber verildi');
+ok((await gRow(aptYakin)).business_delay_minutes === 15 && (await gRow(aptIki)).business_delay_minutes === 15 && (await gRow(aptIki)).business_delay_count === 1, 'işletme gecikmesi kaydedildi');
+for (const id of [aptDort, aptIptal, aptDiger]) ok((await gRow(id)).business_delay_minutes === null, 'kapsam dışı randevu (4 saat sonra, iptal, başka personel) etkilenmedi');
+await expectError(() => as(BASKA_SAHIP, `select report_business_delay($1, 15)`, [personel]), /yetki/i, 'başka işletme gecikme haberi veremez');
+await expectError(() => as(MUSTERI, `select report_business_delay($1, 15)`, [personel]), /yetki/i, 'müşteri işletme gecikmesi bildiremez');
+ok((await as(SAHIP, `select report_business_delay($1, 15) n`, [bosPersonel])).rows[0].n === 0, 'randevusu olmayan personelde 0 randevu');
+await as(SAHIP, `select report_business_delay($1, 30)`, [personel]);
+await as(SAHIP, `select report_business_delay($1, 45)`, [personel]);
+ok((await as(SAHIP, `select report_business_delay($1, 10) n`, [personel])).rows[0].n === 0, '3 haberden sonra o randevulara yenisi verilmez');
+ok((await gRow(aptYakin)).business_delay_count === 3 && (await gRow(aptYakin)).business_delay_minutes === 45, 'işletme haber sayısı 3\'te kaldı');
+
+// doğrudan yazma korunur
+ok((await as(SAHIP, `update appointments set business_delay_count = 0, business_delay_minutes = null, customer_late_count = 0, customer_late_minutes = 5 where id = $1 returning id`, [aptYakin])).rows.length === 1, 'işletme randevuyu güncelleyebiliyor (koruma tetikleyiciyle)');
+const korunan = await gRow(aptYakin);
+ok(korunan.business_delay_count === 3 && korunan.business_delay_minutes === 45 && korunan.customer_late_count === 3 && korunan.customer_late_minutes === 15,
+  'işletme gecikme alanlarını doğrudan değiştiremez');
+await as(MUSTERI, `update appointments set customer_late_count = 0 where id = $1`, [aptYakin]);
+ok((await gRow(aptYakin)).customer_late_count === 3, 'müşteri gecikme sayacını doğrudan sıfırlayamaz');
+const elle = (await as(SAHIP, `insert into appointments (business_id, staff_id, service_name, customer_name, customer_phone, starts_at, ends_at, customer_late_count, business_delay_minutes)
+  values ($1, $2, 'x', 'x', 'x', now() + interval '8 hours', now() + interval '9 hours', 2, 30) returning customer_late_count, business_delay_minutes`, [gbiz, bosPersonel])).rows[0];
+ok(elle.customer_late_count === 0 && elle.business_delay_minutes === null, 'elle eklenen randevuda gecikme alanları boşlanır');
+
+// claim_delay_notices
+await expectError(() => as(MUSTERI, `select * from claim_delay_notices(10)`), /permission denied/, 'gecikme haberlerini istemci alamaz');
+await db.query(`update appointments set status = 'cancelled' where id = $1`, [aptIki]);
+const gClaimed = (await db.query(`select * from claim_delay_notices(100)`)).rows;
+const toBusiness = gClaimed.filter((r) => r.recipient === 'business');
+const toCustomer = gClaimed.filter((r) => r.recipient === 'customer');
+ok(toBusiness.length === 3 && toBusiness.every((r) => r.email === null && r.tokens.join() === 'ExponentPushToken[gsahip]' && r.business_slug === 'gecikme-berber'),
+  'müşteri gecikmeleri işletmeye gider: e-posta yok, işletme sahibinin jetonu');
+ok(toCustomer.length === 3 && toCustomer.every((r) => r.email === 'gmusteri@x.com' && r.tokens.join() === 'ExponentPushToken[gmusteri]' && r.customer_name === 'Gecikmeli Müşteri' && r.service_name === 'Saç Kesimi' && r.business_name === 'Gecikme Berber'),
+  'işletme gecikmeleri müşteriye gider: e-posta ve müşterinin jetonu; sonradan iptal edilen randevunun haberi gelmez');
+ok((await db.query(`select * from claim_delay_notices(100)`)).rows.length === 0, 'alınan haber ikinci kez dönmez');
+ok((await db.query(`select count(*)::int c from delay_notices where status = 'pending'`)).rows[0].c === 0, 'iptal edilen randevunun haberi de gönderilmiş sayıldı');
+
 console.log(failures ? `\n${failures} TEST BAŞARISIZ` : '\nTÜM TESTLER GEÇTİ');
 process.exit(failures ? 1 : 0);

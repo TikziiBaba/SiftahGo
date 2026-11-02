@@ -11,6 +11,7 @@
 drop trigger if exists on_auth_user_created on auth.users;
 
 drop table if exists
+  public.delay_notices,
   public.support_emails,
   public.support_messages,
   public.support_tickets,
@@ -73,7 +74,8 @@ begin
         'protect_profile_columns', 'admin_suspend_business', 'admin_lift_suspension', 'lift_suspension',
         'lift_due_suspensions', 'request_freeze', 'admin_reject_freeze_request',
         'support_add_message', 'support_check_rate', 'open_support_ticket', 'reply_support_ticket',
-        'admin_reply_support_ticket', 'admin_close_support_ticket', 'claim_support_emails', 'finish_support_email'
+        'admin_reply_support_ticket', 'admin_close_support_ticket', 'claim_support_emails', 'finish_support_email',
+        'report_customer_late', 'report_business_delay', 'claim_delay_notices'
       )
   loop
     execute 'drop function if exists ' || r.sig || ' cascade';
@@ -329,6 +331,15 @@ create table public.appointments (
   -- Seansı düşülen paket (use_package_session yazar).
   package_id       uuid references public.session_packages (id) on delete set null,
   created_at     timestamptz not null default now(),
+  -- Gecikme haberi (randevu saati değişmez). Müşteri "geç kalacağım" der (report_customer_late), işletme "gecikme
+  -- var" der (report_business_delay). Son haberin dakikası ve zamanı ile bugüne dek verilen haber sayısı (en fazla 3).
+  -- İstemci bu alanları elle değiştiremez (protect_appointment_columns).
+  customer_late_minutes int check (customer_late_minutes in (5, 10, 15)),
+  customer_late_at      timestamptz,
+  customer_late_count   smallint not null default 0,
+  business_delay_minutes int check (business_delay_minutes in (10, 15, 30, 45)),
+  business_delay_at      timestamptz,
+  business_delay_count   smallint not null default 0,
   check (ends_at > starts_at),
   -- Aynı personele aynı anda iki aktif randevu verilemez.
   constraint appointments_no_overlap exclude using gist (
@@ -340,6 +351,19 @@ create index appointments_business_time_idx on public.appointments (business_id,
 create index appointments_customer_idx on public.appointments (customer_id, starts_at);
 -- Müşteri geçmişi telefonun son 10 hanesiyle eşleşir ("0555..." = "+90555...").
 create index appointments_phone_idx on public.appointments ((right(regexp_replace(customer_phone, '\D', '', 'g'), 10)));
+
+-- Gecikme haberi kuyruğu: report_* yazar, claim_delay_notices alır (/api/notifications gönderir).
+-- recipient: haberi kim alır ('business': müşteri geç kalacak, 'customer': işletmede gecikme var).
+create table public.delay_notices (
+  id             uuid primary key default gen_random_uuid(),
+  appointment_id uuid not null references public.appointments (id) on delete cascade,
+  recipient      text not null check (recipient in ('customer', 'business')),
+  minutes        int not null check (minutes in (5, 10, 15, 30, 45)),
+  status         text not null default 'pending' check (status in ('pending', 'sent')),
+  created_at     timestamptz not null default now()
+);
+create index delay_notices_pending_idx on public.delay_notices (created_at) where status = 'pending';
+create index delay_notices_appointment_idx on public.delay_notices (appointment_id);
 
 -- Müşteri değerlendirmesi: tamamlanan her randevu için bir tane (add_review ile eklenir).
 create table public.reviews (
@@ -861,12 +885,24 @@ begin
       new.customer_id := null;
       new.customer_email := null;
       new.package_id := null;
+      new.customer_late_minutes := null;
+      new.customer_late_at := null;
+      new.customer_late_count := 0;
+      new.business_delay_minutes := null;
+      new.business_delay_at := null;
+      new.business_delay_count := 0;
     else
       new.business_id := old.business_id;
       new.customer_id := old.customer_id;
       new.customer_email := old.customer_email;
       new.package_id := old.package_id;
       new.created_at := old.created_at;
+      new.customer_late_minutes := old.customer_late_minutes;
+      new.customer_late_at := old.customer_late_at;
+      new.customer_late_count := old.customer_late_count;
+      new.business_delay_minutes := old.business_delay_minutes;
+      new.business_delay_at := old.business_delay_at;
+      new.business_delay_count := old.business_delay_count;
       if old.customer_id is not null then
         new.customer_phone := old.customer_phone;
         -- Hesapla alınan yaklaşan randevu "gelmedi" yapılamaz, saati de geçmişe alınamaz: müşterinin gelmeme sayısı
@@ -3270,6 +3306,123 @@ $$;
 
 revoke execute on function public.claim_waitlist(int) from public, anon, authenticated;
 
+-- Müşteri "geç kalacağım" der (5, 10 veya 15 dakika). Randevu saati değişmez; işletmeye haber kuyruğa girer.
+-- Randevudan en erken 2 saat önce ve randevu bitmeden verilir; bir randevu için en fazla 3 haber.
+create function public.report_customer_late(p_id uuid, p_minutes int)
+returns void
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  a public.appointments;
+begin
+  if p_minutes is null or p_minutes not in (5, 10, 15) then
+    raise exception 'Gecikme süresi 5, 10 veya 15 dakika olmalı.';
+  end if;
+  select * into a from public.appointments
+  where id = p_id and customer_id = auth.uid() and status in ('pending', 'confirmed')
+  for update;
+  if not found or now() >= a.ends_at then
+    raise exception 'Bu randevu için gecikme haberi verilemez.';
+  end if;
+  if now() < a.starts_at - interval '2 hours' then
+    raise exception 'Gecikme haberi randevudan en fazla 2 saat önce verilebilir.';
+  end if;
+  if a.customer_late_count >= 3 then
+    raise exception 'Bir randevu için en fazla 3 gecikme haberi verilebilir.';
+  end if;
+
+  update public.appointments
+  set customer_late_minutes = p_minutes, customer_late_at = now(), customer_late_count = customer_late_count + 1
+  where id = a.id;
+  insert into public.delay_notices (appointment_id, recipient, minutes) values (a.id, 'business', p_minutes);
+end;
+$$;
+
+-- İşletme "gecikmemiz var" der (10, 15, 30 veya 45 dakika): o personelin önümüzdeki 3 saat içindeki aktif
+-- randevularına, haber sayısı 3'ü geçmemişse. Saatler değişmez. Haber verilen randevu sayısını döndürür.
+create function public.report_business_delay(p_staff_id uuid, p_minutes int)
+returns int
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  v_business uuid;
+  v_n        int;
+begin
+  select s.business_id into v_business from public.staff s where s.id = p_staff_id;
+  if v_business is null or not public.is_business_owner(v_business) then
+    raise exception 'Bu işlem için yetkiniz yok.';
+  end if;
+  if p_minutes is null or p_minutes not in (10, 15, 30, 45) then
+    raise exception 'Gecikme süresi 10, 15, 30 veya 45 dakika olmalı.';
+  end if;
+
+  with upd as (
+    update public.appointments a
+    set business_delay_minutes = p_minutes, business_delay_at = now(), business_delay_count = a.business_delay_count + 1
+    where a.staff_id = p_staff_id
+      and a.status in ('pending', 'confirmed')
+      and a.starts_at >= now() and a.starts_at <= now() + interval '3 hours'
+      and a.business_delay_count < 3
+    returning a.id
+  )
+  insert into public.delay_notices (appointment_id, recipient, minutes)
+  select upd.id, 'customer', p_minutes from upd;
+  get diagnostics v_n = row_count;
+  return v_n;
+end;
+$$;
+
+-- Sunucu (/api/notifications) gecikme haberlerini alır. Alınan haber gönderilmiş sayılır (tekrar denenmez);
+-- randevusu bu arada iptal edilen ya da tamamlanan haber gönderilmiş sayılır ama döndürülmez.
+-- recipient 'business': işletme sahibinin jetonları; 'customer': müşterinin jetonları ve randevudaki e-posta.
+create function public.claim_delay_notices(p_limit int default 50)
+returns table (
+  id            uuid,
+  recipient     text,
+  minutes       int,
+  email         text,
+  customer_name text,
+  business_name text,
+  business_slug text,
+  service_name  text,
+  starts_at     timestamptz,
+  tokens        text[]
+)
+language plpgsql volatile security definer set search_path = ''
+as $$
+#variable_conflict use_column
+begin
+  return query
+  with picked as (
+    select n.id from public.delay_notices n
+    where n.status = 'pending'
+    order by n.created_at
+    limit p_limit
+    for update skip locked
+  ), claimed as (
+    update public.delay_notices n
+    set status = 'sent'
+    from picked
+    where n.id = picked.id
+    returning n.*
+  )
+  select
+    c.id, c.recipient, c.minutes,
+    case when c.recipient = 'customer' then a.customer_email end,
+    a.customer_name, b.name, b.slug, a.service_name, a.starts_at,
+    coalesce((
+      select array_agg(t.token) from public.push_tokens t
+      where t.user_id = case when c.recipient = 'business' then b.owner_id else a.customer_id end
+    ), '{}')
+  from claimed c
+  join public.appointments a on a.id = c.appointment_id
+  join public.businesses b on b.id = a.business_id
+  where a.status in ('pending', 'confirmed');
+end;
+$$;
+
+revoke execute on function public.claim_delay_notices(int) from public, anon, authenticated;
+
 -- Keşfet "Bugün müsait": listedeki işletmelerden (en fazla 60) bugün en kısa hizmetine boş saati olanlar.
 create function public.available_today(p_ids uuid[])
 returns setof uuid
@@ -3443,6 +3596,9 @@ alter table public.session_packages enable row level security;
 create policy "seans paketi: sahibi yönetir" on public.session_packages
   for all using (public.is_business_owner(business_id) and public.plan_has_feature(business_id, 'customers'))
   with check (public.is_business_owner(business_id) and public.plan_has_feature(business_id, 'customers'));
+
+-- Gecikme haberleri yalnızca report_* ve claim_delay_notices ile okunur/yazılır; istemciye politika yok.
+alter table public.delay_notices enable row level security;
 
 alter table public.waitlist enable row level security;
 
