@@ -68,13 +68,18 @@ export default function BookingScreen() {
   const { business, service } = data;
   // Seçilen hizmet ve saate uyan kuponlar (gösterim için; asıl denetim sunucuda). Kullanılmış ya da başka randevuya
   // bağlı kod, hakkı biten kupon ve fiyatsız hizmet sunulmaz.
+  // Durdurulmuş kuponu önceden alan müşterinin kodu hâlâ geçerli: açık kuponlara alınmış (active) kodlar da eklenir.
+  const candidates = [
+    ...coupons,
+    ...claims.filter((x) => x.state === 'active' && !coupons.some((c) => c.id === x.coupon_id)).map((x) => ({ ...x, id: x.coupon_id })),
+  ];
   const offers =
     session && Number(service.price) > 0
-      ? coupons.filter((c) => {
+      ? candidates.filter((c) => {
           if (!couponFits(c, service.id, time)) return false;
           const mine = claims.find((x) => x.coupon_id === c.id);
           if (mine) return mine.state === 'active';
-          return c.total_limit === null || c.claimed_count < c.total_limit;
+          return 'total_limit' in c && (c.total_limit === null || c.claimed_count < c.total_limit);
         })
       : [];
   const pickKey = `${service.id}|${time}`;

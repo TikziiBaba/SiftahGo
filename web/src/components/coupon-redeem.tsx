@@ -13,8 +13,9 @@ type Found = {
   discount_type: "percent" | "fixed";
   discount_value: number;
   customer_name: string;
-  state: "active" | "attached" | "used" | "expired";
+  state: "active" | "attached" | "used" | "expired" | "unavailable";
   problem: string | null;
+  redeemed_at: string | null;
 };
 
 const UNDO_MS = 10 * 60 * 1000;
@@ -26,54 +27,75 @@ export function CouponRedeem() {
   const [found, setFound] = useState<Found | null>(null);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
-  // Kullanılmış sayılan kod ve saati; 10 dakika dolunca geri alma kapanır.
-  const [done, setDone] = useState<{ claimId: string; at: number } | null>(null);
+  // Kasada işaretlenmiş ve 10 dakikası dolmamış kod geri alınabilir. Sunucudaki redeemed_at'tan hesaplanır: sonraki
+  // sorgu ve sayfa yenilemesi de geri almayı gösterir; süre dolunca düğme kapanır.
+  const [undoable, setUndoable] = useState(false);
 
-  const doneAt = done?.at;
+  const redeemedAt = found?.redeemed_at;
   useEffect(() => {
-    if (!doneAt) return;
-    const t = setTimeout(() => setDone(null), Math.max(0, doneAt + UNDO_MS - Date.now()));
+    if (!undoable || !redeemedAt) return;
+    const t = setTimeout(() => setUndoable(false), Math.max(0, new Date(redeemedAt).getTime() + UNDO_MS - Date.now()));
     return () => clearTimeout(t);
-  }, [doneAt]);
+  }, [undoable, redeemedAt]);
+
+  async function lookup() {
+    const { data, error } = await createClient().rpc("find_coupon_code", { p_business_id: business.id, p_code: code.trim() });
+    if (error) {
+      setMessage({ ok: false, text: errorMessage(error) });
+      return false;
+    }
+    // Yanlış kodda hata değil null döner.
+    if (!data) {
+      setMessage({ ok: false, text: "Kod bulunamadı" });
+      return false;
+    }
+    const f = data as Found;
+    setFound(f);
+    setUndoable(f.state === "used" && !!f.redeemed_at && Date.now() - new Date(f.redeemed_at).getTime() < UNDO_MS);
+    return true;
+  }
 
   async function find(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setMessage(null);
     setFound(null);
-    setDone(null);
-    const { data, error } = await createClient().rpc("find_coupon_code", { p_business_id: business.id, p_code: code.trim() });
+    setUndoable(false);
+    await lookup();
     setBusy(false);
-    if (error) return setMessage({ ok: false, text: errorMessage(error) });
-    // Yanlış kodda hata değil null döner.
-    if (!data) return setMessage({ ok: false, text: "Kod bulunamadı" });
-    setFound(data as Found);
   }
 
   async function redeem() {
     setBusy(true);
     setMessage(null);
     const { data, error } = await createClient().rpc("redeem_coupon_code", { p_business_id: business.id, p_code: code.trim() });
-    setBusy(false);
-    if (error) return setMessage({ ok: false, text: errorMessage(error) });
+    if (error) {
+      setBusy(false);
+      return setMessage({ ok: false, text: errorMessage(error) });
+    }
     if (!data) {
+      setBusy(false);
       setFound(null);
       return setMessage({ ok: false, text: "Kod bulunamadı" });
     }
-    setFound(null);
-    setCode("");
-    setDone({ claimId: data as string, at: Date.now() });
-    setMessage({ ok: true, text: "Kupon kullanıldı olarak işaretlendi." });
+    // Kart yeniden okunur: kullanıldı görünür ve 10 dakika "Geri al" açık kalır.
+    const ok = await lookup();
+    setBusy(false);
+    if (ok) setMessage({ ok: true, text: "Kupon kullanıldı olarak işaretlendi." });
   }
 
   async function undo() {
-    if (!done) return;
+    if (!found) return;
     setBusy(true);
-    const { error } = await createClient().rpc("undo_coupon_redeem", { p_claim_id: done.claimId });
+    setMessage(null);
+    const { error } = await createClient().rpc("undo_coupon_redeem", { p_claim_id: found.claim_id });
+    if (error) {
+      setBusy(false);
+      return setMessage({ ok: false, text: errorMessage(error) });
+    }
+    const ok = await lookup();
     setBusy(false);
-    if (error) return setMessage({ ok: false, text: errorMessage(error) });
-    setDone(null);
-    setMessage({ ok: true, text: "Geri alındı; kupon yeniden kullanılabilir." });
+    if (ok) setMessage({ ok: true, text: "Geri alındı; kupon yeniden kullanılabilir." });
   }
 
   return (
@@ -92,6 +114,8 @@ export function CouponRedeem() {
           onChange={(e) => {
             setCode(e.target.value.replace(/\D/g, ""));
             setFound(null);
+            setMessage(null);
+            setUndoable(false);
           }}
         />
         <button disabled={busy || code.length !== 6} className="btn btn-secondary">
@@ -109,20 +133,19 @@ export function CouponRedeem() {
           <p className="text-sm text-ink-3">
             {formatDiscount(found)} · {found.customer_name}
           </p>
-          {found.problem ? (
-            <p className="mt-3 rounded-xl bg-amber-400/10 p-3 text-sm text-amber-200">{found.problem}</p>
-          ) : (
-            <button disabled={busy} className="btn btn-primary mt-3" onClick={redeem}>
-              {busy && <Loader2 className="size-4 animate-spin" />} Kullanıldı
+          {found.problem && <p className="mt-3 rounded-xl bg-amber-400/10 p-3 text-sm text-amber-200">{found.problem}</p>}
+          {undoable ? (
+            <button disabled={busy} className="btn btn-ghost mt-3" onClick={undo}>
+              Geri al (10 dakika içinde)
             </button>
+          ) : (
+            !found.problem && (
+              <button disabled={busy} className="btn btn-primary mt-3" onClick={redeem}>
+                {busy && <Loader2 className="size-4 animate-spin" />} Kullanıldı
+              </button>
+            )
           )}
         </div>
-      )}
-
-      {done && (
-        <button disabled={busy} className="btn btn-ghost mt-3" onClick={undo}>
-          Geri al (10 dakika içinde)
-        </button>
       )}
     </section>
   );

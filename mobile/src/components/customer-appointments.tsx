@@ -19,7 +19,7 @@ import { formatMoney } from '@/lib/coupons';
 import { errorMessage, formatDate, formatTime, mapsLink, relativeDay, dayOf, shortDay } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import { colors, radius } from '@/lib/theme';
-import type { Appointment } from '@/lib/types';
+import type { Appointment, MyCoupon } from '@/lib/types';
 
 type Row = Appointment & {
   businesses: { name: string; slug: string; phone: string; address: string; district: string; city: string } | null;
@@ -37,9 +37,11 @@ export function CustomerAppointments({ userId, header = true }: { userId: string
   const [reviewable, setReviewable] = useState<Set<string>>(new Set());
   const [reviewing, setReviewing] = useState<Row | null>(null);
   const [moving, setMoving] = useState<Row | null>(null);
+  // Kuponlu randevunun kupon adı (coupon_claim_id -> başlık)
+  const [couponNames, setCouponNames] = useState<Map<string, string>>(new Map());
 
   const load = useCallback(async () => {
-    const [{ data }, { data: reviews }] = await Promise.all([
+    const [{ data }, { data: reviews }, { data: coupons }] = await Promise.all([
       supabase
         .from('appointments')
         .select('*, businesses(name, slug, phone, address, district, city)')
@@ -47,7 +49,9 @@ export function CustomerAppointments({ userId, header = true }: { userId: string
         .order('starts_at', { ascending: false })
         .limit(100),
       supabase.from('reviews').select('appointment_id').eq('customer_id', userId),
+      supabase.rpc('my_coupons'),
     ]);
+    setCouponNames(new Map(((coupons ?? []) as MyCoupon[]).map((c) => [c.claim_id, c.title])));
     const reviewed = new Set((reviews ?? []).map((r: { appointment_id: string }) => r.appointment_id));
     const rows = (data ?? []) as Row[];
     const now = new Date().toISOString();
@@ -143,6 +147,7 @@ export function CustomerAppointments({ userId, header = true }: { userId: string
         renderItem={({ item }) => (
           <AppointmentCard
             item={item}
+            couponName={couponNames.get(item.coupon_claim_id ?? '')}
             upcoming={tab === 'upcoming'}
             canReview={reviewable.has(item.id)}
             onCancel={() => cancel(item)}
@@ -184,6 +189,7 @@ export function CustomerAppointments({ userId, header = true }: { userId: string
 
 function AppointmentCard({
   item,
+  couponName,
   upcoming,
   canReview,
   onCancel,
@@ -192,6 +198,7 @@ function AppointmentCard({
   onLate,
 }: {
   item: Row;
+  couponName?: string;
   upcoming: boolean;
   canReview: boolean;
   onCancel: () => unknown;
@@ -231,8 +238,17 @@ function AppointmentCard({
           </Text>
           <Text variant="caption" tone="muted" numberOfLines={1}>
             {item.service_name}
-            {Number(item.price) > 0 ? ` · ${formatMoney(item.price)}` : ''}
+            {item.list_price !== null
+              ? ` · ${formatMoney(item.list_price)} → ${formatMoney(item.price)}`
+              : Number(item.price) > 0
+                ? ` · ${formatMoney(item.price)}`
+                : ''}
           </Text>
+          {couponName ? (
+            <Text variant="caption" tone="muted" numberOfLines={1}>
+              Kupon: {couponName}
+            </Text>
+          ) : null}
           <View style={[styles.wrap, { marginTop: 2 }]}>
             {item.rejected ? (
               <Badge label="Onaylanmadı" icon={STATUS.cancelled.icon} fg={STATUS.cancelled.fg} bg={STATUS.cancelled.bg} />

@@ -31,6 +31,7 @@ import {
 import { AppointmentReview } from "@/components/appointment-review";
 import { KpiCard } from "@/components/charts";
 import { useBusiness } from "@/components/panel-context";
+import { AppointmentPrice } from "@/components/appointment-price";
 import { delayLabel } from "@/components/delay-actions";
 import { DayCalendar, WeekView } from "@/components/panel-schedule";
 import { RescheduleDialog } from "@/components/reschedule-dialog";
@@ -310,7 +311,7 @@ export default function AppointmentsPage() {
                 <p className="truncate text-lg font-semibold">{nextUp.customer_name}</p>
                 <p className="truncate text-sm text-ink-2">
                   {nextUp.service_name}
-                  {nextUp.staff && ` · ${nextUp.staff.name}`} · {formatPrice(nextUp.price)}
+                  {nextUp.staff && ` · ${nextUp.staff.name}`} · <AppointmentPrice price={nextUp.price} listPrice={nextUp.list_price} />
                 </p>
                 {delayLabel(nextUp) && <p className="text-sm font-medium text-warn">{delayLabel(nextUp)}</p>}
               </div>
@@ -467,7 +468,7 @@ export default function AppointmentsPage() {
                       </p>
                       <p className="text-sm text-ink-2">
                         {r.service_name}
-                        {r.staff && ` · ${r.staff.name}`} · {formatPrice(r.price)}
+                        {r.staff && ` · ${r.staff.name}`} · <AppointmentPrice price={r.price} listPrice={r.list_price} />
                       </p>
                       <div className="mt-0.5 flex flex-wrap gap-x-4 text-sm">
                         <a href={`tel:${r.customer_phone}`} className="inline-flex items-center gap-1 text-accent">

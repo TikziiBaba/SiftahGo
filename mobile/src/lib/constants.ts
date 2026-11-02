@@ -108,6 +108,7 @@ export const PLAN_FEATURES: Record<string, string> = {
   announcement: 'Sayfada duyuru bandı',
   links: 'WhatsApp, Instagram ve web kısayolları',
   theme: 'Sayfa rengi seçimi',
+  coupons: 'Kupon: indirim tanımlayın, kasada kodla kullanın',
 };
 export const BASE_FEATURES = [
   '7/24 online randevu sayfası',

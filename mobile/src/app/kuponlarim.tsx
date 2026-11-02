@@ -14,6 +14,7 @@ const STATE: Record<MyCoupon['state'], string> = {
   attached: 'Randevuya bağlı',
   used: 'Kullanıldı',
   expired: 'Süresi doldu',
+  unavailable: 'Şu an kullanılamıyor',
 };
 
 /** Hesap altında müşterinin aldığı kuponlar ve kodları (web: components/my-coupons.tsx). */
@@ -44,7 +45,7 @@ export default function MyCouponsScreen() {
           <Empty icon="ticket-outline" title="Henüz kuponun yok" text="İşletme sayfalarındaki “Kuponu al” düğmesiyle kupon alabilirsin." />
         ) : (
           list.map((c) => (
-            <Card key={c.claim_id} style={[{ flexDirection: 'row', alignItems: 'center', gap: 14 }, (c.state === 'used' || c.state === 'expired') && { opacity: 0.6 }]}>
+            <Card key={c.claim_id} style={[{ flexDirection: 'row', alignItems: 'center', gap: 14 }, c.state !== 'active' && c.state !== 'attached' && { opacity: 0.6 }]}>
               <View style={{ flex: 1, gap: 2 }}>
                 <Text variant="bodyStrong">{c.title}</Text>
                 <Button

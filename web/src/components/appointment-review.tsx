@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Check, Loader2, Star, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { AppointmentPrice } from "@/components/appointment-price";
 import { CANCEL_REASONS } from "@/lib/constants";
-import { errorMessage, formatDate, formatPrice, formatTime } from "@/lib/format";
+import { errorMessage, formatDate, formatTime } from "@/lib/format";
 import type { Appointment, CustomerCard } from "@/lib/types";
 
 type Props = {
@@ -75,7 +76,7 @@ export function AppointmentReview({ appointment: a, rejecting: startRejecting = 
             <h2 id="review-title" className="text-lg font-bold">{a.customer_name}</h2>
             <p className="mt-0.5 text-sm text-ink-3">
               {formatDate(a.starts_at, { weekday: undefined })} {formatTime(a.starts_at)} · {a.service_name}
-              {a.staff && ` · ${a.staff.name}`} · {formatPrice(a.price)}
+              {a.staff && ` · ${a.staff.name}`} · <AppointmentPrice price={a.price} listPrice={a.list_price} />
             </p>
           </div>
           <button type="button" onClick={onClose} className="btn btn-ghost px-2" aria-label="Kapat">

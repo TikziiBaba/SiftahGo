@@ -317,7 +317,7 @@ export type PublicCoupon = Pick<
   "id" | "title" | "discount_type" | "discount_value" | "starts_on" | "ends_on" | "weekdays" | "start_time" | "end_time" | "service_ids" | "total_limit"
 > & { claimed_count: number };
 
-// Müşterinin kuponu (my_coupons satırı). state: used kullanıldı, attached aktif bir randevuya bağlı, expired süresi doldu, active.
+// Müşterinin kuponu (my_coupons satırı). state: used kullanıldı, attached aktif bir randevuya bağlı, expired süresi doldu, unavailable işletmenin paketinde kupon yok, active.
 export type MyCoupon = {
   claim_id: string;
   code: string;
@@ -337,5 +337,5 @@ export type MyCoupon = {
   business_id: string;
   business_name: string;
   business_slug: string;
-  state: "active" | "attached" | "used" | "expired";
+  state: "active" | "attached" | "used" | "expired" | "unavailable";
 };

@@ -337,5 +337,5 @@ export type MyCoupon = {
   business_id: string;
   business_name: string;
   business_slug: string;
-  state: "active" | "attached" | "used" | "expired";
+  state: "active" | "attached" | "used" | "expired" | "unavailable";
 };

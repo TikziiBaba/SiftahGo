@@ -13,6 +13,7 @@ const STATE: Record<MyCoupon["state"], string> = {
   attached: "Randevuya bağlı",
   used: "Kullanıldı",
   expired: "Süresi doldu",
+  unavailable: "Şu an kullanılamıyor",
 };
 
 /** Hesabım'da müşterinin aldığı kuponlar ve kodları. */
@@ -43,7 +44,7 @@ export function MyCoupons() {
   return (
     <ul className="space-y-3">
       {list.map((c) => (
-        <li key={c.claim_id} className={`card flex flex-wrap items-center gap-4 p-4 ${c.state === "used" || c.state === "expired" ? "opacity-60" : ""}`}>
+        <li key={c.claim_id} className={`card flex flex-wrap items-center gap-4 p-4 ${c.state !== "active" && c.state !== "attached" ? "opacity-60" : ""}`}>
           <div className="min-w-0 flex-1">
             <p className="font-semibold">{c.title}</p>
             <Link href={`/${c.business_slug}`} className="text-sm text-ink-2 hover:underline">

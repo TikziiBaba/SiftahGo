@@ -1,5 +1,6 @@
 import { SUPPORT_CATEGORIES } from "@/lib/constants";
-import { formatDate, formatPrice, formatTime } from "@/lib/format";
+import { formatMoney } from "@/lib/coupons";
+import { formatDate, formatTime } from "@/lib/format";
 import type { DelayNotice, WaitlistNotice } from "@/lib/push";
 import type { AppointmentStatus, SupportCategory, SupportStatus } from "@/lib/types";
 
@@ -52,7 +53,7 @@ function content(n: QueuedNotification, appUrl: string): Content {
     ["Telefon", n.customer_phone],
     ["Hizmet", n.service_name],
     ["Tarih", when],
-    ...(Number(n.price) > 0 ? [["Ücret", formatPrice(n.price)] as [string, string]] : []),
+    ...(Number(n.price) > 0 ? [["Ücret", formatMoney(n.price)] as [string, string]] : []),
     ...(n.note ? [["Not", n.note] as [string, string]] : []),
   ];
   const panel = { label: "Panelde aç", href: `${appUrl}/panel` };

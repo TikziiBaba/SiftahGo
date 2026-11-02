@@ -7,6 +7,8 @@ import type { MyCoupon, PublicCoupon } from "@/lib/types";
 
 const COLUMNS = "id, title, discount_type, discount_value, starts_on, ends_on, weekdays, start_time, end_time, service_ids, total_limit, claimed_count";
 
+const CHANGED = "shop-coupons-changed";
+
 /**
  * İşletmenin açık kuponları ve girişli müşterinin bu işletmeden aldıkları. Dükkân sayfası önbellekte olduğu için
  * kuponlar sayfaya gömülmez, tarayıcıda her açılışta okunur. loggedIn null: oturum henüz bilinmiyor.
@@ -18,7 +20,7 @@ export function useShopCoupons(businessId: string, enabled = true) {
     loggedIn: null,
   });
 
-  const refresh = useCallback(async () => {
+  const load = useCallback(async () => {
     if (!enabled) return;
     const supabase = createClient();
     const {
@@ -44,8 +46,17 @@ export function useShopCoupons(businessId: string, enabled = true) {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- kuponlar ilk açılışta yüklenir
-    refresh();
-  }, [refresh]);
+    load();
+    // Aynı sayfadaki başka bir kupon bölümü (dükkân kartı, randevu kutusu) kuponu aldı ya da kullandı: yeniden oku.
+    window.addEventListener(CHANGED, load);
+    return () => window.removeEventListener(CHANGED, load);
+  }, [load]);
+
+  // Yenilerken sayfadaki diğer kupon bölümleri de haberdar edilir.
+  const refresh = useCallback(async () => {
+    await load();
+    window.dispatchEvent(new Event(CHANGED));
+  }, [load]);
 
   return { ...state, refresh };
 }

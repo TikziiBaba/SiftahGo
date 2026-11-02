@@ -13,8 +13,9 @@ type Found = {
   discount_type: 'percent' | 'fixed';
   discount_value: number;
   customer_name: string;
-  state: 'active' | 'attached' | 'used' | 'expired';
+  state: 'active' | 'attached' | 'used' | 'expired' | 'unavailable';
   problem: string | null;
+  redeemed_at: string | null;
 };
 
 const UNDO_MS = 10 * 60 * 1000;
@@ -25,53 +26,74 @@ export function CouponRedeem({ businessId }: { businessId: string }) {
   const [found, setFound] = useState<Found | null>(null);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
-  // Kullanılmış sayılan kod ve saati; 10 dakika dolunca geri alma kapanır.
-  const [done, setDone] = useState<{ claimId: string; at: number } | null>(null);
+  // Kasada işaretlenmiş ve 10 dakikası dolmamış kod geri alınabilir. Sunucudaki redeemed_at'tan hesaplanır: sonraki
+  // sorgu ve yenileme de geri almayı gösterir; süre dolunca düğme kapanır.
+  const [undoable, setUndoable] = useState(false);
 
-  const doneAt = done?.at;
+  const redeemedAt = found?.redeemed_at;
   useEffect(() => {
-    if (!doneAt) return;
-    const t = setTimeout(() => setDone(null), Math.max(0, doneAt + UNDO_MS - Date.now()));
+    if (!undoable || !redeemedAt) return;
+    const t = setTimeout(() => setUndoable(false), Math.max(0, new Date(redeemedAt).getTime() + UNDO_MS - Date.now()));
     return () => clearTimeout(t);
-  }, [doneAt]);
+  }, [undoable, redeemedAt]);
+
+  async function lookup() {
+    const { data, error } = await supabase.rpc('find_coupon_code', { p_business_id: businessId, p_code: code.trim() });
+    if (error) {
+      setMessage({ ok: false, text: errorMessage(error) });
+      return false;
+    }
+    // Yanlış kodda hata değil null döner.
+    if (!data) {
+      setMessage({ ok: false, text: 'Kod bulunamadı' });
+      return false;
+    }
+    const f = data as Found;
+    setFound(f);
+    setUndoable(f.state === 'used' && !!f.redeemed_at && Date.now() - new Date(f.redeemed_at).getTime() < UNDO_MS);
+    return true;
+  }
 
   async function find() {
     setBusy(true);
     setMessage(null);
     setFound(null);
-    setDone(null);
-    const { data, error } = await supabase.rpc('find_coupon_code', { p_business_id: businessId, p_code: code.trim() });
+    setUndoable(false);
+    await lookup();
     setBusy(false);
-    if (error) return setMessage({ ok: false, text: errorMessage(error) });
-    // Yanlış kodda hata değil null döner.
-    if (!data) return setMessage({ ok: false, text: 'Kod bulunamadı' });
-    setFound(data as Found);
   }
 
   async function redeem() {
     setBusy(true);
     setMessage(null);
     const { data, error } = await supabase.rpc('redeem_coupon_code', { p_business_id: businessId, p_code: code.trim() });
-    setBusy(false);
-    if (error) return setMessage({ ok: false, text: errorMessage(error) });
+    if (error) {
+      setBusy(false);
+      return setMessage({ ok: false, text: errorMessage(error) });
+    }
     if (!data) {
+      setBusy(false);
       setFound(null);
       return setMessage({ ok: false, text: 'Kod bulunamadı' });
     }
-    setFound(null);
-    setCode('');
-    setDone({ claimId: data as string, at: Date.now() });
-    setMessage({ ok: true, text: 'Kupon kullanıldı olarak işaretlendi.' });
+    // Kart yeniden okunur: kullanıldı görünür ve 10 dakika "Geri al" açık kalır.
+    const ok = await lookup();
+    setBusy(false);
+    if (ok) setMessage({ ok: true, text: 'Kupon kullanıldı olarak işaretlendi.' });
   }
 
   async function undo() {
-    if (!done) return;
+    if (!found) return;
     setBusy(true);
-    const { error } = await supabase.rpc('undo_coupon_redeem', { p_claim_id: done.claimId });
+    setMessage(null);
+    const { error } = await supabase.rpc('undo_coupon_redeem', { p_claim_id: found.claim_id });
+    if (error) {
+      setBusy(false);
+      return setMessage({ ok: false, text: errorMessage(error) });
+    }
+    const ok = await lookup();
     setBusy(false);
-    if (error) return setMessage({ ok: false, text: errorMessage(error) });
-    setDone(null);
-    setMessage({ ok: true, text: 'Geri alındı; kupon yeniden kullanılabilir.' });
+    if (ok) setMessage({ ok: true, text: 'Geri alındı; kupon yeniden kullanılabilir.' });
   }
 
   return (
@@ -88,6 +110,8 @@ export function CouponRedeem({ businessId }: { businessId: string }) {
         onChangeText={(v) => {
           setCode(v.replace(/\D/g, ''));
           setFound(null);
+          setMessage(null);
+          setUndoable(false);
         }}
         keyboardType="number-pad"
         maxLength={6}
@@ -107,13 +131,14 @@ export function CouponRedeem({ businessId }: { businessId: string }) {
             <View style={{ marginTop: 8 }}>
               <Banner tone="warning" icon="alert-circle-outline" text={found.problem} />
             </View>
-          ) : (
+          ) : null}
+          {undoable ? (
+            <Button title="Geri al (10 dakika içinde)" variant="ghost" onPress={undo} disabled={busy} style={{ marginTop: 8 }} />
+          ) : !found.problem ? (
             <Button title="Kullanıldı" onPress={redeem} loading={busy} disabled={busy} style={{ marginTop: 8 }} />
-          )}
+          ) : null}
         </View>
       )}
-
-      {done && <Button title="Geri al (10 dakika içinde)" variant="ghost" onPress={undo} disabled={busy} />}
     </Card>
   );
 }

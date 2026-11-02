@@ -241,6 +241,15 @@ function Agenda({ business }: { business: Business }) {
         <Text variant="caption" tone="muted" numberOfLines={1}>
           {item.service_name}
           {item.staff ? ` · ${item.staff.name}` : ''} · {formatMoney(item.price)}
+          {item.list_price !== null ? (
+            <>
+              {' '}
+              <Text variant="caption" tone="muted" style={{ textDecorationLine: 'line-through' }}>
+                {formatMoney(item.list_price)}
+              </Text>
+              {' · Kupon'}
+            </>
+          ) : null}
         </Text>
         <FlaggedNote row={item} />
         <DelayNote row={item} />
