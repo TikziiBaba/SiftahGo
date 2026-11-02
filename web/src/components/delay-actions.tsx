@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Clock, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { errorMessage } from "@/lib/format";
@@ -10,10 +10,21 @@ const LATE_MINUTES = [5, 10, 15];
 const DELAY_MINUTES = [10, 15, 30, 45];
 const TWO_HOURS = 2 * 60 * 60 * 1000;
 
-/** Rozet metni: müşterinin son haberi (işletme görür) ya da işletmenin son haberi (müşteri görür). Haber yoksa null. */
-export function delayLabel(a: Pick<Appointment, "customer_late_minutes" | "business_delay_minutes">, side: "business" | "customer" = "business"): string | null {
+/** Rozet metni: müşterinin son haberi (işletme görür) ya da işletmenin son haberi (müşteri görür). Haber yoksa ve randevu bekleyen/onaylı değilse null. */
+export function delayLabel(a: Pick<Appointment, "customer_late_minutes" | "business_delay_minutes" | "status">, side: "business" | "customer" = "business"): string | null {
+  if (a.status !== "pending" && a.status !== "confirmed") return null;
   if (side === "business") return a.customer_late_minutes ? `${a.customer_late_minutes} dk gecikiyor` : null;
   return a.business_delay_minutes ? `Yaklaşık ${a.business_delay_minutes} dk gecikme` : null;
+}
+
+/** Şimdiki zaman; dakikada bir güncellenir, açık kalan kart pencereyi doğru gösterir. */
+function useNow() {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  return now;
 }
 
 function Minutes({ options, busy, onPick }: { options: number[]; busy: boolean; onPick: (m: number) => void }) {
@@ -35,7 +46,7 @@ export function CustomerLateButton({ appointment, onDone }: { appointment: Appoi
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [sent, setSent] = useState<number | null>(null);
-  const [now] = useState(() => Date.now()); // sayfa açıldığı an; sunucu zaten pencereyi denetler
+  const now = useNow(); // sunucu zaten pencereyi denetler
   const inWindow = now >= new Date(appointment.starts_at).getTime() - TWO_HOURS && now < new Date(appointment.ends_at).getTime();
   if (!inWindow || !["pending", "confirmed"].includes(appointment.status)) return null;
 
@@ -62,7 +73,7 @@ export function CustomerLateButton({ appointment, onDone }: { appointment: Appoi
         </div>
       ) : (
         <button type="button" className="btn btn-secondary py-2" onClick={() => setOpen(true)}>
-          <Clock className="size-4" /> Geç kalacağım
+          <Clock className="size-4" /> Gecikiyorum
         </button>
       )}
       {sent && !open && <p className="mt-2 text-sm text-ok">İşletmeye {sent} dk gecikeceğin haber verildi.</p>}
@@ -72,7 +83,7 @@ export function CustomerLateButton({ appointment, onDone }: { appointment: Appoi
 }
 
 /** İşletme: bir personelin önümüzdeki 3 saatteki müşterilerine "gecikmemiz var" der. */
-export function BusinessDelayButton({ staff, onDone }: { staff: { id: string; name: string }; onDone?: () => void }) {
+export function BusinessDelayButton({ staff, named, onDone }: { staff: { id: string; name: string }; named?: boolean; onDone?: () => void }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -85,7 +96,7 @@ export function BusinessDelayButton({ staff, onDone }: { staff: { id: string; na
     setBusy(false);
     if (error) return setError(errorMessage(error));
     const n = Number(data ?? 0);
-    setResult(n > 0 ? `${n} müşteriye haber verildi` : "Önümüzdeki 3 saatte randevu yok");
+    setResult(n > 0 ? `${n} müşteriye haber verildi` : "Haber verilebilecek müşteri yok. Elle eklenen randevuları arayın.");
     setOpen(false);
     onDone?.();
   }
@@ -100,8 +111,8 @@ export function BusinessDelayButton({ staff, onDone }: { staff: { id: string; na
           </button>
         </div>
       ) : (
-        <button type="button" className="btn btn-secondary px-3 py-1 text-xs" onClick={() => setOpen(true)} aria-label={`${staff.name} için gecikme haberi`}>
-          <Clock className="size-3.5" /> Gecikme var
+        <button type="button" className="btn btn-secondary px-3 py-1 text-xs" onClick={() => { setResult(""); setOpen(true); }} aria-label={`${staff.name} için gecikme haberi`}>
+          <Clock className="size-3.5" /> {named ? `${staff.name}: Sarktık` : "Sarktık"}
         </button>
       )}
       {result && !open && (

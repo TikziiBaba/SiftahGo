@@ -73,7 +73,7 @@ export function DayCalendar({
                 </span>
                 {c.id && day === todayStr() && (
                   <div className="mt-1.5 font-normal">
-                    <BusinessDelayButton staff={{ id: c.id, name: c.name }} onDone={onDelay} />
+                    <BusinessDelayButton staff={{ id: c.id, name: c.name }} named={staff.length > 1} onDone={onDelay} />
                   </div>
                 )}
               </div>

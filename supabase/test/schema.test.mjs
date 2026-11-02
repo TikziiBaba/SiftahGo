@@ -1266,7 +1266,21 @@ const korunan = await gRow(aptYakin);
 ok(korunan.business_delay_count === 3 && korunan.business_delay_minutes === 45 && korunan.customer_late_count === 3 && korunan.customer_late_minutes === 15,
   'işletme gecikme alanlarını doğrudan değiştiremez');
 await as(MUSTERI, `update appointments set customer_late_count = 0 where id = $1`, [aptYakin]);
-ok((await gRow(aptYakin)).customer_late_count === 3, 'müşteri gecikme sayacını doğrudan sıfırlayamaz');
+ok((await gRow(aptYakin)).customer_late_count === 3, 'müşterinin randevu güncelleme yetkisi yok; sayaç zaten değişmez (asıl koruma yukarıdaki işletme testi)');
+
+// bekleyen randevuya da haber verilir
+const aptBekleyen = await gApt(bosPersonel, MUSTERI, 1, 'pending');
+await as(MUSTERI, `select report_customer_late($1, 5)`, [aptBekleyen]);
+ok((await gRow(aptBekleyen)).customer_late_minutes === 5, 'bekleyen randevuya müşteri gecikme haberi verilebilir');
+
+// saat değişince haberler sıfırlanır
+await db.query(`update appointments set business_delay_minutes = 15, business_delay_at = now(), business_delay_count = 1 where id = $1`, [aptBekleyen]);
+ok((await gRow(aptBekleyen)).business_delay_count === 1, 'işletme haberi hazır');
+await as(SAHIP, `update appointments set starts_at = starts_at + interval '30 minutes', ends_at = ends_at + interval '30 minutes' where id = $1`, [aptBekleyen]);
+const tasinan = await gRow(aptBekleyen);
+ok(tasinan.customer_late_minutes === null && tasinan.customer_late_at === null && tasinan.customer_late_count === 0
+  && tasinan.business_delay_minutes === null && tasinan.business_delay_at === null && tasinan.business_delay_count === 0,
+  'randevu saati değişince gecikme haberleri ve sayaçlar sıfırlanır');
 const elle = (await as(SAHIP, `insert into appointments (business_id, staff_id, service_name, customer_name, customer_phone, starts_at, ends_at, customer_late_count, business_delay_minutes)
   values ($1, $2, 'x', 'x', 'x', now() + interval '8 hours', now() + interval '9 hours', 2, 30) returning customer_late_count, business_delay_minutes`, [gbiz, bosPersonel])).rows[0];
 ok(elle.customer_late_count === 0 && elle.business_delay_minutes === null, 'elle eklenen randevuda gecikme alanları boşlanır');
@@ -1277,7 +1291,7 @@ await db.query(`update appointments set status = 'cancelled' where id = $1`, [ap
 const gClaimed = (await db.query(`select * from claim_delay_notices(100)`)).rows;
 const toBusiness = gClaimed.filter((r) => r.recipient === 'business');
 const toCustomer = gClaimed.filter((r) => r.recipient === 'customer');
-ok(toBusiness.length === 3 && toBusiness.every((r) => r.email === null && r.tokens.join() === 'ExponentPushToken[gsahip]' && r.business_slug === 'gecikme-berber'),
+ok(toBusiness.length === 4 &&toBusiness.every((r) => r.email === null && r.tokens.join() === 'ExponentPushToken[gsahip]' && r.business_slug === 'gecikme-berber'),
   'müşteri gecikmeleri işletmeye gider: e-posta yok, işletme sahibinin jetonu');
 ok(toCustomer.length === 3 && toCustomer.every((r) => r.email === 'gmusteri@x.com' && r.tokens.join() === 'ExponentPushToken[gmusteri]' && r.customer_name === 'Gecikmeli Müşteri' && r.service_name === 'Saç Kesimi' && r.business_name === 'Gecikme Berber'),
   'işletme gecikmeleri müşteriye gider: e-posta ve müşterinin jetonu; sonradan iptal edilen randevunun haberi gelmez');

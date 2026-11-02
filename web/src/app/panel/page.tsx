@@ -462,6 +462,7 @@ export default function AppointmentsPage() {
                       <p className="flex flex-wrap items-center gap-2 font-semibold">
                         {r.customer_name}
                         {r.customer_flagged && <FlaggedChip row={r} />}
+                        {delayLabel(r) && <span className="text-sm font-medium text-warn">{delayLabel(r)}</span>}
                         {!r.customer_id && <span className="chip bg-tint/5 px-2 text-2xs text-ink-3">elle eklendi</span>}
                       </p>
                       <p className="text-sm text-ink-2">

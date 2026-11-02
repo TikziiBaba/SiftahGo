@@ -210,7 +210,7 @@ export function buildDelayEmail(n: DelayNotice & { email: string }, appUrl: stri
       ["Tarih", when],
       ["Tahmini gecikme", `${n.minutes} dakika`],
     ],
-    action: { label: "İşletme sayfası", href: `${appUrl}/${n.business_slug}` },
+    action: { label: "Randevularım", href: `${appUrl}/hesabim` },
   });
 }
 

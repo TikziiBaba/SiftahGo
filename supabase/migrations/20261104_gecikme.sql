@@ -93,6 +93,54 @@ begin
 end;
 $$;
 
+-- Randevu yazılırken: geçmiş sayıları ve "sık iptal eden müşteri" işareti (yalnız eklerken),
+-- iptal edenin kim olduğu (durum iptale dönünce). İstemci bu alanları elle değiştiremez.
+-- Saat değişince gecikme haberleri ve sayaçları sıfırlanır.
+create or replace function public.appointments_before_write()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  v_owner boolean := public.is_business_owner(new.business_id);
+begin
+  if tg_op = 'INSERT' then
+    select h.cancels, h.no_shows into new.prior_cancels, new.prior_no_shows
+    from public.customer_history(new.customer_id, new.customer_phone, new.business_id) h;
+    -- Son 6 ayda 3 iptal veya 2 gelmeme: işletme uyarılır, müşterinin aldığı randevu onaya düşer.
+    new.customer_flagged := new.prior_cancels >= 3 or new.prior_no_shows >= 2;
+    if new.customer_flagged and not v_owner and new.status = 'confirmed' then
+      new.status := 'pending';
+    end if;
+    new.cancelled_by := case when new.status = 'cancelled' then 'business' end;
+    new.rejected := false;
+  else
+    new.prior_cancels := old.prior_cancels;
+    new.prior_no_shows := old.prior_no_shows;
+    new.customer_flagged := old.customer_flagged;
+    new.cancelled_by := case
+      when new.status <> 'cancelled' then null
+      when old.status = 'cancelled' then old.cancelled_by
+      when not v_owner and new.customer_id = auth.uid() then 'customer'
+      else 'business'
+    end;
+    new.rejected := new.status = 'cancelled' and new.cancelled_by = 'business'
+                    and (old.status = 'pending' or (old.status = 'cancelled' and old.rejected));
+    -- Saat değişince eski saate ait gecikme haberleri geçersiz: haberler ve sayaçlar sıfırlanır.
+    if new.starts_at is distinct from old.starts_at then
+      new.customer_late_minutes := null;
+      new.customer_late_at := null;
+      new.customer_late_count := 0;
+      new.business_delay_minutes := null;
+      new.business_delay_at := null;
+      new.business_delay_count := 0;
+    end if;
+  end if;
+  -- Açıklamayı yalnızca iptal eden işletme yazar.
+  new.cancel_reason := case when new.cancelled_by = 'business' then trim(new.cancel_reason) else '' end;
+  return new;
+end;
+$$;
+
 -- Müşteri "geç kalacağım" der (5, 10 veya 15 dakika). Randevu saati değişmez; işletmeye haber kuyruğa girer.
 -- Randevudan en erken 2 saat önce ve randevu bitmeden verilir; bir randevu için en fazla 3 haber.
 create or replace function public.report_customer_late(p_id uuid, p_minutes int)

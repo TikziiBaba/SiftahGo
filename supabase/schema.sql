@@ -858,6 +858,15 @@ begin
     end;
     new.rejected := new.status = 'cancelled' and new.cancelled_by = 'business'
                     and (old.status = 'pending' or (old.status = 'cancelled' and old.rejected));
+    -- Saat değişince eski saate ait gecikme haberleri geçersiz: haberler ve sayaçlar sıfırlanır.
+    if new.starts_at is distinct from old.starts_at then
+      new.customer_late_minutes := null;
+      new.customer_late_at := null;
+      new.customer_late_count := 0;
+      new.business_delay_minutes := null;
+      new.business_delay_at := null;
+      new.business_delay_count := 0;
+    end if;
   end if;
   -- Açıklamayı yalnızca iptal eden işletme yazar.
   new.cancel_reason := case when new.cancelled_by = 'business' then trim(new.cancel_reason) else '' end;

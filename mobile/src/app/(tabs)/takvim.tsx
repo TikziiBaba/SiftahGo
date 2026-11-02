@@ -360,7 +360,7 @@ function Agenda({ business }: { business: Business }) {
             {day === today && staff.length > 0 && (
               <View style={styles.wrap}>
                 {staff.map((m) => (
-                  <BusinessDelayButton key={m.id} staff={m} onDone={load} />
+                  <BusinessDelayButton key={m.id} staff={m} named={staff.length > 1} onDone={load} />
                 ))}
               </View>
             )}

@@ -275,6 +275,7 @@ function AppointmentCard({
           </View>
         )
       )}
+      {!upcoming && <CustomerLateButton appointment={item} onDone={onLate} />}
       {upcoming && item.status === 'pending' && (
         <View style={styles.rowCenter}>
           <Ionicons name="hourglass-outline" size={14} color={colors.warning} />

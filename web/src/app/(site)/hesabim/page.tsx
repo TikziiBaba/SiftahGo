@@ -386,7 +386,7 @@ function AppointmentCard({
           <p className="text-sm text-ink-2">
             {formatDate(row.starts_at)} · {row.service_name} · {formatPrice(row.price)}
           </p>
-          {delayLabel(row, "customer") && row.status !== "cancelled" && <p className="text-sm font-medium text-warn">{delayLabel(row, "customer")}</p>}
+          {delayLabel(row, "customer") &&<p className="text-sm font-medium text-warn">{delayLabel(row, "customer")}</p>}
         </div>
         <span className={`chip ${status.className}`}>{row.rejected ? "Onaylanmadı" : status.label}</span>
         <div className="flex w-full flex-wrap gap-2 sm:w-auto">
@@ -405,7 +405,7 @@ function AppointmentCard({
               <RotateCcw className="size-4" /> Tekrar al
             </Link>
           )}
-          {onCancel && <CustomerLateButton appointment={row} onDone={onChanged} />}
+          <CustomerLateButton appointment={row} onDone={onChanged} />
           {canReview && !reviewing && (
             <button onClick={() => setReviewing(true)} className="btn btn-primary py-2">
               <Star className="size-4" /> Değerlendir

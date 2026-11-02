@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { AppState, View } from 'react-native';
 
 import { Sheet } from '@/components/sheet';
 import { useToast } from '@/components/toast';
@@ -25,6 +25,22 @@ export function delayLabel(
   return a.business_delay_minutes ? `Yaklaşık ${a.business_delay_minutes} dk gecikme` : null;
 }
 
+/** Şimdiki zaman; dakikada bir ve uygulama öne gelince güncellenir, açık kalan ekran pencereyi doğru gösterir. */
+function useNow() {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') setNow(Date.now());
+    });
+    return () => {
+      clearInterval(t);
+      sub.remove();
+    };
+  }, []);
+  return now;
+}
+
 function Minutes({ options, busy, onPick }: { options: number[]; busy: boolean; onPick: (m: number) => void }) {
   return (
     <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -41,7 +57,7 @@ export function CustomerLateButton({ appointment, onDone }: { appointment: Appoi
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [now] = useState(() => Date.now()); // ekran açıldığı an; sunucu zaten pencereyi denetler
+  const now = useNow(); // sunucu zaten pencereyi denetler
   const inWindow = now >= new Date(appointment.starts_at).getTime() - TWO_HOURS && now < new Date(appointment.ends_at).getTime();
   if (!inWindow || !['pending', 'confirmed'].includes(appointment.status)) return null;
 
@@ -58,8 +74,8 @@ export function CustomerLateButton({ appointment, onDone }: { appointment: Appoi
 
   return (
     <>
-      <Button title="Geç kalacağım" icon="time-outline" variant="secondary" size="sm" onPress={() => setOpen(true)} />
-      <Sheet visible={open} onClose={() => setOpen(false)} title="Geç kalacağım" subtitle="Ne kadar geç kalacaksın?">
+      <Button title="Gecikiyorum" icon="time-outline" variant="secondary" size="sm" onPress={() => setOpen(true)} />
+      <Sheet visible={open} onClose={() => setOpen(false)} title="Gecikiyorum" subtitle="Ne kadar geç kalacaksın?">
         <Minutes options={LATE_MINUTES} busy={busy} onPick={send} />
         {error ? (
           <Text variant="label" tone="danger">
@@ -73,7 +89,7 @@ export function CustomerLateButton({ appointment, onDone }: { appointment: Appoi
 }
 
 /** İşletme: bir personelin önümüzdeki 3 saatteki müşterilerine "gecikmemiz var" der. */
-export function BusinessDelayButton({ staff, onDone }: { staff: { id: string; name: string }; onDone?: () => void }) {
+export function BusinessDelayButton({ staff, named, onDone }: { staff: { id: string; name: string }; named?: boolean; onDone?: () => void }) {
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -87,14 +103,14 @@ export function BusinessDelayButton({ staff, onDone }: { staff: { id: string; na
     if (error) return setError(errorMessage(error));
     const n = Number(data ?? 0);
     setOpen(false);
-    toast(n > 0 ? `${n} müşteriye haber verildi` : 'Önümüzdeki 3 saatte randevu yok');
+    toast(n > 0 ? `${n} müşteriye haber verildi` : 'Haber verilebilecek müşteri yok. Elle eklenen randevuları arayın.');
     onDone?.();
   }
 
   return (
     <>
-      <Button title={`${staff.name}: gecikme var`} icon="time-outline" variant="secondary" size="sm" onPress={() => setOpen(true)} />
-      <Sheet visible={open} onClose={() => setOpen(false)} title="Gecikme var" subtitle={`${staff.name} · önümüzdeki 3 saatteki müşterilere haber verilir`}>
+      <Button title={named ? `${staff.name}: Sarktık` : 'Sarktık'} icon="time-outline" variant="secondary" size="sm" onPress={() => setOpen(true)} />
+      <Sheet visible={open} onClose={() => setOpen(false)} title="Sarktık" subtitle={`${staff.name} · önümüzdeki 3 saatteki müşterilere haber verilir`}>
         <Minutes options={DELAY_MINUTES} busy={busy} onPick={send} />
         {error ? (
           <Text variant="label" tone="danger">
