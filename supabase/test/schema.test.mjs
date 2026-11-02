@@ -1548,5 +1548,108 @@ await db.query(`update coupon_code_attempts set created_at = now() - interval '1
 ok((await kasada(KBASKA, kbiz2, kcB.code)).rows[0].id === kcB.id, '10 dakika geçince giriş yeniden açılır');
 ok((await bul(KSAHIP, kbiz, kc5.code)).state === 'used', 'bir işletmenin denemeleri diğerini kilitlemez');
 
+// --- Randevuda kupon
+{
+const PN = ['c8', 'c9', 'ca', 'cb', 'cc', 'cd', 'ce'].map((s) => `00000000-0000-0000-0000-0000000000${s}`);
+const [P1, P2, P3, P4, P5, P6, P7] = PN;
+await db.exec(PN.map((u, i) => `insert into auth.users values ('${u}', 'kp${i + 1}@x.com', '{"full_name":"Randevu Müşteri ${i + 1}"}');`).join('\n'));
+const svc100 = (await as(KSAHIP, `insert into services (business_id, name, duration_minutes, price) values ($1, 'Fiyatlı Hizmet', 30, 100) returning id`, [kbiz])).rows[0].id;
+const svc3333 = (await as(KSAHIP, `insert into services (business_id, name, duration_minutes, price) values ($1, 'Kuruşlu Hizmet', 30, 33.33) returning id`, [kbiz])).rows[0].id;
+const svc0 = (await as(KSAHIP, `insert into services (business_id, name, duration_minutes, price) values ($1, 'Ücretsiz Hizmet', 30, 0) returning id`, [kbiz])).rows[0].id;
+const sat = (h) => `${monday}T${String(h).padStart(2, '0')}:00:00Z`; // 06:00Z = 09:00 İstanbul
+const kitap = (uid, svc, t, kupon, tel = '05558880000') =>
+  as(uid, `select book_appointment($1, $2, null, $3, 'Cem Yılmaz', $4, '', null, $5) r`, [kbiz, svc, t, tel, kupon ?? null]);
+const aptRow = async (id) => (await db.query(`select * from appointments where id = $1`, [id])).rows[0];
+const claimOf = async (kupon, uid) => (await db.query(`select * from coupon_claims where coupon_id = $1 and customer_id = $2`, [kupon, uid])).rows[0];
+
+const K15 = await yeniKupon({ title: 'Yüzde 15', value: 15 });
+const rk = (await kitap(P1, svc100, sat(7), K15)).rows[0].r;
+const ka = await aptRow(rk.id);
+ok(Number(rk.price) === 85 && Number(ka.price) === 85 && Number(ka.list_price) === 100 && ka.coupon_claim_id, 'kuponlu randevu: indirimli fiyat ve liste fiyatı');
+const c1 = await claimOf(K15, P1);
+ok(c1 && c1.appointment_id === rk.id && ka.coupon_claim_id === c1.id && /^\d{6}$/.test(c1.code), 'alınmamış kuponda randevuyla birlikte kod oluştu ve randevuya bağlandı');
+ok((await kupRow(K15)).claimed_count === 1 && await myState(P1, c1.id) === 'attached', 'kupon sayısı arttı, durum attached');
+
+const eski8 = (await as(P2, `select book_appointment($1, $2, null, $3, 'Cem Yılmaz', '05557770002', '', null) r`, [kbiz, svc100, sat(8)])).rows[0].r;
+const ea = await aptRow(eski8.id);
+ok(Number(eski8.price) === 100 && Number(ea.price) === 100 && ea.list_price === null && ea.coupon_claim_id === null, 'eski 8 argümanlı çağrı aynen çalışır, list_price null');
+
+const r33 = (await kitap(P3, svc3333, sat(9), K15, '05557770003')).rows[0].r;
+ok(Number(r33.price) === 28.33, 'yüzde indirim kuruş düzeyinde yuvarlanır');
+const Kfix = await yeniKupon({ title: 'Sabit 150', type: 'fixed', value: 150 });
+const rfix = (await kitap(P4, svc100, sat(10), Kfix, '05557770004')).rows[0].r;
+ok(Number(rfix.price) === 0 && Number((await aptRow(rfix.id)).list_price) === 100, 'sabit indirim fiyatı aşarsa fiyat 0');
+
+// sebepli hatalar
+const Khiz = await yeniKupon({ title: 'Yalnız saç kesimi', services: [kSvc] });
+await expectError(() => kitap(P5, svc100, sat(11), Khiz), /hizmette/, 'seçili hizmet dışında kupon kullanılamaz');
+const Kgun = await yeniKupon({ title: 'Salı', days: [2] });
+await expectError(() => kitap(P5, svc100, sat(11), Kgun), /bu günde/, 'gün dışında kupon kullanılamaz');
+const Ksaat = await yeniKupon({ title: 'Öğle', start: '12:00', end: '13:00' });
+await expectError(() => kitap(P5, svc100, sat(7), Ksaat), /bu saatte/, 'saat aralığı dışında kupon kullanılamaz');
+await expectError(() => kitap(P5, svc0, sat(11), K15), /fiyat/i, 'fiyatı 0 olan hizmette kupon seçilemez');
+await expectError(() => kitap(P1, svc100, sat(12), K15), /randevuya bağlı/, 'açık randevuya bağlı kupon yeniden kullanılamaz');
+const Kbaska = await yeniKupon({ title: 'Başka işletme' }, KBASKA);
+await expectError(() => kitap(P5, svc100, sat(11), Kbaska), /bulunamadı/, 'başka işletmenin kuponu kullanılamaz');
+await expectError(() => kitap(P5, svc100, sat(8), K15), /müsait değil/, 'dolu saatte randevu alınamaz');
+ok(!(await claimOf(K15, P5)) && (await kupRow(K15)).claimed_count === 2, 'başarısız randevu kupon kodu bırakmaz');
+ok((await db.query(`select 1 from coupon_claims where coupon_id in ($1, $2, $3)`, [Khiz, Kgun, Ksaat])).rows.length === 0, 'reddedilen kuponlar alınmış sayılmaz');
+
+// iptal: kupon geri döner ve yeni randevuda kullanılır
+await as(P1, `select cancel_appointment($1)`, [rk.id]);
+ok(await myState(P1, c1.id) === 'active', 'iptal edilen randevunun kuponu geri döner');
+const rk2 = (await kitap(P1, svc100, sat(12), K15)).rows[0].r;
+ok(Number(rk2.price) === 85 && (await claimOf(K15, P1)).appointment_id === rk2.id && (await kupRow(K15)).claimed_count === 2, 'geri dönen kupon yeni randevuda kullanılır, ikinci kod oluşmaz');
+
+// ertele: kuponun saat aralığında çalışır, dışında /kupon/ hatası
+const Kr = await yeniKupon({ title: 'Sabah', start: '09:00', end: '11:00' });
+const rr = (await kitap(P6, svc100, sat(6), Kr, '05557770006')).rows[0].r;
+await as(P6, `select reschedule_appointment($1, $2)`, [rr.id, sat(7)]);
+const rra = await aptRow(rr.id);
+ok(rra.starts_at.toISOString().slice(11, 16) === '07:00' && rra.coupon_claim_id && Number(rra.price) === Number(rr.price), 'ertele: aralık içinde çalışır, kupon ve fiyat kalır');
+await expectError(() => as(P6, `select reschedule_appointment($1, $2)`, [rr.id, sat(13)]), /kupon/, 'ertele: kuponun aralığı dışında hata verir');
+ok((await aptRow(rr.id)).starts_at.toISOString().slice(11, 16) === '07:00', 'reddedilen erteleme saati değiştirmez');
+await expectError(() => as(KSAHIP, `select reschedule_appointment($1, $2)`, [rr.id, sat(13)]), /kupon/, 'ertele: işletme sahibi için de aynı kural');
+
+// kullanılmış sayılma ve seans paketi
+const bizUsed = async (kupon) => (await as(KSAHIP, `select used from business_coupons($1) where id = $2`, [kbiz, kupon])).rows[0].used;
+const pk = async (tel, svc) => (await db.query(`insert into session_packages (business_id, phone_key, customer_name, service_id, name, total) values ($1, $2, 'x', $3, 'Paket', 5) returning id`, [kbiz, tel, svc])).rows[0].id;
+const pkUsed = async (id) => (await db.query(`select used from session_packages where id = $1`, [id])).rows[0].used;
+const pkKuponlu = await pk('5557770004', svc100), pkNormal = await pk('5557770002', svc100);
+const c4 = await claimOf(Kfix, P4);
+ok(await bizUsed(Kfix) === 0 && await myState(P4, c4.id) === 'attached', 'tamamlanmamış randevudaki kupon kullanılmış sayılmaz');
+await db.query(`update appointments set status = 'completed' where id = $1`, [rfix.id]);
+ok(await myState(P4, c4.id) === 'used' && await bizUsed(Kfix) === 1, 'tamamlanan randevudaki kupon kullanılmış sayılır, rapor artar');
+ok(await pkUsed(pkKuponlu) === 0 && (await aptRow(rfix.id)).package_id === null, 'kuponlu randevu paketten seans düşmez');
+await db.query(`update appointments set status = 'completed' where id = $1`, [eski8.id]);
+ok(await pkUsed(pkNormal) === 1, 'kuponsuz randevu paketten seans düşer (karşılaştırma)');
+await db.query(`update appointments set status = 'no_show' where id = $1`, [rfix.id]);
+ok(await myState(P4, c4.id) === 'active' && await bizUsed(Kfix) === 0, 'gelmeyen müşterinin kuponu geri döner, rapor azalır');
+const c3 = await claimOf(K15, P3);
+await db.query(`update appointments set status = 'confirmed', starts_at = now() - interval '2 hours', ends_at = now() - interval '90 minutes' where id = $1`, [r33.id]);
+ok(await myState(P3, c3.id) === 'used' && await bizUsed(K15) === 1, 'onaylı ve saati geçmiş randevudaki kupon kullanılmış sayılır');
+
+// süresi geçmiş onay bekleyen randevu kuponu kilitlemez
+const Kbayat = await yeniKupon({ title: 'Bayat bekleyen' });
+const rb = (await kitap(P7, svc100, sat(13), Kbayat, '05557770007')).rows[0].r;
+const cb = await claimOf(Kbayat, P7);
+await db.query(`update appointments set status = 'pending' where id = $1`, [rb.id]);
+ok(await myState(P7, cb.id) === 'attached', 'onay bekleyen yaklaşan randevu kuponu bağlı tutar');
+await db.query(`update appointments set starts_at = now() - interval '5 hours', ends_at = now() - interval '270 minutes' where id = $1`, [rb.id]);
+ok(await myState(P7, cb.id) === 'active', 'saati geçmiş onay bekleyen randevu kuponu kilitlemez');
+ok((await kasada(KSAHIP, kbiz, cb.code)).rows[0].id === cb.id, 'saati geçmiş onay bekleyen randevudaki kod kasada kullanılabilir');
+
+// istemci fiyat ve kupon alanlarını yazamaz
+const manuel = (await as(KSAHIP, `insert into appointments (business_id, staff_id, service_name, customer_name, customer_phone, price, list_price, coupon_claim_id, starts_at, ends_at)
+  values ($1, $2, 'Elle', 'Elle Müşteri', '05550001122', 70, 999, $3, now() + interval '20 days', now() + interval '20 days 30 minutes') returning id, price, list_price, coupon_claim_id`, [kbiz, kStaff, c1.id])).rows[0];
+ok(Number(manuel.price) === 70 && manuel.list_price === null && manuel.coupon_claim_id === null, 'işletmenin elle eklediği randevu liste fiyatı ve kupon bağlayamaz, fiyat yazılabilir');
+await as(KSAHIP, `update appointments set list_price = 1, coupon_claim_id = null where id = $1`, [rr.id]);
+const rra2 = await aptRow(rr.id);
+ok(Number(rra2.list_price) === 100 && rra2.coupon_claim_id, 'işletme sahibi liste fiyatını ve kupon bağlantısını değiştiremez');
+await as(KSAHIP, `update appointments set coupon_claim_id = $2 where id = $1`, [manuel.id, c1.id]);
+ok((await aptRow(manuel.id)).coupon_claim_id === null, 'işletme sahibi randevuya kupon bağlayamaz');
+ok(await dogrudan(P6, `update appointments set price = 0, list_price = 0 where id = $1 returning id`, [rr.id]) === 0 && Number((await aptRow(rr.id)).price) === Number(rr.price), 'müşteri randevu fiyatını yazamaz');
+}
+
 console.log(failures ? `\n${failures} TEST BAŞARISIZ` : '\nTÜM TESTLER GEÇTİ');
 process.exit(failures ? 1 : 0);

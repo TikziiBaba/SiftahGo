@@ -415,6 +415,13 @@ create table public.coupon_claims (
 create index coupon_claims_customer_idx on public.coupon_claims (customer_id);
 create index coupon_claims_appointment_idx on public.coupon_claims (appointment_id);
 
+-- Randevudaki kupon: price indirimli fiyat, list_price indirimsiz hizmet fiyatı (kuponsuz randevuda null), coupon_claim_id
+-- kullanılan kod. book_appointment yazar; istemci elle değiştiremez (protect_appointment_columns). Tablo burada eklenir çünkü
+-- coupon_claims da randevuya bağlıdır (appointment_id).
+alter table public.appointments
+  add column list_price numeric(10, 2),
+  add column coupon_claim_id uuid references public.coupon_claims (id) on delete set null;
+
 -- Kasada yanlış girilen kodlar: işletme başına 10 dakikada 20 yanlış denemeden sonra giriş durur
 -- (coupon_lookup yazar; hata fırlatılsa kayıt geri alınacağı için yanlış kod hata değil boş sonuç döner).
 create table public.coupon_code_attempts (
@@ -952,6 +959,8 @@ begin
       new.customer_id := null;
       new.customer_email := null;
       new.package_id := null;
+      new.list_price := null;
+      new.coupon_claim_id := null;
       new.customer_late_minutes := null;
       new.customer_late_at := null;
       new.customer_late_count := 0;
@@ -963,6 +972,8 @@ begin
       new.customer_id := old.customer_id;
       new.customer_email := old.customer_email;
       new.package_id := old.package_id;
+      new.list_price := old.list_price;
+      new.coupon_claim_id := old.coupon_claim_id;
       new.created_at := old.created_at;
       new.customer_late_minutes := old.customer_late_minutes;
       new.customer_late_at := old.customer_late_at;
@@ -1011,7 +1022,9 @@ as $$
 declare
   v_pkg uuid;
 begin
-  if new.status = 'completed' and old.status is distinct from 'completed' and new.service_id is not null then
+  -- Kuponlu randevu paketten seans düşmez.
+  if new.status = 'completed' and old.status is distinct from 'completed' and new.service_id is not null
+     and new.coupon_claim_id is null then
     select p.id into v_pkg
     from public.session_packages p
     where p.business_id = new.business_id
@@ -1054,7 +1067,7 @@ $$;
 -- Girişli müşteri randevu alır. p_staff_id boşsa uygun ilk personel.
 -- Sahte randevuya karşı: işletmenin engellediği müşteri alamaz; aynı işletmede en fazla 3, toplamda
 -- en fazla 10 yaklaşan randevu; 24 saatte en fazla 10 randevu.
--- Dönen: {id, status}. İşletme elle onaylıyorsa, yalnızca tanıdık müşteriyi otomatik onaylıyorsa ve müşteri ilk kez
+-- Dönen: {id, status, price}. İşletme elle onaylıyorsa, yalnızca tanıdık müşteriyi otomatik onaylıyorsa ve müşteri ilk kez
 -- geliyorsa ya da müşteri sık iptal ediyorsa randevu işletme onayına düşer (status = pending).
 create function public.book_appointment(
   p_business_id    uuid,
@@ -1064,7 +1077,8 @@ create function public.book_appointment(
   p_customer_name  text,
   p_customer_phone text,
   p_note           text default '',
-  p_customer_email text default null
+  p_customer_email text default null,
+  p_coupon_id      uuid default null
 )
 returns jsonb
 language plpgsql volatile security definer set search_path = ''
@@ -1072,6 +1086,11 @@ as $$
 declare
   b        public.businesses;
   s        public.services;
+  c        public.coupons;
+  cl       public.coupon_claims;
+  v_price  numeric(10, 2);
+  v_reason text;
+  v_state  text;
   v_uid    uuid := auth.uid();
   v_staff  uuid;
   v_id     uuid;
@@ -1124,6 +1143,25 @@ begin
   where id = p_service_id and business_id = p_business_id and is_active;
   if not found then raise exception 'Hizmet bulunamadı.'; end if;
 
+  -- Kupon: işletmenin kuponu, paketinde kupon varken, bu hizmette ve bu saatte geçerli; kod müşterinin elinde kullanılabilir.
+  -- Kupon fiyatı hizmetin güncel fiyatı üzerinden sunucuda hesaplanır.
+  if p_coupon_id is not null then
+    select * into c from public.coupons where id = p_coupon_id and business_id = b.id;
+    if not found or not public.plan_has_feature(b.id, 'coupons') then raise exception 'Kupon bulunamadı.'; end if;
+    if s.price <= 0 then raise exception 'Fiyatı olmayan hizmette kupon kullanılamaz.'; end if;
+    if cardinality(c.service_ids) > 0 and not (s.id = any (c.service_ids)) then
+      raise exception 'Bu kupon seçtiğiniz hizmette geçerli değil.';
+    end if;
+    v_reason := public.coupon_invalid_reason(c, p_starts_at);
+    if v_reason is not null then raise exception '%', v_reason; end if;
+    select * into cl from public.coupon_claims where coupon_id = c.id and customer_id = v_uid for update;
+    if found then
+      v_state := public.coupon_claim_state(cl);
+      if v_state = 'used' then raise exception 'Bu kupon zaten kullanıldı.'; end if;
+      if v_state = 'attached' then raise exception 'Bu kupon başka bir randevuya bağlı.'; end if;
+    end if;
+  end if;
+
   select x.staff_id into v_staff
   from public.get_available_slots(
     p_business_id, p_service_id, (p_starts_at at time zone b.timezone)::date, p_staff_id
@@ -1135,22 +1173,34 @@ begin
     raise exception 'Bu saat artık müsait değil, lütfen başka bir saat seçin.';
   end if;
 
+  v_price := s.price;
+  if p_coupon_id is not null then
+    -- Henüz alınmamış kupon randevuyla birlikte alınır (sınır ve durdurma kuralları claim_coupon'da).
+    if cl.id is null then cl := public.claim_coupon(c.id); end if;
+    v_price := public.coupon_price(s.price, c.discount_type, c.discount_value);
+  end if;
+
   insert into public.appointments (
     business_id, service_id, staff_id, customer_id, service_name,
-    customer_name, customer_phone, customer_email, note, price, starts_at, ends_at, status
+    customer_name, customer_phone, customer_email, note, price, list_price, coupon_claim_id, starts_at, ends_at, status
   ) values (
     b.id, s.id, v_staff, v_uid, s.name,
-    trim(p_customer_name), v_phone, v_email, left(coalesce(p_note, ''), 500), s.price,
+    trim(p_customer_name), v_phone, v_email, left(coalesce(p_note, ''), 500), v_price,
+    case when p_coupon_id is not null then s.price end, cl.id,
     p_starts_at, p_starts_at + make_interval(mins => s.duration_minutes),
     case when public.needs_confirmation(b, v_uid) then 'pending' else 'confirmed' end
   )
   returning id, status into v_id, v_status;
 
+  if p_coupon_id is not null then
+    update public.coupon_claims set appointment_id = v_id where id = cl.id;
+  end if;
+
   -- O gün için bekleme listesindeyse artık haber gerekmez.
   delete from public.waitlist w
   where w.customer_id = v_uid and w.business_id = b.id and w.day = (p_starts_at at time zone b.timezone)::date;
 
-  return jsonb_build_object('id', v_id, 'status', v_status);
+  return jsonb_build_object('id', v_id, 'status', v_status, 'price', v_price);
 exception
   when exclusion_violation then
     raise exception 'Bu saat artık müsait değil, lütfen başka bir saat seçin.';
@@ -1336,6 +1386,15 @@ begin
   end if;
 
   select * into b from public.businesses where id = a.business_id;
+
+  -- Kuponlu randevunun yeni saati de kuponun gün ve saat aralığında olmalı; kupon randevuda kalır.
+  if a.coupon_claim_id is not null and exists (
+    select 1 from public.coupon_claims cl join public.coupons c on c.id = cl.coupon_id
+    where cl.id = a.coupon_claim_id and public.coupon_invalid_reason(c, p_starts_at) is not null
+  ) then
+    raise exception 'Yeni saat kuponun geçerli olduğu aralıkta değil.';
+  end if;
+
   select x.staff_id into v_staff
   from public.get_available_slots(
     a.business_id, a.service_id, (p_starts_at at time zone b.timezone)::date, p_staff_id, a.id
@@ -3550,7 +3609,7 @@ as $$
   );
 $$;
 
--- Müşterinin gözünden durum: used (kullanıldı), attached (aktif bir randevuya bağlı), expired (süresi doldu), active.
+-- Müşterinin gözünden durum: used (kullanıldı), attached (aktif bir randevuya bağlı; saati geçmiş onay bekleyen sayılmaz), expired (süresi doldu), active.
 create function public.coupon_claim_state(cl public.coupon_claims)
 returns text
 language plpgsql stable security definer set search_path = ''
@@ -3560,7 +3619,11 @@ declare
   v_tz   text;
 begin
   if public.coupon_claim_used(cl) then return 'used'; end if;
-  if exists (select 1 from public.appointments a where a.id = cl.appointment_id and a.status in ('pending', 'confirmed')) then
+  -- Saati geçmiş onay bekleyen randevuyu hiçbir iş çözmez: kod sonsuza dek kilitli kalmasın diye bağlı sayılmaz.
+  if exists (
+    select 1 from public.appointments a
+    where a.id = cl.appointment_id and (a.status = 'confirmed' or (a.status = 'pending' and a.ends_at > now()))
+  ) then
     return 'attached';
   end if;
   select c.ends_on, b.timezone into v_ends, v_tz
