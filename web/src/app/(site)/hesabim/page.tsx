@@ -18,12 +18,15 @@ import {
   RotateCcw,
   Star,
   Store,
+  Ticket,
   Trash2,
   UserRound,
   type LucideIcon,
 } from "lucide-react";
 import { CookieSettingsButton } from "@/components/cookie-consent";
 import { CustomerLateButton, delayLabel } from "@/components/delay-actions";
+import { formatMoney } from "@/lib/coupons";
+import { MyCoupons } from "@/components/my-coupons";
 import { HoldButton } from "@/components/hold-button";
 import { RescheduleDialog } from "@/components/reschedule-dialog";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
@@ -31,16 +34,17 @@ import { SupportCenter } from "@/components/support-center";
 import { createClient } from "@/lib/supabase/client";
 import { STATUS } from "@/lib/constants";
 import { errorMessage, formatDate, formatPrice, formatTime, untilText } from "@/lib/format";
-import type { Appointment, Business, Profile } from "@/lib/types";
+import type { Appointment, Business, MyCoupon, Profile } from "@/lib/types";
 
 type Row = Appointment & { businesses: { name: string; slug: string; phone: string; address: string; district: string; city: string } | null };
 type Favorite = Pick<Business, "slug" | "name" | "district" | "city" | "logo_url" | "category">;
-type Tab = "yaklasan" | "gecmis" | "favoriler" | "destek" | "profil";
+type Tab = "yaklasan" | "gecmis" | "favoriler" | "kuponlar" | "destek" | "profil";
 
 const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
   { id: "yaklasan", label: "Yaklaşan", icon: CalendarCheck },
   { id: "gecmis", label: "Geçmiş", icon: History },
   { id: "favoriler", label: "Favoriler", icon: Heart },
+  { id: "kuponlar", label: "Kuponlarım", icon: Ticket },
   { id: "destek", label: "Destek", icon: LifeBuoy },
   { id: "profil", label: "Profil", icon: UserRound },
 ];
@@ -83,6 +87,8 @@ function AccountView() {
   const [answered, setAnswered] = useState(0);
   // Değerlendirilebilecek randevular: tamamlanan veya saati geçmiş onaylı, henüz değerlendirilmemiş.
   const [reviewable, setReviewable] = useState<Set<string>>(new Set());
+  // Kuponlu randevu kartında kupon adı için: kod kimliği -> kupon adı
+  const [couponNames, setCouponNames] = useState<Map<string, string>>(new Map());
   const [error, setError] = useState("");
   const [moving, setMoving] = useState<Row | null>(null);
 
@@ -95,7 +101,7 @@ function AccountView() {
     } = await supabase.auth.getSession();
     if (!auth) return router.replace("/giris?next=/hesabim");
     setEmail(auth.user.email ?? "");
-    const [p, a, r, f, s] = await Promise.all([
+    const [p, a, r, f, s, cp] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", auth.user.id).maybeSingle(),
       supabase
         .from("appointments")
@@ -110,7 +116,9 @@ function AccountView() {
         .eq("customer_id", auth.user.id)
         .order("created_at", { ascending: false }),
       supabase.from("support_tickets").select("id", { count: "exact", head: true }).eq("user_id", auth.user.id).eq("status", "answered"),
+      supabase.rpc("my_coupons"),
     ]);
+    setCouponNames(new Map(((cp.data ?? []) as MyCoupon[]).map((c) => [c.claim_id, c.title])));
     setProfile(p.data as Profile | null);
     setAnswered(s.count ?? 0);
     // Yayından kalkan işletme gelmez (businesses boş).
@@ -156,7 +164,7 @@ function AccountView() {
   const next = upcoming[0];
   const done = past.filter((r) => r.status === "completed").length;
   const firstName = profile?.full_name?.split(" ")[0] ?? "";
-  const counts: Record<Tab, number | null> = { yaklasan: upcoming.length, gecmis: past.length, favoriler: favorites?.length ?? 0, destek: answered || null, profil: null };
+  const counts: Record<Tab, number | null> = { yaklasan: upcoming.length, gecmis: past.length, favoriler: favorites?.length ?? 0, kuponlar: null, destek: answered || null, profil: null };
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-4 pb-16 pt-4">
@@ -263,7 +271,7 @@ function AccountView() {
           ) : (
             <ul className="space-y-3">
               {upcoming.map((r) => (
-                <AppointmentCard key={r.id} row={r} onChanged={load} onCancel={() => cancel(r.id)} onReschedule={r.service_id ? () => setMoving(r) : undefined} />
+                <AppointmentCard key={r.id} row={r} couponName={couponNames.get(r.coupon_claim_id ?? "")} onChanged={load} onCancel={() => cancel(r.id)} onReschedule={r.service_id ? () => setMoving(r) : undefined} />
               ))}
             </ul>
           ))}
@@ -276,7 +284,7 @@ function AccountView() {
           ) : (
             <ul className="space-y-3">
               {past.map((r) => (
-                <AppointmentCard key={r.id} row={r} canReview={reviewable.has(r.id)} onReviewed={load} />
+                <AppointmentCard key={r.id} row={r} couponName={couponNames.get(r.coupon_claim_id ?? "")} canReview={reviewable.has(r.id)} onReviewed={load} />
               ))}
             </ul>
           ))}
@@ -304,6 +312,8 @@ function AccountView() {
               ))}
             </ul>
           ))}
+
+        {tab === "kuponlar" && <MyCoupons />}
 
         {tab === "destek" && <SupportCenter />}
 
@@ -352,6 +362,7 @@ function Empty({ icon: Icon, title, text, action }: { icon: LucideIcon; title: s
 
 function AppointmentCard({
   row,
+  couponName,
   onCancel,
   onReschedule,
   canReview,
@@ -359,6 +370,7 @@ function AppointmentCard({
   onChanged,
 }: {
   row: Row;
+  couponName?: string;
   onChanged?: () => void;
   onCancel?: () => void;
   onReschedule?: () => void;
@@ -384,8 +396,13 @@ function AppointmentCard({
             <p className="font-semibold">İşletme</p>
           )}
           <p className="text-sm text-ink-2">
-            {formatDate(row.starts_at)} · {row.service_name} · {formatPrice(row.price)}
+            {formatDate(row.starts_at)} · {row.service_name} ·{" "}
+            {row.list_price !== null && row.list_price > row.price && (
+              <span className="text-ink-3 line-through">{formatMoney(row.list_price)}</span>
+            )}{" "}
+            {row.list_price !== null ? formatMoney(row.price) : formatPrice(row.price)}
           </p>
+          {couponName && <p className="text-sm text-accent">Kupon: {couponName}</p>}
           {delayLabel(row, "customer") &&<p className="text-sm font-medium text-warn">{delayLabel(row, "customer")}</p>}
         </div>
         <span className={`chip ${status.className}`}>{row.rejected ? "Onaylanmadı" : status.label}</span>

@@ -1,4 +1,5 @@
-import { formatDate, formatDuration, formatPrice, formatTime } from "@/lib/format";
+import { formatMoney } from "@/lib/coupons";
+import { formatDate, formatDuration, formatTime } from "@/lib/format";
 
 /**
  * Alınan randevu, delikli koçanlı bir bilet olarak (bkz. .ticket-top / .ticket-stub, globals.css).
@@ -41,7 +42,7 @@ export function AppointmentTicket({
           </Field>
           <Field label="Tarih">{formatDate(startsAt)}</Field>
           <Field label="Süre">{formatDuration(durationMinutes)}</Field>
-          <Field label="Ücret">{price > 0 ? formatPrice(price) : "—"}</Field>
+          <Field label="Ücret">{price > 0 ? formatMoney(price) : "—"}</Field>
           {staffName && <Field label="Personel">{staffName}</Field>}
           {place && (
             <div className="col-span-2">

@@ -10,6 +10,7 @@ import { ChevronRight, Clock, Globe, MapPin, Megaphone, Phone, Sparkles, Star } 
 import { SiteFooter, SiteHeader } from "@/components/site-header";
 import { BookingWidget } from "@/components/booking-widget";
 import { Morph } from "@/components/business-card";
+import { ShopCoupons } from "@/components/shop-coupons";
 import { ShopShortcuts } from "@/components/shop-shortcuts";
 import { TrackRecent } from "@/components/track-recent";
 import { createClient } from "@/lib/supabase/server";
@@ -312,6 +313,11 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
           </p>
         )}
 
+        {/* Kuponlar önbellekteki sayfaya gömülmez: tarayıcıda ayrı okunur (bayat kalmasın). */}
+        {features.includes("coupons") && (
+          <ShopCoupons businessId={business.id} slug={business.slug} services={services.map((s) => ({ id: s.id, name: s.name }))} />
+        )}
+
         <div className="grid items-start gap-6 py-8 lg:grid-cols-[1fr_360px]">
           {/* min-w-0: kaydırılan gün şeridi sütunu ekrandan genişletmesin */}
           <div id="randevu" className="min-w-0 scroll-mt-28">
@@ -332,6 +338,7 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
                 staff={staffList}
                 staffServices={staffServices}
                 hours={hourList}
+                couponsEnabled={features.includes("coupons")}
               />
             </Suspense>
           </div>

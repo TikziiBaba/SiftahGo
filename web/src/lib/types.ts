@@ -310,3 +310,32 @@ export type CouponClaim = {
   appointment_id: string | null;
   created_at: string;
 };
+
+// İşletme sayfasında herkese açık kupon (coupons tablosunun okunan alanları); claimed_count alınan sayıdır.
+export type PublicCoupon = Pick<
+  Coupon,
+  "id" | "title" | "discount_type" | "discount_value" | "starts_on" | "ends_on" | "weekdays" | "start_time" | "end_time" | "service_ids" | "total_limit"
+> & { claimed_count: number };
+
+// Müşterinin kuponu (my_coupons satırı). state: used kullanıldı, attached aktif bir randevuya bağlı, expired süresi doldu, active.
+export type MyCoupon = {
+  claim_id: string;
+  code: string;
+  claimed_at: string;
+  redeemed_at: string | null;
+  appointment_id: string | null;
+  coupon_id: string;
+  title: string;
+  discount_type: "percent" | "fixed";
+  discount_value: number;
+  starts_on: string;
+  ends_on: string;
+  weekdays: number[];
+  start_time: string | null;
+  end_time: string | null;
+  service_ids: string[];
+  business_id: string;
+  business_name: string;
+  business_slug: string;
+  state: "active" | "attached" | "used" | "expired";
+};
