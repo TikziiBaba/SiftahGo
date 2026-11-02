@@ -1,6 +1,9 @@
 import { createElement } from "react";
 import {
+  Apple,
   Camera,
+  Coffee,
+  Croissant,
   Droplets,
   Dumbbell,
   Flower2,
@@ -10,10 +13,13 @@ import {
   LayoutGrid,
   PawPrint,
   PenTool,
+  ShoppingCart,
+  Store,
   Scissors,
   Shirt,
   Sparkles,
   Stethoscope,
+  Utensils,
   Wind,
   Wrench,
   type LucideIcon,
@@ -38,6 +44,12 @@ export const CATEGORY_ICONS: Record<(typeof CATEGORIES)[number]["id"], LucideIco
   egitim: GraduationCap,
   fotograf: Camera,
   terzi: Shirt,
+  lokanta: Utensils,
+  kafe: Coffee,
+  firin: Croissant,
+  market: ShoppingCart,
+  "manav-kasap": Apple,
+  magaza: Store,
   diger: LayoutGrid,
 };
 

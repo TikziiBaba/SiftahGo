@@ -10,6 +10,9 @@ export type Profile = {
 // Başvuru onayı: yönetici onaylayana kadar işletme görünmez; reddedilirse approval_note sebebi yazar.
 export type ApprovalStatus = "pending" | "approved" | "rejected";
 
+// Randevulu işletme (varsayılan) ya da randevu almayan vitrin: menü ve kuponla sayfa açar.
+export type BusinessType = "appointment" | "showcase";
+
 export type Business = {
   id: string;
   owner_id: string;
@@ -57,6 +60,7 @@ export type Business = {
   referral_code: string;
   referred_by: string | null;
   referral_rewarded_at: string | null;
+  business_type: BusinessType;
 };
 
 export type SuspensionReason = "kural_ihlali" | "odeme" | "sikayet" | "sahip_talebi" | "diger";
@@ -110,6 +114,20 @@ export type SupportMessage = {
   ticket_id: string;
   from_admin: boolean;
   body: string;
+  created_at: string;
+};
+
+// Vitrin menüsü ürünü. category boşsa kategorisiz; sayfada kategoriye göre gruplanır.
+export type MenuItem = {
+  id: string;
+  business_id: string;
+  category: string;
+  name: string;
+  description: string;
+  price: number;
+  image_url: string | null;
+  is_active: boolean;
+  sort_order: number;
   created_at: string;
 };
 

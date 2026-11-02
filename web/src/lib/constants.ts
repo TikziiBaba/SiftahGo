@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { AppointmentStatus, SupportCategory, SupportStatus, SuspensionReason } from "./types";
+import type { AppointmentStatus, BusinessType, SupportCategory, SupportStatus, SuspensionReason } from "./types";
 
 export const SITE_NAME = "SiftahGo";
 export const SITE_URL = (process.env.NEXT_PUBLIC_APP_URL || "https://siftahgo.app").replace(/\/$/, "");
@@ -22,8 +22,32 @@ export const CATEGORIES = [
   { id: "egitim", label: "Özel Ders & Kurs" },
   { id: "fotograf", label: "Fotoğraf Stüdyosu" },
   { id: "terzi", label: "Terzi" },
+  { id: "lokanta", label: "Lokanta" },
+  { id: "kafe", label: "Kafe" },
+  { id: "firin", label: "Fırın & Pastane" },
+  { id: "market", label: "Market" },
+  { id: "manav-kasap", label: "Manav & Kasap" },
+  { id: "magaza", label: "Mağaza" },
   { id: "diger", label: "Diğer" },
 ] as const;
+
+// Randevusuz (vitrin) işletmelerin seçebildiği kategoriler; "Diğer" ikisinde de var. Mobildekiyle aynı.
+export const SHOWCASE_CATEGORY_IDS: readonly string[] = ["lokanta", "kafe", "firin", "market", "manav-kasap", "magaza"];
+
+/** İşletme türüne göre seçilebilen kategoriler: vitrin yalnızca kendi kategorilerini ve "Diğer"i, randevulu vitrin kategorileri dışındakileri görür. */
+export function categoriesFor(type: BusinessType) {
+  return CATEGORIES.filter((c) => (type === "showcase" ? SHOWCASE_CATEGORY_IDS.includes(c.id) || c.id === "diger" : !SHOWCASE_CATEGORY_IDS.includes(c.id)));
+}
+
+/** Randevu almayan, menü ve kuponla sayfa açan işletme mi. */
+export function isShowcase(b: { business_type?: BusinessType | null }) {
+  return b.business_type === "showcase";
+}
+
+/** Menü sayfasının adı: yemek-içmede "Menü", diğerlerinde "Ürünler". */
+export function menuLabel(category: string): "Menü" | "Ürünler" {
+  return category === "lokanta" || category === "kafe" || category === "firin" ? "Menü" : "Ürünler";
+}
 
 export function categoryLabel(id: string) {
   return CATEGORIES.find((c) => c.id === id)?.label ?? "Diğer";
@@ -116,6 +140,7 @@ export const PLAN_FEATURES: Record<string, string> = {
   links: "WhatsApp, Instagram ve web kısayolları",
   theme: "Sayfa rengi seçimi",
   coupons: "Kupon: indirim tanımlayın, kasada kodla kullanın",
+  menu: "Menü: ürünlerinizi fiyatıyla sayfanızda gösterin",
 };
 // Davet bağlantısıyla (/kayit?davet=KOD) gelenin kodu; işletme kurulumunda doldurulur.
 export const REFERRAL_KEY = "siftahgo.davet";
@@ -124,6 +149,15 @@ export const BASE_FEATURES = [
   "7/24 online randevu sayfası",
   "Çakışmasız takvim, izin ve tatil günleri",
   "WhatsApp ile hatırlatma",
+  "QR kod ve kendi adresiniz",
+  "Müşteri yorumları",
+];
+
+// Vitrin paketinde randevu yok: kartta gösterilen temel özellikler.
+export const SHOWCASE_BASE_FEATURES = [
+  "7/24 açık işletme sayfası",
+  "Menü ve ürün listesi",
+  "Çalışma saatleri ve yol tarifi",
   "QR kod ve kendi adresiniz",
   "Müşteri yorumları",
 ];

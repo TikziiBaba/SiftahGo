@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Lock } from "lucide-react";
 import { useBusiness } from "@/components/panel-context";
 import { createClient } from "@/lib/supabase/client";
+import { isShowcase } from "@/lib/constants";
 
 /** Özellik paketinizde yoksa yükseltme kartı gösterir, varsa içeriği. */
 export function PlanGate({ feature, title, children }: { feature: string; title: string; children: React.ReactNode }) {
@@ -38,9 +39,13 @@ export function PlanGate({ feature, title, children }: { feature: string; title:
             <Lock className="size-5" />
           </span>
           <h1 className="mt-5 text-xl font-semibold">{title} paketinizde yok</h1>
-          <p className="mt-2 text-sm text-ink-3">Esnaf veya Pro paketine geçerek bu özelliği hemen kullanmaya başlayabilirsiniz.</p>
+          <p className="mt-2 text-sm text-ink-3">
+            {isShowcase(business)
+              ? "Bu özellik Vitrin paketinizle gelir; paketinizin geçerli olduğundan emin olun."
+              : "Esnaf veya Pro paketine geçerek bu özelliği hemen kullanmaya başlayabilirsiniz."}
+          </p>
           <Link href="/panel/abonelik" className="btn btn-primary mt-6">
-            Paketleri gör
+            {isShowcase(business) ? "Aboneliğimi gör" : "Paketleri gör"}
           </Link>
         </div>
       </div>

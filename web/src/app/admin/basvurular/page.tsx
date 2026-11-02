@@ -57,7 +57,7 @@ export default function AdminApplications() {
     <div className="mx-auto max-w-4xl">
       <PageTitle
         title="Başvurular"
-        hint="Yeni işletmeler onaylanana kadar görünmez ve randevu almaz. Onayda 2 aylık Pro denemesi başlar."
+        hint="Yeni işletmeler onaylanana kadar görünmez ve randevu almaz. Onayda 2 aylık deneme başlar: randevulu için Pro, vitrin için Vitrin."
       />
 
       <div className="mt-6">
@@ -81,6 +81,9 @@ export default function AdminApplications() {
                   <Link href={`/admin/isletmeler/${b.id}`} className="text-lg font-semibold hover:text-accent">
                     {b.name}
                   </Link>
+                  <span className={`chip ${b.business_type === "showcase" ? TONE.amber : TONE.muted}`}>
+                    {b.business_type === "showcase" ? "Vitrin (randevusuz)" : "Randevulu"}
+                  </span>
                   {b.approval_status === "pending" && b.approval_note && (
                     <span className={`chip gap-1 ${TONE.sky}`}>
                       <RotateCcw className="size-3" /> Yeniden başvuru

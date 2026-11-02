@@ -12,11 +12,14 @@ const DAY_NAMES = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
 export function CouponForm({
   coupon,
   services,
+  showServices = true,
   onSaved,
   onCancel,
 }: {
   coupon: Coupon | null;
   services: Service[];
+  /** Vitrin işletmede hizmet yoktur; hizmet seçimi gizlenir. */
+  showServices?: boolean;
   onSaved: () => void;
   onCancel: () => void;
 }) {
@@ -136,6 +139,7 @@ export function CouponForm({
           onChange={(e) => setLimit(e.target.value)}
         />
       </div>
+      {showServices && (
       <div className="sm:col-span-2">
         <label className="label">Geçerli hizmetler (hiçbiri seçili değilse hepsi)</label>
         <div className="flex flex-wrap gap-x-4 gap-y-2">
@@ -154,6 +158,7 @@ export function CouponForm({
           {services.length === 0 && <p className="text-sm text-ink-3">Henüz hizmet yok; kupon tüm hizmetlerde geçer.</p>}
         </div>
       </div>
+      )}
       {error && <p className="rounded-xl bg-rose-500/10 p-3 text-sm text-rose-300 sm:col-span-2">{error}</p>}
       <div className="flex gap-2 sm:col-span-2">
         <button disabled={busy} className="btn btn-primary">

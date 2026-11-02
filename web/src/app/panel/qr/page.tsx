@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Copy, Download, ImagePlus, Loader2, Printer } from "lucide-react";
 import { useBusiness } from "@/components/panel-context";
 import { QrPoster, QrSvg } from "@/components/qr-poster";
-import { SITE_URL } from "@/lib/constants";
+import { isShowcase, SITE_URL } from "@/lib/constants";
 import { QR_COLOR, qrMatrix } from "@/lib/qr";
 
 export default function QrPage() {
@@ -63,7 +63,7 @@ export default function QrPage() {
       <div className="mt-6 grid gap-4 md:grid-cols-[1fr_minmax(0,360px)]">
         <section className="card flex flex-col items-center p-8 text-center">
           <p className="text-2xl font-bold">{business.name}</p>
-          <p className="mt-1 text-ink-3">Randevu almak için kodu okutun</p>
+          <p className="mt-1 text-ink-3">{isShowcase(business) ? "Menü ve kuponlar için kodu okutun" : "Randevu almak için kodu okutun"}</p>
           <div className="mt-6 rounded-2xl bg-white p-3">
             <QrSvg value={url} logo={business.logo_url} className="block size-60" />
           </div>

@@ -1,7 +1,7 @@
 import type Ionicons from '@expo/vector-icons/Ionicons';
 
 import { colors } from './theme';
-import type { AppointmentStatus, SuspensionReason } from './types';
+import type { AppointmentStatus, BusinessType, SuspensionReason } from './types';
 
 export const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://siftahgo.app';
 /** Sayfa adreslerinde gösterilen alan adı (örn. siftahgo.app/usta-berber) */
@@ -26,8 +26,32 @@ export const CATEGORIES = [
   { id: 'egitim', label: 'Özel Ders & Kurs', icon: 'school-outline' },
   { id: 'fotograf', label: 'Fotoğraf Stüdyosu', icon: 'camera-outline' },
   { id: 'terzi', label: 'Terzi', icon: 'shirt-outline' },
+  { id: 'lokanta', label: 'Lokanta', icon: 'restaurant-outline' },
+  { id: 'kafe', label: 'Kafe', icon: 'cafe-outline' },
+  { id: 'firin', label: 'Fırın & Pastane', icon: 'pizza-outline' },
+  { id: 'market', label: 'Market', icon: 'cart-outline' },
+  { id: 'manav-kasap', label: 'Manav & Kasap', icon: 'basket-outline' },
+  { id: 'magaza', label: 'Mağaza', icon: 'storefront-outline' },
   { id: 'diger', label: 'Diğer', icon: 'grid-outline' },
 ] as const satisfies readonly { id: string; label: string; icon: IconName }[];
+
+// Randevusuz (vitrin) işletmelerin seçebildiği kategoriler; 'Diğer' ikisinde de var. Web ile aynı.
+export const SHOWCASE_CATEGORY_IDS: readonly string[] = ['lokanta', 'kafe', 'firin', 'market', 'manav-kasap', 'magaza'];
+
+/** İşletme türüne göre seçilebilen kategoriler: vitrin yalnızca kendi kategorilerini ve 'Diğer'i, randevulu vitrin kategorileri dışındakileri görür. */
+export function categoriesFor(type: BusinessType) {
+  return CATEGORIES.filter((c) => (type === 'showcase' ? SHOWCASE_CATEGORY_IDS.includes(c.id) || c.id === 'diger' : !SHOWCASE_CATEGORY_IDS.includes(c.id)));
+}
+
+/** Randevu almayan, menü ve kuponla sayfa açan işletme mi. */
+export function isShowcase(b: { business_type?: BusinessType | null }) {
+  return b.business_type === 'showcase';
+}
+
+/** Menü ekranının adı: yemek-içmede 'Menü', diğerlerinde 'Ürünler'. */
+export function menuLabel(category: string): 'Menü' | 'Ürünler' {
+  return category === 'lokanta' || category === 'kafe' || category === 'firin' ? 'Menü' : 'Ürünler';
+}
 
 export function categoryLabel(id: string) {
   return CATEGORIES.find((c) => c.id === id)?.label ?? 'Diğer';
@@ -109,6 +133,7 @@ export const PLAN_FEATURES: Record<string, string> = {
   links: 'WhatsApp, Instagram ve web kısayolları',
   theme: 'Sayfa rengi seçimi',
   coupons: 'Kupon: indirim tanımlayın, kasada kodla kullanın',
+  menu: 'Menü: ürünlerinizi fiyatıyla sayfanızda gösterin',
 };
 export const BASE_FEATURES = [
   '7/24 online randevu sayfası',

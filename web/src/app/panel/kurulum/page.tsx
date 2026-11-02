@@ -6,9 +6,9 @@ import { AlertCircle, Hourglass, Loader2, LogOut, RefreshCw } from "lucide-react
 import { Logo } from "@/components/site-header";
 import { SetupContext } from "@/components/panel-context";
 import { createClient } from "@/lib/supabase/client";
-import { CATEGORIES, CITIES, REFERRAL_KEY, RESERVED_SLUGS, SITE_DOMAIN } from "@/lib/constants";
+import { categoriesFor, CITIES, REFERRAL_KEY, RESERVED_SLUGS, SITE_DOMAIN } from "@/lib/constants";
 import { errorMessage, formatDate, slugInput, slugify } from "@/lib/format";
-import type { Business } from "@/lib/types";
+import type { Business, BusinessType } from "@/lib/types";
 
 /** İşletme başvurusu: yeni başvuru, inceleniyor ekranı ya da reddedilen başvuruyu düzeltip yeniden gönderme. */
 export default function SetupPage() {
@@ -29,6 +29,8 @@ export default function SetupPage() {
 }
 
 function ApplicationForm({ business, done }: { business: Business | null; done: () => Promise<void> }) {
+  // Tür başvuruda seçilir; sonradan yalnızca yönetici değiştirir, bu yüzden yeniden başvuruda kilitlidir.
+  const [type, setType] = useState<BusinessType>(business?.business_type ?? "appointment");
   const [form, setForm] = useState({
     name: business?.name ?? "",
     slug: business?.slug ?? "",
@@ -82,7 +84,7 @@ function ApplicationForm({ business, done }: { business: Business | null; done: 
       }
     } else {
       const { data: auth } = await supabase.auth.getUser();
-      const { error } = await supabase.from("businesses").insert({ owner_id: auth.user!.id, ...fields });
+      const { error } = await supabase.from("businesses").insert({ owner_id: auth.user!.id, business_type: type, ...fields });
       if (error) {
         setBusy(false);
         return setError(errorMessage(error));
@@ -101,7 +103,7 @@ function ApplicationForm({ business, done }: { business: Business | null; done: 
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">{business ? "Başvurunuzu düzeltin" : "İşletmenizi oluşturalım"}</h1>
         <p className="mt-1 text-sm text-ink-3">
-          Bilgileriniz yetkililerimizce kontrol edildikten sonra sayfanız yayına açılır ve 2 aylık ücretsiz Pro denemeniz başlar.
+          Bilgileriniz yetkililerimizce kontrol edildikten sonra sayfanız yayına açılır ve 2 aylık ücretsiz {type === "showcase" ? "Vitrin" : "Pro"} denemeniz başlar.
         </p>
       </div>
       {business?.approval_status === "rejected" && (
@@ -114,6 +116,38 @@ function ApplicationForm({ business, done }: { business: Business | null; done: 
           </div>
         </div>
       )}
+      <fieldset disabled={!!business}>
+        <legend className="label">Müşterileriniz randevu alıyor mu?</legend>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {(
+            [
+              ["appointment", "Randevuyla çalışıyorum", "Berber, kuaför, klinik gibi; müşteri saat seçer."],
+              ["showcase", "Randevuyla çalışmıyorum", "Lokanta, market, mağaza gibi; menü ve kuponla sayfa açarsınız."],
+            ] as const
+          ).map(([id, label, hint]) => (
+            <label
+              key={id}
+              className={`flex items-start gap-2 rounded-xl p-3 text-sm ring-1 transition ${type === id ? "bg-brand-400/10 ring-brand-400/40" : "ring-line"} ${business ? "opacity-70" : "cursor-pointer hover:bg-tint/5"}`}
+            >
+              <input
+                type="radio"
+                name="business_type"
+                className="mt-0.5 size-4 accent-brand-400"
+                checked={type === id}
+                onChange={() => {
+                  setType(id);
+                  setForm({ ...form, category: categoriesFor(id)[0].id });
+                }}
+              />
+              <span>
+                <b>{label}</b>
+                <span className="block text-ink-3">{hint}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+        {business && <p className="mt-1 text-xs text-ink-3">Bu seçim sonradan değiştirilemez; değişiklik için bizimle iletişime geçin.</p>}
+      </fieldset>
       <div>
         <label className="label" htmlFor="name">İşletme adı</label>
         <input id="name" required className="input" placeholder="Örn. Usta Berber" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -138,7 +172,7 @@ function ApplicationForm({ business, done }: { business: Business | null; done: 
         <div>
           <label className="label" htmlFor="category">Kategori</label>
           <select id="category" className="input" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-            {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+            {categoriesFor(type).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
           </select>
         </div>
         <div>
@@ -202,7 +236,7 @@ function Waiting({ business: b, refresh }: { business: Business; refresh: () => 
       <h1 className="mt-5 text-2xl font-semibold tracking-tight">Başvurunuz inceleniyor</h1>
       <p className="mt-2 text-sm text-ink-3">
         Yetkililerimiz bilgilerinizi kontrol ediyor; gerekirse sizi işletme telefonunuzdan arayabiliriz. Onaylanınca sayfanız
-        yayına açılır ve 2 aylık ücretsiz Pro denemeniz başlar.
+        yayına açılır ve 2 aylık ücretsiz {b.business_type === "showcase" ? "Vitrin" : "Pro"} denemeniz başlar.
       </p>
       <dl className="mt-6 divide-y divide-line rounded-2xl bg-tint/[0.03] px-4 text-left text-sm ring-1 ring-line">
         {rows.map(([label, value]) => (

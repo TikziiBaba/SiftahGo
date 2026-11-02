@@ -11,7 +11,7 @@ import { ImageButton } from "@/components/image-button";
 import { PageAppearance } from "@/components/page-appearance";
 import { useBusiness } from "@/components/panel-context";
 import { createClient } from "@/lib/supabase/client";
-import { CATEGORIES, CITIES, CONFIRM_MODES, confirmMode, RESERVED_SLUGS, SITE_DOMAIN } from "@/lib/constants";
+import { categoriesFor, CITIES, CONFIRM_MODES, confirmMode, isShowcase, RESERVED_SLUGS, SITE_DOMAIN } from "@/lib/constants";
 import { errorMessage, slugInput, slugify } from "@/lib/format";
 import { uploadImage } from "@/lib/upload";
 
@@ -23,6 +23,8 @@ const NOTICE_OPTIONS = [
 
 export default function SettingsPage() {
   const { business, refresh } = useBusiness();
+  // Vitrin işletme randevu almaz: randevu kuralları ve engellenen müşteriler görünmez.
+  const showcase = isShowcase(business);
   const [form, setForm] = useState({
     name: business.name,
     slug: business.slug,
@@ -168,7 +170,7 @@ export default function SettingsPage() {
             <div>
               <label className="label">Kategori</label>
               <select className="input" value={form.category} onChange={set("category")}>
-                {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                {categoriesFor(business.business_type).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
               </select>
             </div>
             <div>
@@ -198,8 +200,9 @@ export default function SettingsPage() {
         </section>
 
         <section>
-          <h2 className="text-2xl font-semibold tracking-tight">Randevu kuralları</h2>
+          <h2 className="text-2xl font-semibold tracking-tight">{showcase ? "Yayın" : "Randevu kuralları"}</h2>
           <div className="card mt-4 grid gap-4 p-5 sm:grid-cols-3">
+            {!showcase && (<>
             <div>
               <label className="label">Saat aralığı</label>
               <select className="input" value={form.slot_minutes} onChange={set("slot_minutes")}>
@@ -246,12 +249,15 @@ export default function SettingsPage() {
                 müşteriye iletilir.
               </p>
             </fieldset>
+            </>)}
             <label className="flex items-start gap-2 text-sm sm:col-span-3">
               <input type="checkbox" className="mt-0.5 size-4 accent-brand-400" checked={form.is_published}
                 onChange={(e) => setForm({ ...form, is_published: e.target.checked })} />
               <span>
                 <b>Sayfam yayında</b>
-                <span className="block text-ink-3">Kapalıysa işletmeniz aramada görünmez ve randevu alınamaz.</span>
+                <span className="block text-ink-3">
+                  {showcase ? "Kapalıysa işletmeniz aramada görünmez." : "Kapalıysa işletmeniz aramada görünmez ve randevu alınamaz."}
+                </span>
               </span>
             </label>
           </div>
@@ -272,7 +278,7 @@ export default function SettingsPage() {
       {/* Ek dosya henüz çalıştırılmadıysa (konum sütunları yoksa) gizli kalır. */}
       {"latitude" in business && <BusinessLocation />}
 
-      <BlockedCustomers businessId={business.id} />
+      {!showcase && <BlockedCustomers businessId={business.id} />}
 
       <FreezeRequestSection businessId={business.id} suspended={business.is_suspended} />
     </div>

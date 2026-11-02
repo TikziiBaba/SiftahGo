@@ -33,7 +33,7 @@ import {
 import { ReviewActions } from "@/components/admin/review";
 import { AreaChart, Donut, STATUS_COLORS } from "@/components/charts";
 import { createClient } from "@/lib/supabase/client";
-import { categoryLabel, confirmMode, STATUS } from "@/lib/constants";
+import { categoryLabel, confirmMode, isShowcase, STATUS } from "@/lib/constants";
 import { addDays, dayOf, errorMessage, formatDate, formatDuration, formatPrice, intlPhone, isoWeekday, todayStr } from "@/lib/format";
 import type { AppointmentStatus } from "@/lib/types";
 import type { AdminUser } from "@/lib/admin-types";
@@ -172,6 +172,7 @@ export default function AdminBusinessDetail() {
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-semibold tracking-tight">{b.name}</h1>
               <span className={`chip ${state.className}`}>{state.label}</span>
+              <span className={`chip ${isShowcase(b) ? TONE.amber : TONE.muted}`}>{isShowcase(b) ? "Vitrin (randevusuz)" : "Randevulu"}</span>
             </div>
             <p className="mt-1 text-sm text-ink-3">
               {categoryLabel(b.category)} · {[b.district, b.city].filter(Boolean).join(", ") || "Konum yok"} · Kayıt {shortDate(b.created_at)}
@@ -362,12 +363,12 @@ export default function AdminBusinessDetail() {
 
         <div className="space-y-4">
           {b.approval_status === "approved" ? (
-            <Actions data={data} upcoming={stats.upcoming} onDone={load} />
+            <Actions key={b.business_type} data={data} upcoming={stats.upcoming} onDone={load} />
           ) : (
             <Section title="Başvuru" className="ring-1 ring-gold/20">
               <p className="mt-2 text-sm text-ink-3">
                 {b.approval_status === "pending"
-                  ? `Başvuru ${dateTime(b.submitted_at)} geldi. Onaylanınca sayfa yayına açılır ve 2 aylık Pro denemesi başlar.`
+                  ? `Başvuru ${dateTime(b.submitted_at)} geldi. Onaylanınca sayfa yayına açılır ve 2 aylık ${isShowcase(b) ? "Vitrin" : "Pro"} denemesi başlar.`
                   : `${dateTime(b.reviewed_at)} reddedildi. İşletme sahibi bilgileri düzeltip yeniden başvurabilir.`}
               </p>
               {b.approval_note && (
@@ -409,7 +410,9 @@ export default function AdminBusinessDetail() {
 }
 
 function Actions({ data, upcoming, onDone }: { data: Data; upcoming: number; onDone: () => Promise<void> }) {
-  const { business: b, plans } = data;
+  const { business: b } = data;
+  // Randevulu işletmeye yalnızca Vitrin dışı, vitrine yalnızca Vitrin paketi tanımlanır (sunucu da böyle zorlar).
+  const plans = data.plans.filter((p) => (p.id === "vitrin") === isShowcase(b));
   const [planId, setPlanId] = useState(b.plan_id ?? plans[0]?.id ?? "");
   const [days, setDays] = useState(30);
   const [amount, setAmount] = useState("");
@@ -438,6 +441,14 @@ function Actions({ data, upcoming, onDone }: { data: Data; upcoming: number; onD
       () => supabase.rpc("admin_grant_subscription", { p_business_id: b.id, p_plan_id: planId, p_days: days, p_amount: Number(amount) || 0 }),
       `${plans.find((p) => p.id === planId)?.name} paketi ${days} gün tanımlandı.`,
     );
+  const toShowcase = !isShowcase(b);
+  const changeType = () => {
+    const warning = toShowcase
+      ? `"${b.name}" vitrine çevrilsin mi? Randevu almayı bırakır; hizmet ve personel kayıtları silinmez. Paketi varsa Vitrin paketine geçer, süre aynı kalır.`
+      : `"${b.name}" randevulu işletmeye çevrilsin mi? Paketi varsa Başlangıç paketine geçer, süre aynı kalır.`;
+    if (!confirm(warning)) return;
+    return run("type", () => supabase.rpc("admin_set_business_type", { p_business_id: b.id, p_type: toShowcase ? "showcase" : "appointment" }), toShowcase ? "İşletme vitrine çevrildi." : "İşletme randevuluya çevrildi.");
+  };
   const end = () => run("end", () => supabase.rpc("admin_end_subscription", { p_business_id: b.id }), "Abonelik bitirildi.");
 
   return (
@@ -492,6 +503,9 @@ function Actions({ data, upcoming, onDone }: { data: Data; upcoming: number; onD
       </div>
 
       <div className="mt-5 space-y-2 border-t border-line pt-4">
+        <button type="button" disabled={!!busy} onClick={changeType} className="btn btn-secondary w-full justify-start">
+          {busy === "type" && <Loader2 className="size-4 animate-spin" />} {toShowcase ? "Vitrine çevir (randevusuz)" : "Randevuluya çevir"}
+        </button>
         {subscribed && (
           <HoldButton pending="Abonelik bitiriliyor" disabled={!!busy} onConfirm={end} className="btn btn-secondary w-full justify-start">
             <CircleSlash className="size-4 text-amber-300" /> Aboneliği şimdi bitir

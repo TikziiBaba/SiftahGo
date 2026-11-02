@@ -5,6 +5,7 @@ import { Loader2, MessageSquareReply, MessageSquareText, Star, ThumbsDown } from
 import { KpiCard } from "@/components/charts";
 import { useBusiness } from "@/components/panel-context";
 import { createClient } from "@/lib/supabase/client";
+import { isShowcase } from "@/lib/constants";
 import { errorMessage, formatDate } from "@/lib/format";
 import type { Review } from "@/lib/types";
 
@@ -51,7 +52,7 @@ export default function ReviewsPage() {
     <div className="mx-auto max-w-4xl">
       <h1 className="text-2xl font-semibold tracking-tight">Yorumlar</h1>
       <p className="text-sm text-ink-3">
-        Sadece randevusu gerçekleşen müşteriler puan verebilir. Cevabınız işletme sayfanızda yorumun altında herkese görünür.
+        {isShowcase(business) ? "Sadece kuponunu kullanan müşteriler puan verebilir." : "Sadece randevusu gerçekleşen müşteriler puan verebilir."} Cevabınız işletme sayfanızda yorumun altında herkese görünür.
       </p>
 
       {rows && all.length > 0 && (
@@ -111,7 +112,9 @@ export default function ReviewsPage() {
             <MessageSquareText className="size-10" />
             <p className="mt-2">
               {all.length === 0
-                ? "Henüz değerlendirme yok. Randevudan sonra müşterilerinize puan vermeleri için otomatik hatırlatma gider."
+                ? isShowcase(business)
+                  ? "Henüz değerlendirme yok. Kuponu kullanan müşterilere puan vermeleri için otomatik hatırlatma gider."
+                  : "Henüz değerlendirme yok. Randevudan sonra müşterilerinize puan vermeleri için otomatik hatırlatma gider."
                 : "Cevap bekleyen yorum yok."}
             </p>
           </div>

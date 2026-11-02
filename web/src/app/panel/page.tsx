@@ -35,8 +35,9 @@ import { AppointmentPrice } from "@/components/appointment-price";
 import { delayLabel } from "@/components/delay-actions";
 import { DayCalendar, WeekView } from "@/components/panel-schedule";
 import { RescheduleDialog } from "@/components/reschedule-dialog";
+import { ShowcaseHome } from "@/components/showcase-home";
 import { createClient } from "@/lib/supabase/client";
-import { STATUS } from "@/lib/constants";
+import { isShowcase, STATUS } from "@/lib/constants";
 import {
   addDays,
   dayBounds,
@@ -74,7 +75,13 @@ function greeting(hour: number) {
 
 const earned = (rows: Trend[]) => rows.filter((r) => r.status === "completed" || r.status === "confirmed").reduce((s, r) => s + Number(r.price), 0);
 
-export default function AppointmentsPage() {
+// Vitrin işletmede randevu ekranı hiç yüklenmez (sorgular da çalışmaz).
+export default function PanelHome() {
+  const { business } = useBusiness();
+  return isShowcase(business) ? <ShowcaseHome /> : <AppointmentsPage />;
+}
+
+function AppointmentsPage() {
   const { business } = useBusiness();
   const account = useAccount();
   const supabase = createClient();

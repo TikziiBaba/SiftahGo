@@ -7,7 +7,7 @@ import { useBusiness } from "@/components/panel-context";
 import { PaymentReceipt } from "@/components/payment-receipt";
 import { ReferralCard } from "@/components/referral-card";
 import { createClient } from "@/lib/supabase/client";
-import { BASE_FEATURES, isSubscribed, isTrial, PLAN_FEATURES } from "@/lib/constants";
+import { BASE_FEATURES, isShowcase, isSubscribed, isTrial, PLAN_FEATURES, SHOWCASE_BASE_FEATURES } from "@/lib/constants";
 import { formatDate, formatPrice } from "@/lib/format";
 import type { Payment, Plan } from "@/lib/types";
 
@@ -31,9 +31,12 @@ export default function SubscriptionPage() {
   const [result] = useState(() => (typeof window === "undefined" ? null : new URLSearchParams(location.search).get("odeme")));
   const [waiting, setWaiting] = useState(result === "basarili");
 
+  const showcase = isShowcase(business);
   const subscribed = isSubscribed(business);
   const trial = isTrial(business);
   const currentPlan = plans?.find((p) => p.id === business.plan_id);
+  // Vitrin işletme yalnızca Vitrin paketini, randevulu işletme Vitrin dışındaki paketleri görür (sunucu da böyle zorlar).
+  const visiblePlans = plans?.filter((p) => (p.id === "vitrin") === showcase) ?? null;
   const lastPayment = payments[0];
   const lastStatus = lastPayment?.status;
 
@@ -127,7 +130,7 @@ export default function SubscriptionPage() {
             <p className="text-3xs font-medium uppercase tracking-[0.2em] text-ink-3">Mevcut durum</p>
             {trial ? (
               <p className="text-lg font-semibold">
-                Ücretsiz deneme (Pro) ·{" "}
+                Ücretsiz deneme ({showcase ? "Vitrin" : "Pro"}) ·{" "}
                 <span className="font-normal text-ink-2">{formatDate(business.subscription_ends_at!, { weekday: undefined, year: "numeric" })} tarihine kadar</span>
               </p>
             ) : subscribed ? (
@@ -145,7 +148,7 @@ export default function SubscriptionPage() {
             )}
             {!subscribed && (
               <p className="text-sm text-ink-3">
-                Paket seçene kadar sayfanız yayında görünmez ve randevu alınamaz. Ayarlar’dan bilgilerinizi şimdiden doldurabilirsiniz.
+                Paket seçene kadar sayfanız yayında görünmez{showcase ? "" : " ve randevu alınamaz"}. {showcase ? "Bilgiler" : "Ayarlar"}’dan bilgilerinizi şimdiden doldurabilirsiniz.
               </p>
             )}
           </div>
@@ -193,12 +196,12 @@ export default function SubscriptionPage() {
         ))}
       </div>
 
-      <div className="mt-4 grid gap-4 md:grid-cols-3">
-        {plans === null &&
-          Array.from({ length: 3 }, (_, i) => <div key={i} className="h-96 animate-pulse rounded-[2rem] bg-surface-2" />)}
-        {plans?.map((plan) => {
+      <div className={`mt-4 grid gap-4 ${showcase ? "mx-auto max-w-md" : "md:grid-cols-3"}`}>
+        {visiblePlans === null &&
+          Array.from({ length: showcase ? 1 : 3 }, (_, i) => <div key={i} className="h-96 animate-pulse rounded-[2rem] bg-surface-2" />)}
+        {visiblePlans?.map((plan) => {
           const isCurrent = subscribed && !trial && plan.id === business.plan_id;
-          const popular = plan.id === POPULAR;
+          const popular = !showcase && plan.id === POPULAR;
           return (
             <div key={plan.id} className={`bezel ${popular ? "ring-brand-400/40" : ""}`}>
               <div className={`bezel-core relative flex h-full flex-col overflow-hidden p-6 ${popular ? "bg-gradient-to-b from-brand-900/40 to-surface" : ""}`}>
@@ -217,11 +220,14 @@ export default function SubscriptionPage() {
                   </p>
                 )}
                 <ul className="relative mt-6 flex-1 space-y-2.5 text-sm">
-                  <Feature>{plan.staff_limit ? `${plan.staff_limit} personel` : "Sınırsız personel"}</Feature>
-                  {BASE_FEATURES.map((f) => (
+                  {!showcase && <Feature>{plan.staff_limit ? `${plan.staff_limit} personel` : "Sınırsız personel"}</Feature>}
+                  {(showcase ? SHOWCASE_BASE_FEATURES : BASE_FEATURES).map((f) => (
                     <Feature key={f}>{f}</Feature>
                   ))}
-                  {Object.entries(PLAN_FEATURES).map(([key, label]) => (
+                  {Object.entries(PLAN_FEATURES)
+                    .filter(([key]) => !showcase || ["coupons", "announcement", "links", "menu"].includes(key))
+                    .filter(([key]) => showcase || key !== "menu")
+                    .map(([key, label]) => (
                     <Feature key={key} off={!plan.features.includes(key)}>
                       {label}
                     </Feature>
@@ -230,7 +236,7 @@ export default function SubscriptionPage() {
                 <button
                   disabled={busyPlan !== null}
                   onClick={() => buy(plan)}
-                  className={`btn relative mt-8 w-full py-3 ${popular ? "btn-primary" : "btn-secondary"}`}
+                  className={`btn relative mt-8 w-full py-3 ${popular || showcase ? "btn-primary" : "btn-secondary"}`}
                 >
                   {busyPlan === plan.id && <Loader2 className="size-4 animate-spin" />}
                   {isCurrent ? (months === 12 ? "1 yıl uzat" : "30 gün uzat") : subscribed && !trial ? "Bu pakete geç" : "Seç ve öde"}
@@ -242,7 +248,7 @@ export default function SubscriptionPage() {
       </div>
       <p className="mt-4 flex items-center gap-2 text-xs text-ink-3">
         <ShieldCheck className="size-4 text-brand-300" /> Ödemeler PayTR güvencesiyle alınır; kart bilgileriniz bize ulaşmaz.
-        Küçük pakete geçerseniz fazla personel pasif olur.
+        {showcase ? "" : "Küçük pakete geçerseniz fazla personel pasif olur."}
       </p>
 
       {/* Ek dosya henüz çalıştırılmadıysa (davet sütunları yoksa) gizli kalır. */}

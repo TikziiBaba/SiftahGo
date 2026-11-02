@@ -20,6 +20,7 @@ import {
   Sparkles,
   Star,
   Ticket,
+  UtensilsCrossed,
   Users,
   X,
   type LucideIcon,
@@ -28,7 +29,7 @@ import { InboxBell } from "@/components/inbox-bell";
 import { Logo } from "@/components/site-header";
 import { BusinessContext, SetupContext } from "@/components/panel-context";
 import { createClient } from "@/lib/supabase/client";
-import { isSubscribed, isTrial, SUSPENSION_REASONS } from "@/lib/constants";
+import { isShowcase, isSubscribed, isTrial, menuLabel, SUSPENSION_REASONS } from "@/lib/constants";
 import { formatDate } from "@/lib/format";
 import type { Business, BusinessSuspension } from "@/lib/types";
 
@@ -73,10 +74,44 @@ const ALL = GROUPS.flatMap((g) => g.items);
 // Telefonda alt çubukta duran dört sekme; kalanlar "Daha fazla" sayfasında.
 const PRIMARY = ["/panel", "/panel/musteriler", "/panel/raporlar", "/panel/yorumlar"];
 
+// Vitrin (randevusuz) işletmenin menüsü: randevuyla ilgili hiçbir bölüm yok. Menü sayfasının adı kategoriye göre değişir.
+function showcaseGroups(category: string): { title: string; items: Item[] }[] {
+  return [
+    {
+      title: "Günlük",
+      items: [
+        { href: "/panel", label: "Genel Bakış", icon: CalendarDays },
+        { href: "/panel/menu", label: menuLabel(category), icon: UtensilsCrossed },
+        { href: "/panel/kuponlar", label: "Kuponlar", icon: Ticket },
+        { href: "/panel/yorumlar", label: "Yorumlar", icon: Star, badge: "reviews" },
+      ],
+    },
+    {
+      title: "İşletmem",
+      items: [
+        { href: "/panel/ayarlar", label: "Bilgiler", icon: Settings },
+        { href: "/panel/saatler", label: "Çalışma saatleri", icon: Clock },
+        { href: "/panel/qr", label: "QR kod", icon: QrCode },
+      ],
+    },
+    {
+      title: "Hesap",
+      items: [
+        { href: "/panel/abonelik", label: "Abonelik", icon: CreditCard },
+        { href: "/panel/destek", label: "Destek", icon: LifeBuoy, badge: "support" },
+      ],
+    },
+  ];
+}
+const SHOWCASE_PRIMARY = ["/panel", "/panel/menu", "/panel/kuponlar", "/panel/yorumlar"];
+// Vitrinde açılmayan sayfalar (adresle girilirse panele döner) ve randevulu işletmede açılmayan sayfa.
+const APPOINTMENT_ONLY = ["/panel/hizmetler", "/panel/personel", "/panel/musteriler", "/panel/raporlar"];
+const SHOWCASE_ONLY = ["/panel/menu"];
+
 // Aboneliği olmayan işletmenin açabileceği sayfalar.
 const OPEN_WITHOUT_PLAN = ["/panel/abonelik", "/panel/ayarlar", "/panel/destek"];
 
-const PLAN_NAMES: Record<string, string> = { baslangic: "Başlangıç", esnaf: "Esnaf", pro: "Pro" };
+const PLAN_NAMES: Record<string, string> = { baslangic: "Başlangıç", esnaf: "Esnaf", pro: "Pro", vitrin: "Vitrin" };
 
 export default function PanelLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -112,6 +147,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
 
   // Menü rozetleri: onay bekleyen yaklaşan randevular, cevaplanmamış yorumlar ve yanıtlanan destek talepleri. Sayfa değişince tazelenir.
   const businessId = business?.id;
+  const showcase = !!business && isShowcase(business);
   // Askıdaysa sebebi ve süresi üst bantta gösterilir.
   const suspended = business?.is_suspended;
   useEffect(() => {
@@ -128,16 +164,19 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
     if (!businessId) return;
     const supabase = createClient();
     Promise.all([
-      supabase
-        .from("appointments")
-        .select("id", { count: "exact", head: true })
-        .eq("business_id", businessId)
-        .eq("status", "pending")
-        .gte("starts_at", new Date().toISOString()),
+      // Vitrinde randevu olmadığı için onay bekleyen sorgusu yapılmaz.
+      showcase
+        ? Promise.resolve({ count: 0 })
+        : supabase
+            .from("appointments")
+            .select("id", { count: "exact", head: true })
+            .eq("business_id", businessId)
+            .eq("status", "pending")
+            .gte("starts_at", new Date().toISOString()),
       supabase.from("reviews").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("reply", ""),
       supabase.from("support_tickets").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "answered"),
     ]).then(([p, r, s]) => setBadges({ pending: p.count ?? 0, reviews: r.count ?? 0, support: s.count ?? 0 }));
-  }, [businessId, pathname]);
+  }, [businessId, showcase, pathname]);
 
   // İşletmesi olmayan ya da başvurusu onaylanmamış hesap yalnızca kurulum (başvuru) sayfasını görür.
   const approved = business?.approval_status === "approved";
@@ -145,7 +184,9 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
     if (business !== undefined && !approved && pathname !== "/panel/kurulum") router.replace("/panel/kurulum");
     if (approved && pathname === "/panel/kurulum") router.replace("/panel");
     if (approved && !sub.subscribed && !OPEN_WITHOUT_PLAN.includes(pathname)) router.replace("/panel/abonelik");
-  }, [business, approved, sub.subscribed, pathname, router]);
+    // Doğrudan adresle girilen, türüne uymayan sayfa panele döner.
+    if (approved && (showcase ? APPOINTMENT_ONLY : SHOWCASE_ONLY).includes(pathname)) router.replace("/panel");
+  }, [business, approved, showcase, sub.subscribed, pathname, router]);
 
   if (pathname === "/panel/kurulum" && business !== undefined && !approved) {
     return <SetupContext.Provider value={{ business, refresh }}>{children}</SetupContext.Provider>;
@@ -153,7 +194,13 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
 
   const { subscribed, trial, daysLeft } = sub;
 
-  if (!business || !approved || pathname === "/panel/kurulum" || (!subscribed && !OPEN_WITHOUT_PLAN.includes(pathname))) {
+  if (
+    !business ||
+    !approved ||
+    pathname === "/panel/kurulum" ||
+    (!subscribed && !OPEN_WITHOUT_PLAN.includes(pathname)) ||
+    (showcase ? APPOINTMENT_ONLY : SHOWCASE_ONLY).includes(pathname)
+  ) {
     return (
       <div className="grid flex-1 place-items-center py-24">
         <Loader2 className="size-6 animate-spin text-ink-3" />
@@ -168,10 +215,13 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
   }
 
   const badgeOf = (item: Item) => (item.badge ? badges[item.badge] : 0);
-  const current = ALL.find((i) => i.href === pathname);
-  const moreActive = !PRIMARY.includes(pathname);
+  const groups = showcase ? showcaseGroups(business.category) : GROUPS;
+  const all = showcase ? groups.flatMap((g) => g.items) : ALL;
+  const primary = showcase ? SHOWCASE_PRIMARY : PRIMARY;
+  const current = all.find((i) => i.href === pathname);
+  const moreActive = !primary.includes(pathname);
   // Alt menüde seçili sütun; ana sekmeler dışındaki bölümler "Daha fazla" (5. sütun) sayılır.
-  const navIndex = moreActive ? PRIMARY.length : PRIMARY.indexOf(pathname);
+  const navIndex = moreActive ? primary.length : primary.indexOf(pathname);
   const planName = business.plan_id ? PLAN_NAMES[business.plan_id] ?? business.plan_id : "Paketsiz";
 
   return (
@@ -195,7 +245,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
             </span>
           </Link>
           <nav className="mt-5 flex flex-1 flex-col gap-4 overflow-y-auto [scrollbar-width:none]">
-            {GROUPS.map((g) => (
+            {groups.map((g) => (
               <div key={g.title}>
                 <p className="px-3 pb-1 text-3xs font-semibold uppercase tracking-[0.18em] text-ink-3">{g.title}</p>
                 <div className="flex flex-col gap-0.5">
@@ -227,7 +277,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
           </nav>
           <Link href="/panel/abonelik" className="mt-4 block rounded-2xl bg-gradient-to-br from-brand-400/15 to-gold/10 p-3 ring-1 ring-brand-400/20">
             <p className="flex items-center gap-1.5 text-xs font-semibold text-accent">
-              <Sparkles className="size-3.5" /> {trial ? "Pro deneme" : `${planName} paketi`}
+              <Sparkles className="size-3.5" /> {trial ? (showcase ? "Vitrin deneme" : "Pro deneme") : `${planName} paketi`}
             </p>
             <p className="mt-0.5 text-2xs text-ink-3">{daysLeft > 0 ? `${daysLeft} gün kaldı` : "Süresi doldu"}</p>
             <div className="mt-2 h-1 rounded-full bg-tint/10">
@@ -257,7 +307,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
           </header>
           {business.is_suspended && (
             <p className="border-b border-rose-400/20 bg-rose-500/10 px-4 py-2 text-center text-sm text-rose-200 print:hidden">
-              İşletmeniz askıya alındı{suspension && `: ${SUSPENSION_REASONS[suspension.reason]}`}; sayfanız görünmüyor ve randevu alınamıyor.
+              İşletmeniz askıya alındı{suspension && `: ${SUSPENSION_REASONS[suspension.reason]}`}; sayfanız görünmüyor{showcase ? "." : " ve randevu alınamıyor."}
               {suspension?.note && ` ${suspension.note}`}
               {suspension?.until && ` Askı ${formatDate(suspension.until, { weekday: undefined, year: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} tarihinde kalkar.`}
               {suspension?.pause_subscription && " Askıda geçen süre aboneliğinize eklenir."}
@@ -269,7 +319,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
               href="/panel/abonelik"
               className="flex items-center justify-center gap-2 border-b border-brand-400/20 bg-brand-400/10 px-4 py-2 text-sm text-accent-strong print:hidden"
             >
-              Ücretsiz Pro denemenizin bitmesine {daysLeft} gün kaldı. Sayfanız yayında kalsın diye paket seçin →
+              Ücretsiz {showcase ? "Vitrin" : "Pro"} denemenizin bitmesine {daysLeft} gün kaldı. Sayfanız yayında kalsın diye paket seçin →
             </Link>
           )}
           {subscribed && !trial && daysLeft <= 5 && pathname !== "/panel/abonelik" && (
@@ -297,8 +347,8 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
           >
             <span className="block size-full rounded-xl bg-brand-400/10" />
           </span>
-          {PRIMARY.map((href, index) => {
-            const item = ALL.find((i) => i.href === href)!;
+          {primary.map((href, index) => {
+            const item = all.find((i) => i.href === href)!;
             const on = pathname === href;
             const n = badgeOf(item);
             return (
@@ -335,7 +385,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
                 </button>
               </div>
               <div className="mt-4 grid grid-cols-3 gap-2">
-                {ALL.map((item) => (
+                {all.map((item) => (
                   <Link
                     key={item.href}
                     href={item.href}

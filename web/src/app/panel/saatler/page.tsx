@@ -4,13 +4,15 @@ import { useCallback, useEffect, useState } from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { useBusiness } from "@/components/panel-context";
 import { createClient } from "@/lib/supabase/client";
-import { WEEKDAYS } from "@/lib/constants";
+import { isShowcase, WEEKDAYS } from "@/lib/constants";
 import { errorMessage, formatDate, formatTime, toIso } from "@/lib/format";
 import type { Staff, TimeOff, WorkingHour } from "@/lib/types";
 
 export default function HoursPage() {
   const { business } = useBusiness();
   const supabase = createClient();
+  // Vitrin işletme randevu almaz: yalnızca açılış-kapanış saatleri, izin ve personel yok.
+  const showcase = isShowcase(business);
   const [hours, setHours] = useState<WorkingHour[] | null>(null);
   const [timeOff, setTimeOff] = useState<TimeOff[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
@@ -21,13 +23,15 @@ export default function HoursPage() {
   const load = useCallback(async () => {
     const [h, t, s] = await Promise.all([
       supabase.from("working_hours").select("*").eq("business_id", business.id).order("weekday"),
-      supabase.from("time_off").select("*").eq("business_id", business.id).gte("ends_at", new Date().toISOString()).order("starts_at"),
-      supabase.from("staff").select("*").eq("business_id", business.id).order("sort_order"),
+      showcase
+        ? Promise.resolve({ data: [] })
+        : supabase.from("time_off").select("*").eq("business_id", business.id).gte("ends_at", new Date().toISOString()).order("starts_at"),
+      showcase ? Promise.resolve({ data: [] }) : supabase.from("staff").select("*").eq("business_id", business.id).order("sort_order"),
     ]);
     setHours((h.data ?? []) as WorkingHour[]);
     setTimeOff((t.data ?? []) as TimeOff[]);
     setStaff((s.data ?? []) as Staff[]);
-  }, [supabase, business.id]);
+  }, [supabase, business.id, showcase]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- saatleri ilk açılışta yükle
@@ -75,7 +79,9 @@ export default function HoursPage() {
     <div className="mx-auto max-w-3xl space-y-8">
       <section>
         <h1 className="text-2xl font-semibold tracking-tight">Çalışma saatleri</h1>
-        <p className="text-sm text-ink-3">Müşteriler sadece açık olduğunuz saatlerde randevu alabilir.</p>
+        <p className="text-sm text-ink-3">
+          {showcase ? "Sayfanızda gösterilen açılış ve kapanış saatleri." : "Müşteriler sadece açık olduğunuz saatlerde randevu alabilir."}
+        </p>
 
         <div className="card mt-4 divide-y divide-line">
           {hours === null && <div className="h-64 animate-pulse bg-surface-2" />}
@@ -105,6 +111,7 @@ export default function HoursPage() {
         </div>
       </section>
 
+      {!showcase && (
       <section>
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -164,6 +171,7 @@ export default function HoursPage() {
           ))}
         </ul>
       </section>
+      )}
     </div>
   );
 }
