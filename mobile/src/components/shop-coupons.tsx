@@ -10,7 +10,16 @@ import { errorMessage } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 
 /** İşletme sayfasındaki kuponlar (web: components/shop-coupons.tsx). "Kuponu al" girişsizse girişe götürür; alınan kuponun kodu görünür. */
-export function ShopCoupons({ businessId, services }: { businessId: string; services: { id: string; name: string }[] }) {
+export function ShopCoupons({
+  businessId,
+  services,
+  showcase = false,
+}: {
+  businessId: string;
+  services: { id: string; name: string }[];
+  /** Randevusuz işletme: kod kasada gösterilir, hizmet listesi yoktur. */
+  showcase?: boolean;
+}) {
   const accent = useAccent();
   const toast = useToast();
   const { coupons, claims, loggedIn, refresh } = useShopCoupons(businessId);
@@ -35,7 +44,7 @@ export function ShopCoupons({ businessId, services }: { businessId: string; serv
       {coupons.map((c) => {
         const mine = claims.find((x) => x.coupon_id === c.id);
         const soldOut = !mine && c.total_limit !== null && c.claimed_count >= c.total_limit;
-        const names = c.service_ids.flatMap((id) => services.find((s) => s.id === id)?.name ?? []);
+        const names = showcase ? [] : c.service_ids.flatMap((id) => services.find((s) => s.id === id)?.name ?? []);
         return (
           <Card key={c.id} style={{ gap: 4 }}>
             <Text variant="bodyStrong">{c.title}</Text>
@@ -79,7 +88,7 @@ export function ShopCoupons({ businessId, services }: { businessId: string; serv
       })}
       {error ? <Banner tone="danger" icon="alert-circle-outline" text={error} /> : null}
       <Text variant="caption" tone="muted">
-        Kodu randevu alırken seçin ya da kasada gösterin.
+        {showcase ? 'Kasada kodu gösterin. Kuponu kullandıktan sonra işletmeyi Kuponlarım’dan değerlendirebilirsiniz.' : 'Kodu randevu alırken seçin ya da kasada gösterin.'}
       </Text>
     </>
   );

@@ -4,7 +4,7 @@ import { StyleSheet, View, type ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/lib/auth';
-import type { IconName } from '@/lib/constants';
+import { isShowcase, type IconName } from '@/lib/constants';
 import { useInbox } from '@/lib/inbox';
 import { colors, radius, type } from '@/lib/theme';
 
@@ -20,9 +20,11 @@ function icon(name: string) {
 }
 
 export default function TabLayout() {
-  const { profile } = useAuth();
+  const { profile, business } = useAuth();
   const insets = useSafeAreaInsets();
   const isBusiness = profile?.role === 'business';
+  // Profil ve işletme birlikte yüklenir; tür belli olmadan sekmeler değişmez. Vitrin esnafının takvimi ve müşterileri yoktur.
+  const showcase = !!business && isShowcase(business);
   // Okunmamış bildirimler randevu sekmesinde sayı olarak görünür.
   const { unread } = useInbox();
   const badge = unread ? { tabBarBadge: unread > 9 ? '9+' : unread } : {};
@@ -41,9 +43,11 @@ export default function TabLayout() {
         sceneStyle: { backgroundColor: colors.bg },
       }}>
       {/* İşletme */}
-      <Tabs.Protected guard={isBusiness}>
+      <Tabs.Protected guard={isBusiness && !showcase}>
         <Tabs.Screen name="takvim" options={{ title: 'Takvim', tabBarIcon: icon('calendar'), ...badge }} />
         <Tabs.Screen name="musteriler" options={{ title: 'Müşteriler', tabBarIcon: icon('people') }} />
+      </Tabs.Protected>
+      <Tabs.Protected guard={isBusiness}>
         <Tabs.Screen name="isletmem" options={{ title: 'İşletmem', tabBarIcon: icon('storefront') }} />
       </Tabs.Protected>
       {/* İşletme sahibi de Keşfet'ten başka yerlere randevu alır; aldığı randevular Hesap'tan ayrı ekranda açılır. */}

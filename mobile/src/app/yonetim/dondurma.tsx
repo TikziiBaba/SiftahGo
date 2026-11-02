@@ -5,6 +5,7 @@ import { CalendarSheet, SelectField } from '@/components/pickers';
 import { useToast } from '@/components/toast';
 import { Banner, Button, Card, Field, SectionTitle, Skeleton, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
+import { isShowcase } from '@/lib/constants';
 import { addDays, errorMessage, formatDate, todayStr } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import type { Business, FreezeRequest } from '@/lib/types';
@@ -58,7 +59,7 @@ function FreezeForm({ business }: { business: Business }) {
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text tone="muted">
-          Bir süre hizmet veremeyecekseniz talep açın. Ekibimiz uygulayınca sayfanız görünmez, randevu alınmaz ve dondurulan süre aboneliğinize eklenir.
+          Bir süre hizmet veremeyecekseniz talep açın. Ekibimiz uygulayınca sayfanız görünmez{isShowcase(business) ? '' : ', randevu alınmaz'} ve dondurulan süre aboneliğinize eklenir.
         </Text>
 
         {last === undefined ? <Skeleton height={64} /> : null}

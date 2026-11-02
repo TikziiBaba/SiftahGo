@@ -10,7 +10,7 @@ import { Glow } from '@/components/brand';
 import { Logo } from '@/components/business-logo';
 import { Banner, Button, Card, Empty, Field, Loading, SectionTitle, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
-import { categoryIcon, categoryLabel, isSubscribed, type IconName } from '@/lib/constants';
+import { categoryIcon, categoryLabel, isShowcase, isSubscribed, type IconName } from '@/lib/constants';
 import { couponFits, couponPrice, formatDiscount, formatMoney, useShopCoupons } from '@/lib/coupons';
 import { errorMessage, formatDate, formatDuration, formatPrice, formatTime, googleCalendarLink } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
@@ -44,6 +44,8 @@ export default function BookingScreen() {
     (async () => {
       const { data: business } = await supabase.from('businesses').select('*').eq('slug', slug).maybeSingle();
       if (!business) return setData(null);
+      // Vitrin işletme randevu almaz: doğrudan adresle gelinirse dükkân sayfasına dönülür.
+      if (isShowcase(business)) return router.replace({ pathname: '/isletme/[slug]', params: { slug: business.slug } });
       const { data: service } = await supabase.from('services').select('*').eq('id', serviceId).eq('business_id', business.id).maybeSingle();
       if (!service) return setData(null);
       const { data: staff } = staffId ? await supabase.from('staff').select('name').eq('id', staffId).maybeSingle() : { data: null };

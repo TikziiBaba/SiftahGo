@@ -15,11 +15,14 @@ type Picker = 'starts' | 'ends' | 'startTime' | 'endTime' | null;
 export function CouponForm({
   coupon,
   services,
+  showServices = true,
   onSaved,
   onCancel,
 }: {
   coupon: Coupon | null;
   services: Service[];
+  /** Randevusuz (vitrin) işletmede hizmet yoktur: hizmet seçimi gizlenir. */
+  showServices?: boolean;
   onSaved: () => void;
   onCancel: () => void;
 }) {
@@ -135,16 +138,20 @@ export function CouponForm({
         hint={locked && coupon.total_limit ? `En az ${coupon.total_limit}` : undefined}
       />
 
-      <SectionTitle title="Geçerli hizmetler (hiçbiri seçili değilse hepsi)" />
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-        {services.map((s) => (
-          <Chip key={s.id} label={s.name} selected={serviceIds.includes(s.id)} disabled={locked} onPress={() => setServiceIds(toggle(serviceIds, s.id))} />
-        ))}
-      </View>
-      {services.length === 0 && (
-        <Text variant="caption" tone="muted">
-          Henüz hizmet yok; kupon tüm hizmetlerde geçer.
-        </Text>
+      {showServices && (
+        <>
+          <SectionTitle title="Geçerli hizmetler (hiçbiri seçili değilse hepsi)" />
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {services.map((s) => (
+              <Chip key={s.id} label={s.name} selected={serviceIds.includes(s.id)} disabled={locked} onPress={() => setServiceIds(toggle(serviceIds, s.id))} />
+            ))}
+          </View>
+          {services.length === 0 && (
+            <Text variant="caption" tone="muted">
+              Henüz hizmet yok; kupon tüm hizmetlerde geçer.
+            </Text>
+          )}
+        </>
       )}
 
       {error ? <Banner tone="danger" icon="alert-circle-outline" text={error} /> : null}
@@ -169,8 +176,8 @@ export function CouponForm({
         min={locked ? coupon.ends_on : starts}
         onSelect={setEnds}
       />
-      <TimeSheet visible={picker === 'startTime'} onClose={close} title="Başlangıç saati" value={startTime || null} onSelect={setStartTime} />
-      <TimeSheet visible={picker === 'endTime'} onClose={close} title="Bitiş saati" value={endTime || null} onSelect={setEndTime} />
+      <TimeSheet visible={picker === 'startTime'} onClose={close} title="Başlangıç saati" value={startTime || null} onSelect={setStartTime} from="00:00" />
+      <TimeSheet visible={picker === 'endTime'} onClose={close} title="Bitiş saati" value={endTime || null} onSelect={setEndTime} from="00:00" />
     </Card>
   );
 }

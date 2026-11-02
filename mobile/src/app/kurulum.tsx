@@ -7,14 +7,19 @@ import { Glow, Wordmark } from '@/components/brand';
 import { OptionSheet, SelectField } from '@/components/pickers';
 import { Banner, Button, Field, Group, ListRow, SectionTitle, styles, Text } from '@/components/ui';
 import { signOut, useAuth } from '@/lib/auth';
-import { CATEGORIES, CITIES, RESERVED_SLUGS, SITE_DOMAIN } from '@/lib/constants';
+import { categoriesFor, CITIES, RESERVED_SLUGS, SITE_DOMAIN } from '@/lib/constants';
 import { errorMessage, formatDate, formatTime, slugify, slugInput } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 import { supabase } from '@/lib/supabase';
 import { colors, radius } from '@/lib/theme';
-import type { Business } from '@/lib/types';
+import type { Business, BusinessType } from '@/lib/types';
 
 const CITY_OPTIONS = CITIES.map((c) => ({ value: c, label: c }));
+
+const TYPE_OPTIONS = [
+  { id: 'appointment', label: 'Randevuyla çalışıyorum', hint: 'Berber, kuaför, klinik gibi; müşteri saat seçer.' },
+  { id: 'showcase', label: 'Randevuyla çalışmıyorum', hint: 'Lokanta, market, mağaza gibi; menü ve kuponla sayfa açarsınız.' },
+] as const;
 
 /**
  * İşletme hesabı açıldıktan sonraki ilk ekran (web: panel/kurulum): başvuru formu, inceleniyor ekranı
@@ -28,6 +33,8 @@ export default function SetupScreen() {
 function ApplicationForm({ business }: { business: Business | null }) {
   const { session, profile, refresh } = useAuth();
   const insets = useSafeAreaInsets();
+  // Tür başvuruda seçilir; sonradan yalnızca yönetici değiştirir, bu yüzden yeniden başvuruda kilitlidir.
+  const [type, setType] = useState<BusinessType>(business?.business_type ?? 'appointment');
   const [form, setForm] = useState({
     name: business?.name ?? '',
     slug: business?.slug ?? '',
@@ -66,7 +73,7 @@ function ApplicationForm({ business }: { business: Business | null }) {
     // Reddedilen başvuru düzeltilip yeniden incelemeye gönderilir.
     const { error } = business
       ? await supabase.from('businesses').update({ ...fields, approval_status: 'pending' }).eq('id', business.id)
-      : await supabase.from('businesses').insert({ owner_id: session.user.id, ...fields });
+      : await supabase.from('businesses').insert({ owner_id: session.user.id, business_type: type, ...fields });
     if (error) {
       setBusy(false);
       haptic.error();
@@ -89,7 +96,9 @@ function ApplicationForm({ business }: { business: Business | null }) {
         </View>
         <View style={{ gap: 6, marginVertical: 8 }}>
           <Text variant="display">{business ? 'Başvurunuzu düzeltin' : 'İşletmenizi oluşturalım'}</Text>
-          <Text tone="muted">Bilgileriniz yetkililerimizce kontrol edildikten sonra sayfanız yayına açılır ve 2 aylık ücretsiz Pro denemeniz başlar.</Text>
+          <Text tone="muted">
+            Bilgileriniz yetkililerimizce kontrol edildikten sonra sayfanız yayına açılır ve 2 aylık ücretsiz {type === 'showcase' ? 'Vitrin' : 'Pro'} denemeniz başlar.
+          </Text>
         </View>
         {business?.approval_status === 'rejected' ? (
           <Banner
@@ -98,6 +107,36 @@ function ApplicationForm({ business }: { business: Business | null }) {
             title="Başvurunuz onaylanmadı"
             text={[business.approval_note, 'Bilgileri düzeltip yeniden gönderin.'].filter(Boolean).join('\n')}
           />
+        ) : null}
+
+        <SectionTitle title="Müşterileriniz randevu alıyor mu?" />
+        <View style={{ gap: 8 }} accessibilityRole="radiogroup">
+          {TYPE_OPTIONS.map((o) => {
+            const on = type === o.id;
+            return (
+              <Pressable
+                key={o.id}
+                disabled={!!business}
+                onPress={() => {
+                  haptic.select();
+                  setType(o.id);
+                  setForm({ ...form, category: categoriesFor(o.id)[0].id });
+                }}
+                accessibilityRole="radio"
+                aria-checked={on}
+                style={[s.type, on && s.tileOn, !!business && { opacity: 0.7 }]}>
+                <Text variant="bodyStrong">{o.label}</Text>
+                <Text variant="caption" tone="muted">
+                  {o.hint}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        {business ? (
+          <Text variant="caption" tone="muted">
+            Bu seçim sonradan değiştirilemez; değişiklik için bizimle iletişime geçin.
+          </Text>
         ) : null}
 
         <Field label="İşletme adı" icon="storefront-outline" placeholder="Örn. Usta Berber" value={form.name} onChangeText={(name) => setForm({ ...form, name })} />
@@ -116,7 +155,7 @@ function ApplicationForm({ business }: { business: Business | null }) {
 
         <SectionTitle title="Kategori" />
         <View style={s.grid}>
-          {CATEGORIES.map((c) => {
+          {categoriesFor(type).map((c) => {
             const on = form.category === c.id;
             return (
               <Pressable
@@ -208,7 +247,7 @@ function WaitingScreen({ business: b }: { business: Business }) {
           </Text>
           <Text tone="muted" style={{ textAlign: 'center' }}>
             Yetkililerimiz bilgilerinizi kontrol ediyor; gerekirse sizi işletme telefonunuzdan arayabiliriz. Onaylanınca sayfanız yayına
-            açılır ve 2 aylık ücretsiz Pro denemeniz başlar.
+            açılır ve 2 aylık ücretsiz {b.business_type === 'showcase' ? 'Vitrin' : 'Pro'} denemeniz başlar.
           </Text>
         </View>
         <Group>
@@ -245,5 +284,6 @@ const s = StyleSheet.create({
     borderColor: colors.line,
     backgroundColor: colors.surface,
   },
+  type: { gap: 2, padding: 14, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface },
   tileOn: { borderColor: colors.brandRing, backgroundColor: colors.brandSoft },
 });

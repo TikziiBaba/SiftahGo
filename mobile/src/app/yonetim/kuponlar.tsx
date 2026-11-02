@@ -6,6 +6,7 @@ import { CouponRedeem } from '@/components/coupon-redeem';
 import { PlanGate } from '@/components/plan-gate';
 import { Badge, Banner, Button, Card, Empty, IconButton, Skeleton, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
+import { isShowcase } from '@/lib/constants';
 import { formatCouponWhen, formatDiscount } from '@/lib/coupons';
 import { errorMessage } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
@@ -31,16 +32,19 @@ function Coupons({ business }: { business: Business }) {
   // editing: null kapalı, "new" yeni kupon, Coupon düzenleme
   const [editing, setEditing] = useState<Coupon | 'new' | null>(null);
   const [error, setError] = useState('');
+  const showcase = isShowcase(business);
 
   const load = useCallback(async () => {
     const [c, s] = await Promise.all([
       supabase.rpc('business_coupons', { p_business_id: business.id }),
-      supabase.from('services').select('*').eq('business_id', business.id).order('sort_order').order('created_at'),
+      showcase
+        ? Promise.resolve({ data: [] })
+        : supabase.from('services').select('*').eq('business_id', business.id).order('sort_order').order('created_at'),
     ]);
     if (c.error) setError(errorMessage(c.error));
     setCoupons((c.data ?? []) as Coupon[]);
     setServices((s.data ?? []) as Service[]);
-  }, [business.id]);
+  }, [business.id, showcase]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- kuponlar ilk açılışta yüklenir (web ile aynı)
@@ -91,6 +95,7 @@ function Coupons({ business }: { business: Business }) {
             key={editing === 'new' ? 'new' : editing.id}
             coupon={editing === 'new' ? null : editing}
             services={services}
+            showServices={!showcase}
             onCancel={() => setEditing(null)}
             onSaved={() => {
               setEditing(null);

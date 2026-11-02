@@ -7,7 +7,7 @@ import { QrCode } from '@/components/qr-code';
 import { useToast } from '@/components/toast';
 import { Button, Card, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
-import { WEB_URL } from '@/lib/constants';
+import { isShowcase, WEB_URL } from '@/lib/constants';
 import { colors, radius } from '@/lib/theme';
 
 export default function QrScreen() {
@@ -15,6 +15,7 @@ export default function QrScreen() {
   const toast = useToast();
   if (!business) return null;
   const link = `${WEB_URL}/${business.slug}`;
+  const showcase = isShowcase(business);
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
@@ -24,7 +25,7 @@ export default function QrScreen() {
         <Text variant="title" style={{ textAlign: 'center' }}>
           {business.name}
         </Text>
-        <Text tone="muted">Randevu almak için kodu okutun</Text>
+        <Text tone="muted">{showcase ? 'Menü ve kuponlar için kodu okutun' : 'Randevu almak için kodu okutun'}</Text>
         <View style={{ padding: 12, borderRadius: radius.lg, backgroundColor: colors.white }}>
           <QrCode value={link} size={220} logo={business.logo_url} />
         </View>
@@ -49,7 +50,7 @@ export default function QrScreen() {
             toast('Bağlantı kopyalandı.');
           }}
         />
-        <Button title="Paylaş" icon="share-social-outline" style={{ flex: 1 }} onPress={() => Share.share({ message: `${business.name} için online randevu: ${link}` })} />
+        <Button title="Paylaş" icon="share-social-outline" style={{ flex: 1 }} onPress={() => Share.share({ message: `${business.name} ${showcase ? 'sayfası' : 'için online randevu'}: ${link}` })} />
       </View>
       <Button title="Sayfamı aç" icon="open-outline" variant="ghost" onPress={() => WebBrowser.openBrowserAsync(link)} />
       <Text variant="caption" tone="muted" style={{ textAlign: 'center' }}>

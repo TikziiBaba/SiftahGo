@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { View } from 'react-native';
 
 import { Button, Empty, Skeleton, styles } from '@/components/ui';
-import { isSubscribed } from '@/lib/constants';
+import { isShowcase, isSubscribed } from '@/lib/constants';
 import { usePlan } from '@/lib/plan';
 import type { Business } from '@/lib/types';
 
@@ -32,8 +32,15 @@ export function PlanGate({
           <Skeleton height={96} />
         </>
       ) : (
-        <Empty icon="lock-closed-outline" title={`${title} paketinizde yok`} text="Esnaf veya Pro paketine geçerek bu özelliği hemen kullanmaya başlayabilirsiniz.">
-          <Button title="Paketleri gör" icon="sparkles-outline" onPress={() => router.push('/yonetim/abonelik')} />
+        <Empty
+          icon="lock-closed-outline"
+          title={`${title} paketinizde yok`}
+          text={
+            isShowcase(business)
+              ? 'Bu özellik Vitrin paketinizle gelir; paketinizin geçerli olduğundan emin olun.'
+              : 'Esnaf veya Pro paketine geçerek bu özelliği hemen kullanmaya başlayabilirsiniz.'
+          }>
+          <Button title={isShowcase(business) ? 'Aboneliğimi gör' : 'Paketleri gör'} icon="sparkles-outline" onPress={() => router.push('/yonetim/abonelik')} />
         </Empty>
       )}
     </View>

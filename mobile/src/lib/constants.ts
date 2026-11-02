@@ -143,6 +143,15 @@ export const BASE_FEATURES = [
   'Müşteri yorumları',
 ];
 
+// Vitrin paketinde randevu yok: kartta gösterilen temel özellikler (web ile aynı).
+export const SHOWCASE_BASE_FEATURES = [
+  '7/24 açık işletme sayfası',
+  'Menü ve ürün listesi',
+  'Çalışma saatleri ve yol tarifi',
+  'QR kod ve kendi adresiniz',
+  'Müşteri yorumları',
+];
+
 export function isSubscribed(b: { subscription_ends_at: string | null }) {
   return !!b.subscription_ends_at && new Date(b.subscription_ends_at) > new Date();
 }

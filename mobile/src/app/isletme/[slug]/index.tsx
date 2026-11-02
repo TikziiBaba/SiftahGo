@@ -10,11 +10,12 @@ import { Cover } from '@/components/brand';
 import { Logo } from '@/components/business-logo';
 import { CalendarSheet, DayStrip } from '@/components/pickers';
 import { ShopCoupons } from '@/components/shop-coupons';
+import { BackButton, Shortcut, ShowcasePage } from '@/components/showcase-page';
 import { TopBar, useScrollY } from '@/components/top-bar';
-import { Avatar, Badge, Button, Card, Chip, Empty, IconButton, Loading, PressableScale, SectionTitle, Skeleton, styles, Text } from '@/components/ui';
-import { AccentProvider, useAccent } from '@/lib/accent';
+import { Avatar, Badge, Button, Card, Chip, Empty, IconButton, Loading, SectionTitle, Skeleton, styles, Text } from '@/components/ui';
+import { AccentProvider } from '@/lib/accent';
 import { useAuth } from '@/lib/auth';
-import { categoryIcon, categoryLabel, isSubscribed, WEB_URL, WEEKDAYS, type IconName } from '@/lib/constants';
+import { categoryIcon, categoryLabel, isShowcase, isSubscribed, WEB_URL, WEEKDAYS, type IconName } from '@/lib/constants';
 import { addDays, errorMessage, formatDate, formatDuration, formatPrice, formatTime, isoWeekday, mapsLink, todayStr, whatsappLink } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 import { supabase } from '@/lib/supabase';
@@ -63,9 +64,15 @@ export default function BusinessScreen() {
     (async () => {
       const { data: business } = await supabase.from('businesses').select('*').eq('slug', slug).maybeSingle();
       if (!business) return setData(null);
+      // Vitrin işletmede hizmet ve personel yok; sorgulanmaz.
+      const showcase = isShowcase(business);
       const [s, st, h, r, plan] = await Promise.all([
-        supabase.from('services').select('*').eq('business_id', business.id).eq('is_active', true).order('sort_order').order('created_at'),
-        supabase.from('staff').select('*').eq('business_id', business.id).eq('is_active', true).order('sort_order').order('created_at'),
+        showcase
+          ? Promise.resolve({ data: [] as Service[] })
+          : supabase.from('services').select('*').eq('business_id', business.id).eq('is_active', true).order('sort_order').order('created_at'),
+        showcase
+          ? Promise.resolve({ data: [] as Staff[] })
+          : supabase.from('staff').select('*').eq('business_id', business.id).eq('is_active', true).order('sort_order').order('created_at'),
         supabase.from('working_hours').select('*').eq('business_id', business.id).order('weekday'),
         supabase.from('reviews').select('*').eq('business_id', business.id).order('created_at', { ascending: false }).limit(20),
         supabase.from('plans').select('features').eq('id', business.plan_id ?? '').maybeSingle(),
@@ -95,7 +102,7 @@ export default function BusinessScreen() {
     let active = true;
     Promise.all([
       supabase.from('favorites').select('business_id').eq('business_id', data.business.id).maybeSingle(),
-      supabase.from('waitlist').select('day').eq('business_id', data.business.id),
+      isShowcase(data.business) ? Promise.resolve({ data: [] as { day: string }[] }) : supabase.from('waitlist').select('day').eq('business_id', data.business.id),
     ]).then(([{ data: row }, { data: waits }]) => {
       if (!active) return;
       setFavorite(!!row);
@@ -155,6 +162,19 @@ export default function BusinessScreen() {
   }
 
   const { business, services, hours, links, reviews } = data;
+  // Vitrin işletme randevu almaz: menü, kupon ve yorumlarla ayrı sayfa.
+  if (isShowcase(business)) {
+    return (
+      <ShowcasePage
+        business={business}
+        reviews={reviews}
+        hours={hours}
+        features={isSubscribed(business) ? data.features : []}
+        favorite={favorite}
+        onToggleFavorite={toggleFavorite}
+      />
+    );
+  }
   const service = services.find((x) => x.id === serviceId);
   // Kaydı olmayan personel tüm hizmetleri verir.
   const staff = data.staff.filter(
@@ -533,40 +553,6 @@ export default function BusinessScreen() {
   );
 }
 
-/** Yuvarlak kısayol (Ara, WhatsApp, Yol tarifi...); rengi sayfa renginden. */
-function Shortcut({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
-  const accent = useAccent();
-  return (
-    <PressableScale
-      onPress={() => {
-        haptic.press();
-        onPress();
-      }}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      scale={0.9}
-      style={s.shortcut}>
-      <View style={[s.shortcutIcon, { backgroundColor: alpha(accent.base, 0.12), borderColor: alpha(accent.base, 0.25) }]}>
-        <Ionicons name={icon} size={22} color={accent.soft} />
-      </View>
-      <Text variant="caption" tone="secondary" numberOfLines={1}>
-        {label}
-      </Text>
-    </PressableScale>
-  );
-}
-
-function BackButton({ top }: { top: number }) {
-  return (
-    <IconButton
-      icon="chevron-back"
-      label="Geri"
-      onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
-      style={{ position: 'absolute', top, left: 16, backgroundColor: colors.bgGlass, borderColor: colors.lineStrong }}
-    />
-  );
-}
-
 const s = StyleSheet.create({
   fade: { height: 56, marginTop: -56, experimental_backgroundImage: `linear-gradient(to bottom, ${colors.bgClear}, ${colors.bg})` },
   logo: {
@@ -576,8 +562,6 @@ const s = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   shortcuts: { gap: 4, paddingHorizontal: 12 },
-  shortcut: { width: 72, alignItems: 'center', gap: 6, paddingVertical: 2 },
-  shortcutIcon: { width: 52, height: 52, borderRadius: 26, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   announcement: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: radius.lg, borderWidth: 1 },
   announcementIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   service: { flexDirection: 'row', alignItems: 'center', gap: 12 },

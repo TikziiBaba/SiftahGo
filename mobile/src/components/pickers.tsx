@@ -100,6 +100,7 @@ export function TimeSheet({
   value,
   onSelect,
   step = 30,
+  from = '06:00',
 }: {
   visible: boolean;
   onClose: () => void;
@@ -107,9 +108,10 @@ export function TimeSheet({
   value: string | null;
   onSelect: (time: string) => void;
   step?: number;
+  /** İlk seçenek. Gece saatleri nadiren kullanılır, varsayılan 06:00; fırın, market ve kuponlar '00:00' verir. */
+  from?: string;
 }) {
-  // Gece saatleri nadiren kullanılır; liste 06:00'dan başlar.
-  const options = timeOptions(step, '06:00');
+  const options = timeOptions(step, from);
   // Web panelinden girilmiş 08:45 gibi bir saat ızgarada yoksa da seçili görünsün.
   if (value && !options.includes(value)) options.push(value);
   options.sort();

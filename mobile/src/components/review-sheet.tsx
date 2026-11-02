@@ -13,12 +13,14 @@ type Props = {
   appointment: { id: string; businesses: { name: string } | null } | null;
   onClose: () => void;
   onDone: () => void;
+  /** Verilmezse randevu değerlendirmesi (add_review) gönderilir; vitrin kuponu için add_coupon_review çağrısı verilir. */
+  submit?: (rating: number, comment: string) => PromiseLike<{ error: { message?: string; code?: string } | null }>;
 };
 
 const LABELS = ['', 'Kötü', 'İdare eder', 'İyi', 'Çok iyi', 'Mükemmel'];
 
-/** Tamamlanan randevu için puan + yorum alt penceresi. */
-export function ReviewSheet({ appointment, onClose, onDone }: Props) {
+/** Tamamlanan randevu (ya da kasada kullanılan vitrin kuponu) için puan + yorum alt penceresi. */
+export function ReviewSheet({ appointment, onClose, onDone, submit: send }: Props) {
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
@@ -39,7 +41,9 @@ export function ReviewSheet({ appointment, onClose, onDone }: Props) {
     if (!appointment) return;
     if (!rating) return setError('Lütfen puan verin.');
     setBusy(true);
-    const { error } = await supabase.rpc('add_review', { p_appointment_id: appointment.id, p_rating: rating, p_comment: comment });
+    const { error } = send
+      ? await send(rating, comment)
+      : await supabase.rpc('add_review', { p_appointment_id: appointment.id, p_rating: rating, p_comment: comment });
     setBusy(false);
     if (error) return setError(errorMessage(error));
     reset();

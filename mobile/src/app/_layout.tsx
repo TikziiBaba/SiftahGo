@@ -7,6 +7,7 @@ import { useEffect } from 'react';
 import { ToastProvider } from '@/components/toast';
 import { WhatsNew } from '@/components/whats-new';
 import { AuthProvider, useAuth } from '@/lib/auth';
+import { isShowcase } from '@/lib/constants';
 import { installErrorHandler } from '@/lib/error-log';
 import { InboxProvider } from '@/lib/inbox';
 import { useIntroSeen } from '@/lib/intro';
@@ -73,6 +74,8 @@ function RootStack({ fontsReady }: { fontsReady: boolean }) {
   const approved = business?.approval_status === 'approved';
   // İşletme hesabı açılmış ama işletme henüz oluşturulmamış ya da başvurusu onaylanmamış.
   const needsSetup = isBusiness && !approved;
+  // Profil ve işletme birlikte yüklendiği için tür belli olmadan ekranlar açılmaz (yanıp sönme yok).
+  const showcase = !!business && isShowcase(business);
 
   return (
     <>
@@ -114,24 +117,33 @@ function RootStack({ fontsReady }: { fontsReady: boolean }) {
         </Stack.Protected>
 
         <Stack.Protected guard={isBusiness && approved}>
+          <Stack.Screen name="yonetim/saatler" options={{ title: 'Çalışma saatleri' }} />
+          <Stack.Screen name="yonetim/bilgiler" options={{ title: 'İşletme bilgileri' }} />
+          <Stack.Screen name="yonetim/gorseller" options={{ title: 'Görseller' }} />
+          <Stack.Screen name="yonetim/sayfa" options={{ title: 'Sayfa tasarımı' }} />
+          <Stack.Screen name="yonetim/qr" options={{ title: 'QR kod ve bağlantı' }} />
+          <Stack.Screen name="yonetim/kuponlar" options={{ title: 'Kuponlar' }} />
+          <Stack.Screen name="yonetim/yorumlar" options={{ title: 'Yorumlar' }} />
+          <Stack.Screen name="yonetim/abonelik" options={{ title: 'Abonelik' }} />
+          <Stack.Screen name="yonetim/dondurma" options={{ title: 'Dondurma talebi' }} />
+        </Stack.Protected>
+
+        {/* Randevuyla ilgili ekranlar vitrin esnafına kapalı. */}
+        <Stack.Protected guard={isBusiness && approved && !showcase}>
           <Stack.Screen name="randevu-ekle" options={{ title: 'Randevu ekle', presentation: 'modal' }} />
           <Stack.Screen name="yonetim/hizmetler/index" options={{ title: 'Hizmetler' }} />
           <Stack.Screen name="yonetim/hizmetler/[id]" options={{ title: 'Hizmet', presentation: 'modal' }} />
           <Stack.Screen name="yonetim/personel/index" options={{ title: 'Personel' }} />
           <Stack.Screen name="yonetim/personel/[id]" options={{ title: 'Personel', presentation: 'modal' }} />
-          <Stack.Screen name="yonetim/saatler" options={{ title: 'Çalışma saatleri' }} />
           <Stack.Screen name="yonetim/izin" options={{ title: 'İzin ekle', presentation: 'modal' }} />
-          <Stack.Screen name="yonetim/bilgiler" options={{ title: 'İşletme bilgileri' }} />
           <Stack.Screen name="yonetim/kurallar" options={{ title: 'Randevu kuralları' }} />
-          <Stack.Screen name="yonetim/gorseller" options={{ title: 'Görseller' }} />
-          <Stack.Screen name="yonetim/sayfa" options={{ title: 'Sayfa tasarımı' }} />
-          <Stack.Screen name="yonetim/qr" options={{ title: 'QR kod ve bağlantı' }} />
           <Stack.Screen name="yonetim/raporlar" options={{ title: 'Raporlar' }} />
-          <Stack.Screen name="yonetim/kuponlar" options={{ title: 'Kuponlar' }} />
-          <Stack.Screen name="yonetim/yorumlar" options={{ title: 'Yorumlar' }} />
           <Stack.Screen name="yonetim/engellenenler" options={{ title: 'Engellenen müşteriler' }} />
-          <Stack.Screen name="yonetim/abonelik" options={{ title: 'Abonelik' }} />
-          <Stack.Screen name="yonetim/dondurma" options={{ title: 'Dondurma talebi' }} />
+        </Stack.Protected>
+
+        {/* Menü yalnızca vitrin esnafında. */}
+        <Stack.Protected guard={isBusiness && approved && showcase}>
+          <Stack.Screen name="yonetim/menu" options={{ title: 'Menü' }} />
         </Stack.Protected>
       </Stack>
     </>

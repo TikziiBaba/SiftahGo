@@ -8,7 +8,7 @@ import { SaveBar } from '@/components/save-bar';
 import { useToast } from '@/components/toast';
 import { Button, Card, Empty, IconButton, SectionTitle, Skeleton, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
-import { WEEKDAYS } from '@/lib/constants';
+import { isShowcase, WEEKDAYS } from '@/lib/constants';
 import { addDays, dayOf, errorMessage, formatDate, formatTime } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 import { supabase } from '@/lib/supabase';
@@ -33,6 +33,8 @@ function rangeText(t: TimeOff) {
 
 function Hours({ business }: { business: Business }) {
   const toast = useToast();
+  // Vitrin işletme randevu almaz: yalnızca açılış-kapanış saatleri, izin ve personel yok.
+  const showcase = isShowcase(business);
   const [hours, setHours] = useState<WorkingHour[] | null>(null);
   const [timeOff, setTimeOff] = useState<TimeOff[] | null>(null);
   const [staff, setStaff] = useState<Staff[]>([]);
@@ -52,6 +54,7 @@ function Hours({ business }: { business: Business }) {
   // İzinler, izin ekleme ekranından dönünce tazelenir (kaydedilmemiş saatler bozulmaz).
   useFocusEffect(
     useCallback(() => {
+      if (showcase) return;
       Promise.all([
         supabase.from('time_off').select('*').eq('business_id', business.id).gte('ends_at', new Date().toISOString()).order('starts_at'),
         supabase.from('staff').select('*').eq('business_id', business.id).order('sort_order'),
@@ -59,7 +62,7 @@ function Hours({ business }: { business: Business }) {
         setTimeOff((t.data ?? []) as TimeOff[]);
         setStaff((s.data ?? []) as Staff[]);
       });
-    }, [business.id]),
+    }, [business.id, showcase]),
   );
 
   function update(weekday: number, patch: Partial<WorkingHour>) {
@@ -115,7 +118,7 @@ function Hours({ business }: { business: Business }) {
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text tone="muted">Müşteriler sadece açık olduğunuz saatlerde randevu alabilir.</Text>
+        <Text tone="muted">{showcase ? 'Sayfanızda gösterilen açılış ve kapanış saatleri.' : 'Müşteriler sadece açık olduğunuz saatlerde randevu alabilir.'}</Text>
         <Card style={{ padding: 0 }}>
           {hours === null ? (
             <Skeleton height={320} />
@@ -153,34 +156,38 @@ function Hours({ business }: { business: Business }) {
         </Card>
         {hours && <Button title="Pazartesi saatlerini hafta içine uygula" icon="copy-outline" variant="ghost" size="sm" onPress={copyMonday} />}
 
-        <SectionTitle title="İzin ve tatiller" action="Ekle" onAction={() => router.push('/yonetim/izin')} />
-        <Text variant="caption" tone="muted">
-          Bu aralıklarda randevu alınamaz (öğle arası, tatil, izin günü vb.).
-        </Text>
-        {timeOff === null ? (
-          <Skeleton height={64} />
-        ) : timeOff.length === 0 ? (
-          <Card>
-            <Empty icon="airplane-outline" text="Planlanmış izin yok.">
-              <Button title="İzin ekle" icon="add" variant="secondary" onPress={() => router.push('/yonetim/izin')} />
-            </Empty>
-          </Card>
-        ) : (
-          timeOff.map((t) => (
-            <Card key={t.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <View style={s.offIcon}>
-                <Ionicons name="airplane-outline" size={18} color={colors.gold} />
-              </View>
-              <View style={{ flex: 1, gap: 2 }}>
-                <Text variant="bodyStrong">{rangeText(t)}</Text>
-                <Text variant="caption" tone="muted">
-                  {t.staff_id ? (staff.find((x) => x.id === t.staff_id)?.name ?? 'Personel') : 'Tüm işletme'}
-                  {t.reason ? ` · ${t.reason}` : ''}
-                </Text>
-              </View>
-              <IconButton icon="trash-outline" label="İzni sil" color={colors.danger} size={36} onPress={() => removeTimeOff(t)} />
-            </Card>
-          ))
+        {!showcase && (
+          <>
+            <SectionTitle title="İzin ve tatiller" action="Ekle" onAction={() => router.push('/yonetim/izin')} />
+            <Text variant="caption" tone="muted">
+              Bu aralıklarda randevu alınamaz (öğle arası, tatil, izin günü vb.).
+            </Text>
+            {timeOff === null ? (
+              <Skeleton height={64} />
+            ) : timeOff.length === 0 ? (
+              <Card>
+                <Empty icon="airplane-outline" text="Planlanmış izin yok.">
+                  <Button title="İzin ekle" icon="add" variant="secondary" onPress={() => router.push('/yonetim/izin')} />
+                </Empty>
+              </Card>
+            ) : (
+              timeOff.map((t) => (
+                <Card key={t.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <View style={s.offIcon}>
+                    <Ionicons name="airplane-outline" size={18} color={colors.gold} />
+                  </View>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text variant="bodyStrong">{rangeText(t)}</Text>
+                    <Text variant="caption" tone="muted">
+                      {t.staff_id ? (staff.find((x) => x.id === t.staff_id)?.name ?? 'Personel') : 'Tüm işletme'}
+                      {t.reason ? ` · ${t.reason}` : ''}
+                    </Text>
+                  </View>
+                  <IconButton icon="trash-outline" label="İzni sil" color={colors.danger} size={36} onPress={() => removeTimeOff(t)} />
+                </Card>
+              ))
+            )}
+          </>
         )}
       </ScrollView>
 
@@ -191,6 +198,7 @@ function Hours({ business }: { business: Business }) {
         onClose={() => setEditing(null)}
         title={current && editing ? `${WEEKDAYS[current.weekday - 1]} · ${editing.field === 'open_time' ? 'açılış' : 'kapanış'}` : ''}
         value={current && editing ? current[editing.field].slice(0, 5) : null}
+        from={showcase ? '00:00' : undefined}
         onSelect={(t) => editing && update(editing.weekday, editing.field === 'open_time' ? { open_time: t } : { close_time: t })}
       />
     </View>

@@ -49,5 +49,13 @@
       "İşletmeler artık indirim kuponu açabiliyor; kuponları işletme sayfasından alıp Hesap altındaki Kuponlarım ekranında görebilirsiniz.",
       "Randevu alırken uygun bir kuponunuz varsa seçip indirimli fiyatı görebilirsiniz."
     ]
+  },
+  {
+    "id": 8,
+    "date": "2026-11-02",
+    "items": [
+      "Randevu almayan esnaf (lokanta, market, mağaza gibi) artık menüsü ve kuponlarıyla sayfa açabiliyor; Keşfet'te \"Menüyü gör\" ile görünür.",
+      "Kuponunu kasada kullandığınız işletmeyi Kuponlarım ekranından değerlendirebilirsiniz."
+    ]
   }
 ]

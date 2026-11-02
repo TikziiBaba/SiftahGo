@@ -8,7 +8,7 @@ import { Logo } from '@/components/business-logo';
 import { TopBar, useScrollY } from '@/components/top-bar';
 import { Badge, Banner, Button, Card, Group, ListRow, ScreenHeader, SectionTitle, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
-import { isSubscribed, isTrial, SITE_DOMAIN, SUSPENSION_REASONS, WEB_URL } from '@/lib/constants';
+import { isShowcase, isSubscribed, isTrial, menuLabel, SITE_DOMAIN, SUSPENSION_REASONS, WEB_URL } from '@/lib/constants';
 import { formatDate } from '@/lib/format';
 import { daysLeft, usePlan } from '@/lib/plan';
 import { supabase } from '@/lib/supabase';
@@ -23,8 +23,10 @@ export default function BusinessTab() {
 function Hub({ business }: { business: Business }) {
   const plan = usePlan(business.plan_id);
   const { y, scroll } = useScrollY();
-  const [counts, setCounts] = useState<{ services: number; staff: number } | null>(null);
+  const [counts, setCounts] = useState<{ services: number; staff: number; menu: number } | null>(null);
   const [suspension, setSuspension] = useState<BusinessSuspension | null>(null);
+  const showcase = isShowcase(business);
+  const menuName = menuLabel(business.category);
   const subscribed = isSubscribed(business);
   const left = daysLeft(business.subscription_ends_at);
   const trial = isTrial(business);
@@ -34,10 +36,19 @@ function Hub({ business }: { business: Business }) {
 
   useFocusEffect(
     useCallback(() => {
-      Promise.all([
-        supabase.from('services').select('id', { count: 'exact', head: true }).eq('business_id', business.id),
-        supabase.from('staff').select('id', { count: 'exact', head: true }).eq('business_id', business.id).eq('is_active', true),
-      ]).then(([s, st]) => setCounts({ services: s.count ?? 0, staff: st.count ?? 0 }));
+      // Vitrinde hizmet ve personel yok; yalnızca menü ürünleri sayılır.
+      if (showcase) {
+        supabase
+          .from('menu_items')
+          .select('id', { count: 'exact', head: true })
+          .eq('business_id', business.id)
+          .then(({ count }) => setCounts({ services: 0, staff: 0, menu: count ?? 0 }));
+      } else {
+        Promise.all([
+          supabase.from('services').select('id', { count: 'exact', head: true }).eq('business_id', business.id),
+          supabase.from('staff').select('id', { count: 'exact', head: true }).eq('business_id', business.id).eq('is_active', true),
+        ]).then(([s, st]) => setCounts({ services: s.count ?? 0, staff: st.count ?? 0, menu: 0 }));
+      }
       if (business.is_suspended) {
         supabase
           .from('business_suspensions')
@@ -47,7 +58,7 @@ function Hub({ business }: { business: Business }) {
           .maybeSingle()
           .then(({ data }) => setSuspension(data as BusinessSuspension | null));
       }
-    }, [business.id, business.is_suspended]),
+    }, [business.id, business.is_suspended, showcase]),
   );
 
   const status = business.is_suspended
@@ -59,7 +70,9 @@ function Hub({ business }: { business: Business }) {
         : { label: 'Gizli', fg: colors.ink3, bg: colors.white04 };
 
   const steps = [
-    { title: 'Hizmetlerinizi ekleyin', done: (counts?.services ?? 0) > 0, href: '/yonetim/hizmetler' as const },
+    showcase
+      ? { title: `${menuName === 'Menü' ? 'Menünüze' : 'Ürünlerinize'} ürün ekleyin`, done: (counts?.menu ?? 0) > 0, href: '/yonetim/menu' as const }
+      : { title: 'Hizmetlerinizi ekleyin', done: (counts?.services ?? 0) > 0, href: '/yonetim/hizmetler' as const },
     { title: 'Adresinizi yazın', done: !!(business.address || business.district), href: '/yonetim/bilgiler' as const },
     { title: 'Logo yükleyin', done: !!business.logo_url, href: '/yonetim/gorseller' as const },
     { title: 'Paket seçin', done: subscribed && !trial, href: '/yonetim/abonelik' as const },
@@ -103,7 +116,7 @@ function Hub({ business }: { business: Business }) {
               variant="secondary"
               size="sm"
               style={{ flex: 1 }}
-              onPress={() => Share.share({ message: `${business.name} — online randevu: ${link}` })}
+              onPress={() => Share.share({ message: showcase ? `${business.name}: ${link}` : `${business.name} — online randevu: ${link}` })}
             />
             <Button title="QR" icon="qr-code-outline" variant="secondary" size="sm" style={{ flex: 1 }} disabled={locked} onPress={() => router.push('/yonetim/qr')} />
           </View>
@@ -123,7 +136,7 @@ function Hub({ business }: { business: Business }) {
             {steps.map((st) => (
               <Pressable
                 key={st.title}
-                disabled={st.done || (locked && st.href === '/yonetim/hizmetler')}
+                disabled={st.done || (locked && (st.href === '/yonetim/hizmetler' || st.href === '/yonetim/menu'))}
                 onPress={() => router.push(st.href)}
                 accessibilityRole="button"
                 accessibilityState={{ checked: st.done }}
@@ -147,7 +160,7 @@ function Hub({ business }: { business: Business }) {
               suspension?.note,
               suspension?.until && `Askı ${formatDate(suspension.until, false)} tarihinde kalkar.`,
               suspension?.pause_subscription && 'Askıda geçen süre aboneliğinize eklenir.',
-              'Sayfanız görünmüyor, randevu alınamıyor. Bilgi için bizimle iletişime geçin.',
+              showcase ? 'Sayfanız görünmüyor. Bilgi için bizimle iletişime geçin.' : 'Sayfanız görünmüyor, randevu alınamıyor. Bilgi için bizimle iletişime geçin.',
             ]
               .filter(Boolean)
               .join(' ')}
@@ -162,28 +175,48 @@ function Hub({ business }: { business: Business }) {
           />
         ) : null}
 
-        <SectionTitle title="Randevu ayarları" />
-        <Group>
-          <ListRow
-            icon="cut-outline"
-            title="Hizmetler"
-            subtitle="Süre ve fiyatlar"
-            value={counts ? String(counts.services) : undefined}
-            disabled={locked}
-            onPress={() => router.push('/yonetim/hizmetler')}
-          />
-          <ListRow
-            icon="people-outline"
-            title="Personel"
-            subtitle={plan?.staff_limit ? `Paketiniz ${plan.staff_limit} aktif personele izin veriyor` : 'Kim hangi hizmeti veriyor'}
-            value={counts ? String(counts.staff) : undefined}
-            disabled={locked}
-            onPress={() => router.push('/yonetim/personel')}
-          />
-          <ListRow icon="time-outline" title="Çalışma saatleri" subtitle="Haftalık saatler, izin ve tatiller" disabled={locked} onPress={() => router.push('/yonetim/saatler')} />
-          <ListRow icon="options-outline" title="Randevu kuralları" subtitle="Saat aralığı, en erken/en geç ve onay" onPress={() => router.push('/yonetim/kurallar')} />
-          <ListRow icon="ban-outline" title="Engellenen müşteriler" subtitle="Online randevu alamayanlar" onPress={() => router.push('/yonetim/engellenenler')} />
-        </Group>
+        {showcase ? (
+          <>
+            <SectionTitle title={`${menuName} ve çalışma saatleri`} />
+            <Group>
+              <ListRow
+                icon="restaurant-outline"
+                title={menuName}
+                subtitle="Ürünleriniz ve fiyatları"
+                value={counts ? String(counts.menu) : undefined}
+                disabled={locked}
+                right={plan && !plan.features.includes('menu') ? <Ionicons name="lock-closed" size={14} color={colors.ink3} /> : undefined}
+                onPress={() => router.push('/yonetim/menu')}
+              />
+              <ListRow icon="time-outline" title="Çalışma saatleri" subtitle="Sayfanızda gösterilen açılış ve kapanış saatleri" disabled={locked} onPress={() => router.push('/yonetim/saatler')} />
+            </Group>
+          </>
+        ) : (
+          <>
+            <SectionTitle title="Randevu ayarları" />
+            <Group>
+              <ListRow
+                icon="cut-outline"
+                title="Hizmetler"
+                subtitle="Süre ve fiyatlar"
+                value={counts ? String(counts.services) : undefined}
+                disabled={locked}
+                onPress={() => router.push('/yonetim/hizmetler')}
+              />
+              <ListRow
+                icon="people-outline"
+                title="Personel"
+                subtitle={plan?.staff_limit ? `Paketiniz ${plan.staff_limit} aktif personele izin veriyor` : 'Kim hangi hizmeti veriyor'}
+                value={counts ? String(counts.staff) : undefined}
+                disabled={locked}
+                onPress={() => router.push('/yonetim/personel')}
+              />
+              <ListRow icon="time-outline" title="Çalışma saatleri" subtitle="Haftalık saatler, izin ve tatiller" disabled={locked} onPress={() => router.push('/yonetim/saatler')} />
+              <ListRow icon="options-outline" title="Randevu kuralları" subtitle="Saat aralığı, en erken/en geç ve onay" onPress={() => router.push('/yonetim/kurallar')} />
+              <ListRow icon="ban-outline" title="Engellenen müşteriler" subtitle="Online randevu alamayanlar" onPress={() => router.push('/yonetim/engellenenler')} />
+            </Group>
+          </>
+        )}
 
         <SectionTitle title="İşletme" />
         <Group>
@@ -212,14 +245,16 @@ function Hub({ business }: { business: Business }) {
 
         <SectionTitle title="Performans ve hesap" />
         <Group>
-          <ListRow
-            icon="bar-chart-outline"
-            title="Raporlar"
-            subtitle="Ciro, randevu ve gelmeme oranı"
-            disabled={locked}
-            right={plan && !plan.features.includes('reports') ? <Ionicons name="lock-closed" size={14} color={colors.ink3} /> : undefined}
-            onPress={() => router.push('/yonetim/raporlar')}
-          />
+          {!showcase && (
+            <ListRow
+              icon="bar-chart-outline"
+              title="Raporlar"
+              subtitle="Ciro, randevu ve gelmeme oranı"
+              disabled={locked}
+              right={plan && !plan.features.includes('reports') ? <Ionicons name="lock-closed" size={14} color={colors.ink3} /> : undefined}
+              onPress={() => router.push('/yonetim/raporlar')}
+            />
+          )}
           <ListRow
             icon="card-outline"
             iconColor={colors.gold}

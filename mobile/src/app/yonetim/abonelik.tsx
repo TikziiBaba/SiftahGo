@@ -6,7 +6,7 @@ import { RefreshControl, ScrollView, Share, StyleSheet, View } from 'react-nativ
 import { ScrambleText } from '@/components/scramble-text';
 import { Badge, Banner, Button, Card, Field, SectionTitle, Segmented, Skeleton, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
-import { BASE_FEATURES, isSubscribed, isTrial, PLAN_FEATURES, WEB_URL } from '@/lib/constants';
+import { BASE_FEATURES, isShowcase, isSubscribed, isTrial, PLAN_FEATURES, SHOWCASE_BASE_FEATURES, WEB_URL } from '@/lib/constants';
 import { errorMessage, formatDate, formatPrice } from '@/lib/format';
 import { daysLeft } from '@/lib/plan';
 import { supabase } from '@/lib/supabase';
@@ -39,9 +39,12 @@ function Subscription({ business }: { business: Business }) {
   const [codeBusy, setCodeBusy] = useState(false);
   const [codeMessage, setCodeMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const hasPaid = payments.some((p) => p.status === 'paid');
+  const showcase = isShowcase(business);
   const subscribed = isSubscribed(business);
   const trial = isTrial(business);
   const current = plans?.find((p) => p.id === business.plan_id);
+  // Vitrin işletme yalnızca Vitrin paketini, randevulu işletme Vitrin dışındaki paketleri görür (sunucu da böyle zorlar).
+  const visiblePlans = plans?.filter((p) => (p.id === 'vitrin') === showcase) ?? null;
 
   const load = useCallback(async () => {
     const [p, pay, refs] = await Promise.all([
@@ -70,7 +73,7 @@ function Subscription({ business }: { business: Business }) {
   // Davet bağlantısı: kayıtta işletme hesabı seçili açılır, kod kurulumda dolu gelir.
   function shareInvite() {
     Share.share({
-      message: `SiftahGo'da online randevu sayfanı aç; davet kodum ${business.referral_code} ile ilk ödemende ikimize de 1 ay hediye: ${WEB_URL}/kayit?davet=${business.referral_code}`,
+      message: `SiftahGo'da ${showcase ? 'işletme sayfanı aç' : 'online randevu sayfanı aç'}; davet kodum ${business.referral_code} ile ilk ödemende ikimize de 1 ay hediye: ${WEB_URL}/kayit?davet=${business.referral_code}`,
     });
   }
 
@@ -107,7 +110,7 @@ function Subscription({ business }: { business: Business }) {
         </Text>
         {trial ? (
           <>
-            <Text variant="title">Ücretsiz deneme (Pro)</Text>
+            <Text variant="title">Ücretsiz deneme ({showcase ? 'Vitrin' : 'Pro'})</Text>
             <Text tone="secondary">
               {formatDate(business.subscription_ends_at!, false)} tarihine kadar · {daysLeft(business.subscription_ends_at)} gün kaldı
             </Text>
@@ -125,7 +128,7 @@ function Subscription({ business }: { business: Business }) {
             <Text variant="title" tone="warning">
               Aktif paketiniz yok
             </Text>
-            <Text tone="muted">Paket seçene kadar sayfanız yayında görünmez ve randevu alınamaz.</Text>
+            <Text tone="muted">Paket seçene kadar sayfanız yayında görünmez{showcase ? '' : ' ve randevu alınamaz'}.</Text>
           </>
         )}
       </Card>
@@ -144,14 +147,14 @@ function Subscription({ business }: { business: Business }) {
         value={period}
         onChange={setPeriod}
       />
-      {plans === null ? (
+      {visiblePlans === null ? (
         <>
           <Skeleton height={260} />
-          <Skeleton height={260} />
+          {!showcase && <Skeleton height={260} />}
         </>
       ) : (
-        plans.map((plan) => {
-          const popular = plan.id === POPULAR;
+        visiblePlans.map((plan) => {
+          const popular = !showcase && plan.id === POPULAR;
           const isCurrent = subscribed && !trial && plan.id === business.plan_id;
           return (
             <Card key={plan.id} style={[{ gap: 14 }, popular && s.popular]}>
@@ -173,20 +176,22 @@ function Subscription({ business }: { business: Business }) {
                 </Text>
               )}
               <View style={{ gap: 8 }}>
-                <Feature>{plan.staff_limit ? `${plan.staff_limit} personel` : 'Sınırsız personel'}</Feature>
-                {BASE_FEATURES.map((f) => (
+                {!showcase && <Feature>{plan.staff_limit ? `${plan.staff_limit} personel` : 'Sınırsız personel'}</Feature>}
+                {(showcase ? SHOWCASE_BASE_FEATURES : BASE_FEATURES).map((f) => (
                   <Feature key={f}>{f}</Feature>
                 ))}
-                {Object.entries(PLAN_FEATURES).map(([key, label]) => (
-                  <Feature key={key} off={!plan.features.includes(key)}>
-                    {label}
-                  </Feature>
-                ))}
+                {Object.entries(PLAN_FEATURES)
+                  .filter(([key]) => (showcase ? ['coupons', 'announcement', 'links', 'menu'].includes(key) : key !== 'menu'))
+                  .map(([key, label]) => (
+                    <Feature key={key} off={!plan.features.includes(key)}>
+                      {label}
+                    </Feature>
+                  ))}
               </View>
               <Button
                 title={isCurrent ? (yearly ? '1 yıl uzat' : '30 gün uzat') : subscribed && !trial ? 'Bu pakete geç' : 'Seç ve öde'}
                 icon="open-outline"
-                variant={popular ? 'primary' : 'secondary'}
+                variant={popular || showcase ? 'primary' : 'secondary'}
                 onPress={pay}
               />
             </Card>

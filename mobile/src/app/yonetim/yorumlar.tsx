@@ -7,6 +7,7 @@ import { Sheet } from '@/components/sheet';
 import { useToast } from '@/components/toast';
 import { Avatar, Button, Card, Empty, Field, Segmented, Skeleton, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
+import { isShowcase } from '@/lib/constants';
 import { errorMessage, formatDate } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 import { supabase } from '@/lib/supabase';
@@ -88,7 +89,9 @@ function Reviews({ business }: { business: Business }) {
                 <Text tone="muted">{business.rating_count} değerlendirme</Text>
               </View>
             </Card>
-            <Text tone="muted">Sadece randevusu gerçekleşen müşteriler puan verebilir. Cevabınız sayfanızda herkese görünür.</Text>
+            <Text tone="muted">
+              {isShowcase(business) ? 'Sadece kuponunu kullanan müşteriler puan verebilir.' : 'Sadece randevusu gerçekleşen müşteriler puan verebilir.'} Cevabınız sayfanızda herkese görünür.
+            </Text>
             {all.length > 0 && (
               <Segmented
                 value={tab}
@@ -111,7 +114,13 @@ function Reviews({ business }: { business: Business }) {
             <Empty
               icon="chatbubbles-outline"
               title={all.length === 0 ? 'Henüz değerlendirme yok' : 'Cevap bekleyen yorum yok'}
-              text={all.length === 0 ? 'Randevudan sonra müşterilerinize puan vermeleri için otomatik hatırlatma gider.' : 'Tüm yorumlara cevap verdiniz.'}
+              text={
+                all.length === 0
+                  ? isShowcase(business)
+                    ? 'Kuponu kullanan müşterilere puan vermeleri için otomatik hatırlatma gider.'
+                    : 'Randevudan sonra müşterilerinize puan vermeleri için otomatik hatırlatma gider.'
+                  : 'Tüm yorumlara cevap verdiniz.'
+              }
             />
           )
         }

@@ -9,7 +9,7 @@ import { SaveBar } from '@/components/save-bar';
 import { Badge, Button, Card, Field, SectionTitle, styles, Text } from '@/components/ui';
 import { AccentProvider } from '@/lib/accent';
 import { useAuth } from '@/lib/auth';
-import { categoryLabel, isSubscribed, type IconName } from '@/lib/constants';
+import { categoryLabel, isShowcase, isSubscribed, type IconName } from '@/lib/constants';
 import { errorMessage } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 import { usePlan } from '@/lib/plan';
@@ -105,7 +105,7 @@ function Appearance({ business }: { business: Business }) {
           </View>
         </Part>
 
-        <Part icon="megaphone-outline" title="Duyuru bandı" plan="Esnaf" locked={!has('announcement')} text="Sayfanızın üstünde öne çıkar: tatil günleri, kampanyalar, yeni hizmetler.">
+        <Part icon="megaphone-outline" title="Duyuru bandı" plan="Esnaf" locked={!has('announcement')} text={`Sayfanızın üstünde öne çıkar: tatil günleri, kampanyalar, ${isShowcase(business) ? 'yeni ürünler' : 'yeni hizmetler'}.`}>
           <Field
             value={form.announcement}
             onChangeText={(announcement) => set({ announcement })}
@@ -227,7 +227,7 @@ function Preview({ business, form, has }: { business: Business; form: Form; has:
           ) : null}
           <View style={[s.previewButton, { backgroundColor: accent.base }]}>
             <Text variant="label" style={{ color: accent.ink }}>
-              Randevu al
+              {isShowcase(business) ? 'Menüyü gör' : 'Randevu al'}
             </Text>
           </View>
         </View>

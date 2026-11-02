@@ -13,15 +13,17 @@ import { OptionSheet } from '@/components/pickers';
 import { TopBar, useScrollY } from '@/components/top-bar';
 import { Avatar, Badge, Button, Card, Chip, Empty, Field, PressableScale, Skeleton, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
-import { CATEGORIES, categoryLabel, CITIES } from '@/lib/constants';
+import { CATEGORIES, categoryLabel, CITIES, isShowcase } from '@/lib/constants';
 import { supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
 import type { Business } from '@/lib/types';
 
 // distance_km: "Yakınımda" aramasında uzaklık
-type Item = Pick<Business, 'id' | 'slug' | 'name' | 'category' | 'city' | 'district' | 'logo_url' | 'cover_url' | 'rating_avg' | 'rating_count'> & {
-  distance_km?: number;
-};
+// business_type: vitrin kartı "Menüyü gör" yazar, "Bugün müsait" rozeti almaz (boşsa randevulu sayılır).
+type Item = Pick<Business, 'id' | 'slug' | 'name' | 'category' | 'city' | 'district' | 'logo_url' | 'cover_url' | 'rating_avg' | 'rating_count'> &
+  Partial<Pick<Business, 'business_type'>> & {
+    distance_km?: number;
+  };
 
 const CITY_KEY = 'siftahgo.city';
 const CITY_OPTIONS = [{ value: '', label: 'Tüm şehirler' }, ...CITIES.map((c) => ({ value: c, label: c }))];
@@ -62,7 +64,7 @@ export default function DiscoverScreen() {
       if (!session) return;
       supabase
         .from('favorites')
-        .select('businesses(id, slug, name, category, city, district, logo_url, cover_url, rating_avg, rating_count)')
+        .select('businesses(id, slug, name, category, city, district, logo_url, cover_url, rating_avg, rating_count, business_type)')
         .order('created_at', { ascending: false })
         .then(({ data }) => setFavorites(((data ?? []) as unknown as { businesses: Item | null }[]).flatMap((x) => (x.businesses ? [x.businesses] : []))));
     }, [session]),
@@ -73,7 +75,7 @@ export default function DiscoverScreen() {
     const timer = setTimeout(async () => {
       let q = supabase
         .from('businesses')
-        .select('id, slug, name, category, city, district, logo_url, cover_url, rating_avg, rating_count')
+        .select('id, slug, name, category, city, district, logo_url, cover_url, rating_avg, rating_count, business_type')
         .eq('is_published', true)
         .order('rating_score', { ascending: false })
         .order('created_at', { ascending: false })
@@ -87,9 +89,15 @@ export default function DiscoverScreen() {
         ? await supabase.rpc('nearby_businesses', { p_lat: near.lat, p_lng: near.lng, p_category: category || null, p_query: term || null })
         : await q;
       let rows = (data ?? []) as Item[];
+      // nearby_businesses işletme türünü vermez: vitrin kartı "Menüyü gör" yazsın diye ayrıca okunur.
+      if (near && rows.length) {
+        const { data: types } = await supabase.from('businesses').select('id, business_type').in('id', rows.map((r) => r.id));
+        const showcase = new Set((types ?? []).filter((t) => t.business_type === 'showcase').map((t) => t.id as string));
+        rows = rows.map((r) => (showcase.has(r.id) ? { ...r, business_type: 'showcase' as const } : r));
+      }
       let open: Set<string> | null = null;
       if (today && rows.length) {
-        const { data: ids } = await supabase.rpc('available_today', { p_ids: rows.map((r) => r.id) });
+        const { data: ids } = await supabase.rpc('available_today', { p_ids: rows.filter((r) => !isShowcase(r)).map((r) => r.id) });
         const found = new Set((ids ?? []) as string[]);
         rows = rows.filter((r) => found.has(r.id));
         open = found;
@@ -99,7 +107,7 @@ export default function DiscoverScreen() {
       setRefreshing(false);
       // "Bugün müsait" rozeti: listeyi bekletmeden, ilk 20 kart için ayrıca sorulur (her işletmenin boş saati hesaplanır).
       if (open) return setOpenToday(open);
-      const first = rows.slice(0, 20).map((r) => r.id);
+      const first = rows.filter((r) => !isShowcase(r)).slice(0, 20).map((r) => r.id);
       const { data: ids } = first.length ? await supabase.rpc('available_today', { p_ids: first }) : { data: [] };
       if (active) setOpenToday(new Set((ids ?? []) as string[]));
     }, 250);
@@ -308,7 +316,7 @@ function BusinessCard({ item, open }: { item: Item; open: boolean }) {
   return (
     <Card
       onPress={() => router.push({ pathname: '/isletme/[slug]', params: { slug: item.slug } })}
-      accessibilityLabel={`${item.name}${open ? ', bugün müsait' : ''}`}
+      accessibilityLabel={`${item.name}${open && !isShowcase(item) ? ', bugün müsait' : ''}`}
       style={{ padding: 0, overflow: 'hidden' }}>
       {item.cover_url ? <Image source={item.cover_url} accessibilityLabel="" style={s.cover} contentFit="cover" transition={150} /> : null}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14 }}>
@@ -335,8 +343,16 @@ function BusinessCard({ item, open }: { item: Item; open: boolean }) {
             ) : (
               <Badge label="Yeni" fg={colors.brand300} bg={colors.brandTint} />
             )}
-            {open && <Badge label="Bugün müsait" icon="time-outline" fg={colors.success} bg={colors.successTint} />}
+            {open && !isShowcase(item) && <Badge label="Bugün müsait" icon="time-outline" fg={colors.success} bg={colors.successTint} />}
           </View>
+          {isShowcase(item) && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+              <Text variant="label" tone="brand">
+                Menüyü gör
+              </Text>
+              <Ionicons name="arrow-forward" size={12} color={colors.brand300} />
+            </View>
+          )}
         </View>
         <Ionicons name="chevron-forward" size={18} color={colors.ink3} />
       </View>

@@ -5,13 +5,13 @@ import { Platform } from 'react-native';
 import { WEB_URL } from './constants';
 import { supabase } from './supabase';
 
-export type ImageKind = 'logo' | 'cover' | 'gallery';
+export type ImageKind = 'logo' | 'cover' | 'gallery' | 'menu';
 
 export async function pickImages(kind: ImageKind, limit = 1) {
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],
     allowsEditing: kind !== 'gallery',
-    aspect: kind === 'logo' ? [1, 1] : [16, 9],
+    aspect: kind === 'logo' || kind === 'menu' ? [1, 1] : [16, 9],
     allowsMultipleSelection: kind === 'gallery' && limit > 1,
     selectionLimit: kind === 'gallery' ? limit : 1,
     quality: 1,

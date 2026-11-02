@@ -8,13 +8,12 @@ import { SaveBar } from '@/components/save-bar';
 import { useToast } from '@/components/toast';
 import { Button, Card, Field, SectionTitle, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
-import { CATEGORIES, categoryLabel, CITIES, RESERVED_SLUGS, SITE_DOMAIN } from '@/lib/constants';
+import { categoriesFor, categoryLabel, CITIES, RESERVED_SLUGS, SITE_DOMAIN } from '@/lib/constants';
 import { errorMessage, slugify, slugInput } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
 import type { Business } from '@/lib/types';
 
-const CATEGORY_OPTIONS = CATEGORIES.map((c) => ({ value: c.id as string, label: c.label, icon: c.icon }));
 const CITY_OPTIONS = CITIES.map((c) => ({ value: c, label: c }));
 
 export default function InfoScreen() {
@@ -39,6 +38,8 @@ function Info({ business }: { business: Business }) {
   const [picker, setPicker] = useState<'category' | 'city' | null>(null);
   const [locBusy, setLocBusy] = useState(false);
   const [error, setError] = useState('');
+  // Vitrin işletme yalnızca kendi kategorilerini görür; randevulu işletmenin listesi değişmez.
+  const categoryOptions = categoriesFor(business.business_type).map((c) => ({ value: c.id as string, label: c.label, icon: c.icon }));
   const located = business.latitude != null && business.longitude != null;
   const dirty = (Object.keys(form) as (keyof typeof form)[]).some((k) => form[k] !== business[k]);
   const set = (patch: Partial<typeof form>) => {
@@ -150,7 +151,7 @@ function Info({ business }: { business: Business }) {
         visible={picker === 'category'}
         onClose={() => setPicker(null)}
         title="Kategori"
-        options={CATEGORY_OPTIONS}
+        options={categoryOptions}
         value={form.category}
         onSelect={(category) => set({ category })}
       />
