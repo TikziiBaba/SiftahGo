@@ -10,7 +10,7 @@ import { dayOf, errorMessage, formatDate, formatPrice } from "@/lib/format";
 import { BarChart } from "@/components/charts";
 import type { Payment, Plan } from "@/lib/types";
 
-type Row = Payment & { business_id: string; businesses: { name: string; slug: string } | null };
+type Row = Payment & { business_id: string | null; businesses: { name: string; slug: string } | null };
 
 const STATUSES = [
   { id: "all", label: "Tümü" },
@@ -156,9 +156,13 @@ export default function AdminPayments() {
                 <tr key={p.id} className="transition hover:bg-white/[0.02]">
                   <td className="px-4 py-3 text-ink-2">{dateTime(p.paid_at ?? p.created_at)}</td>
                   <td className="px-4 py-3">
-                    <Link href={`/admin/isletmeler/${p.business_id}`} className="hover:text-brand-300">
-                      {p.businesses?.name ?? "—"}
-                    </Link>
+                    {p.business_id ? (
+                      <Link href={`/admin/isletmeler/${p.business_id}`} className="hover:text-brand-300">
+                        {p.businesses?.name ?? "—"}
+                      </Link>
+                    ) : (
+                      <span className="text-ink-3">{p.business_name || "Silinmiş işletme"}</span>
+                    )}
                   </td>
                   <td className="px-4 py-3">{planName(p.plan_id)}</td>
                   <td className="px-4 py-3 text-right tabular-nums">{formatPrice(p.amount)}</td>

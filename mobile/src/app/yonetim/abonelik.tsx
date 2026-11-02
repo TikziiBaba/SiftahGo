@@ -257,6 +257,13 @@ function Subscription({ business }: { business: Business }) {
         </>
       )}
 
+      <Button
+        title="Fatura bilgilerim"
+        icon="receipt-outline"
+        variant="secondary"
+        onPress={() => WebBrowser.openBrowserAsync(`${WEB_URL}/panel/abonelik`)}
+      />
+
       {payments.length > 0 && (
         <>
           <SectionTitle title="Ödeme geçmişi" />
@@ -270,6 +277,7 @@ function Subscription({ business }: { business: Business }) {
                   </Text>
                   <Text variant="caption" tone="muted">
                     {formatDate(p.created_at)}
+                    {p.status === 'paid' && p.invoice_number ? ` · Fatura no: ${p.invoice_number}` : ''}
                   </Text>
                 </View>
                 <Badge label={PAYMENT_STATUS[p.status].label} fg={PAYMENT_STATUS[p.status].fg} bg={PAYMENT_STATUS[p.status].bg} />

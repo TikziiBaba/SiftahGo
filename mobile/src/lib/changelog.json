@@ -65,5 +65,14 @@
       "İşletme sayfasında daha önce aldığınız hizmetleri görüp tek dokunuşla yeniden randevu alabilirsiniz.",
       "Esnaf isterse sadakat kartı açabiliyor: tamamlanan her randevu bir damga, ödül işletmeden."
     ]
+  },
+  {
+    "id": 10,
+    "date": "2026-11-02",
+    "items": [
+      "Yasal metinlere Hesap ekranından ulaşabilirsiniz.",
+      "Cam afişi artık A3, isteğe göre A4 olarak yazdırılıyor.",
+      "Fatura numaralarınızı ödeme geçmişinde görebilirsiniz."
+    ]
   }
 ]

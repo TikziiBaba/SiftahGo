@@ -230,8 +230,7 @@ function HeroVisual() {
         <div className="bezel rounded-3xl p-1 backdrop-blur-md">
           <div className="flex items-center gap-2 rounded-[calc(1.5rem-0.25rem)] bg-surface-2/90 px-4 py-3 shadow-[inset_0_1px_1px_rgb(255_255_255/0.06)]">
             <Star className="size-4 fill-gold text-gold" />
-            <span className="text-sm font-semibold">4,9</span>
-            <span className="text-xs text-ink-3">128 yorum</span>
+            <span className="text-sm font-semibold">Gerçek yorumlar</span>
           </div>
         </div>
       </div>

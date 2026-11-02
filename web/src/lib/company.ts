@@ -6,6 +6,8 @@ export const COMPANY = {
   address: "Diriliş Mah. 21. Sok., Sivas / Türkiye",
   phone: "0545 645 84 16",
   email: "destek@siftahgo.app",
+  // Vergi dairesi ve numarası, ETBİS kaydı gibi bilgiler alındıkça eklenir: { label: "Vergi dairesi", value: "..." }
+  registry: [] as { label: string; value: string }[],
 };
 
 /** Yasal metinlerin son güncellenme tarihi. Metin değişince güncelleyin. */

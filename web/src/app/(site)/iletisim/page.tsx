@@ -27,6 +27,9 @@ export default function ContactPage() {
         <li><strong>Telefon:</strong> {COMPANY.phone}</li>
         <li><strong>E-posta:</strong> <a href={`mailto:${COMPANY.email}`}>{COMPANY.email}</a></li>
         <li><strong>Web:</strong> {SITE_DOMAIN}</li>
+        {COMPANY.registry.map((r) => (
+          <li key={r.label}><strong>{r.label}:</strong> {r.value}</li>
+        ))}
       </ul>
       <p>
         Hesabınız varsa en hızlı yol <Link href="/hesabim?sekme=destek">destek talebi açmaktır</Link>: yanıtımızı hem hesabınızda hem

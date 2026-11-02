@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalPage } from "@/components/legal-page";
+import { PrintButton } from "@/components/print-button";
 import { COMPANY } from "@/lib/company";
 import { SITE_DOMAIN, SITE_NAME } from "@/lib/constants";
 
@@ -11,8 +12,10 @@ export default function DistanceSalesPage() {
     <LegalPage href="/yasal/mesafeli-satis" title="Ön bilgilendirme formu ve mesafeli satış sözleşmesi">
       <p>
         Bu metin, işletmelerin {SITE_NAME} paketlerini {SITE_DOMAIN} üzerinden satın almasına uygulanır. Ödeme ekranındaki
-        onay kutusu işaretlenip ödeme tamamlandığında sözleşme elektronik ortamda kurulmuş olur.
+        onay kutusu işaretlenip ödeme tamamlandığında sözleşme elektronik ortamda kurulmuş olur. Bu metni yazdırabilir ya da PDF olarak
+        saklayabilirsiniz.
       </p>
+      <p className="print:hidden"><PrintButton label="Yazdır / PDF kaydet" /></p>
 
       <h2>A. Ön bilgilendirme formu</h2>
       <h3>1. Satıcı</h3>
@@ -22,6 +25,9 @@ export default function DistanceSalesPage() {
         <li>Telefon: {COMPANY.phone}</li>
         <li>E-posta: <a href={`mailto:${COMPANY.email}`}>{COMPANY.email}</a></li>
         <li>Web: {SITE_DOMAIN}</li>
+        {COMPANY.registry.map((r) => (
+          <li key={r.label}>{r.label}: {r.value}</li>
+        ))}
       </ul>
       <h3>2. Alıcı</h3>
       <p>{SITE_NAME}’da işletme hesabı açan ve ödeme yapan kişidir. Alıcı bilgileri, hesap ve ödeme sırasında beyan edilen bilgilerdir.</p>
@@ -42,6 +48,7 @@ export default function DistanceSalesPage() {
       <h3>4. Fiyat ve ödeme</h3>
       <ul>
         <li>Ödeme ekranında gösterilen tutar ödenecek toplam bedeldir; ek ücret alınmaz.</li>
+        <li>Fatura, panelde Abonelik sayfasına girilen fatura bilgileriyle düzenlenir ve bilgisi aynı sayfadaki ödeme geçmişinde görünür.</li>
         <li>
           Ödeme banka veya kredi kartıyla, tek çekim olarak, PayTR Ödeme ve Elektronik Para Kuruluşu A.Ş. altyapısıyla alınır. Kart bilgileri
           {" "}{SITE_NAME}’ya ulaşmaz ve saklanmaz.

@@ -2075,5 +2075,32 @@ await expectError(() => as(LC, `select loyalty_stamps($1, $2)`, [lb, LC]), /perm
 await db.query(`update businesses set plan_id = 'baslangic' where id = $1`, [lb]);
 ok((await as(LC, `select my_loyalty($1) r`, [lb])).rows[0].r === null, 'paket düşünce kart gizlenir');
 
+// Fatura bilgileri ve muhasebe
+const FO = 'aaaaaaaa-0000-4000-8000-000000000011', FX = 'aaaaaaaa-0000-4000-8000-000000000012';
+await db.exec(`
+  insert into auth.users values ('${FO}', 'fo@x.com', '{"full_name":"Fatura Usta","role":"business"}');
+  insert into auth.users values ('${FX}', 'fx@x.com', '{"full_name":"Başka Usta","role":"business"}');
+`);
+const fb = (await as(FO, `insert into businesses (owner_id, slug, name, city, category) values ($1, 'fatura-berber', 'Fatura Berber', 'Sivas', 'berber') returning id`, [FO])).rows[0].id;
+await expectError(() => as(FO, `insert into billing_profiles (business_id, kind, legal_name, tax_id, address) values ($1, 'individual', 'Fatura Usta', '123', 'Sivas Merkez')`, [fb]), /check/, 'T.C. no 11 haneli');
+await expectError(() => as(FO, `insert into billing_profiles (business_id, kind, legal_name, tax_id, address) values ($1, 'company', 'Usta Ltd', '1234567890', 'Sivas Merkez')`, [fb]), /check/, 'şirkette vergi dairesi zorunlu');
+await expectError(() => as(FX, `insert into billing_profiles (business_id, kind, legal_name, tax_id, address) values ($1, 'individual', 'Başka', '12345678901', 'Sivas Merkez')`, [fb]), /row-level/, 'başkasının fatura bilgisi yazılamaz');
+await as(FO, `insert into billing_profiles (business_id, kind, legal_name, tax_id, address) values ($1, 'individual', 'Fatura Usta', '12345678901', 'Sivas Merkez')`, [fb]);
+ok((await as(FX, `select * from billing_profiles where business_id = $1`, [fb])).rows.length === 0, 'başkası fatura bilgisini okuyamaz');
+ok((await as(null, `select * from billing_profiles`)).rows.length === 0, 'ziyaretçi fatura bilgisini okuyamaz');
+const fpay = (await db.query(`insert into payments (business_id, plan_id, merchant_oid, amount) values ($1, 'esnaf', 'SGTESTFATURA', 649) returning id, business_name, billing_snapshot`, [fb])).rows[0];
+ok(fpay.business_name === 'Fatura Berber' && fpay.billing_snapshot === null, 'bekleyen ödemede fatura kopyası yok, işletme adı var');
+await db.query(`update payments set status = 'paid', paid_at = now() where id = $1`, [fpay.id]);
+await as(FO, `update billing_profiles set legal_name = 'Yeni Ad' where business_id = $1`, [fb]);
+ok((await db.query(`select billing_snapshot s from payments where id = $1`, [fpay.id])).rows[0].s.legal_name === 'Fatura Usta', 'ödeme anındaki bilgi korunur');
+await as(FO, `update payments set invoice_number = 'X' where id = $1`, [fpay.id]);
+ok((await db.query(`select invoice_number n from payments where id = $1`, [fpay.id])).rows[0].n === null, 'esnaf fatura numarası yazamaz');
+await expectError(() => as(FO, `select admin_set_invoice($1, 'A1', current_date)`, [fpay.id]), /Yetkiniz/, 'fatura kaydı yalnızca yöneticide');
+await expectError(() => as(FO, `select * from expenses`).then((r) => { if (r.rows.length === 0) throw new Error('Yetkiniz yok'); }), /Yetkiniz/, 'gider esnafa kapalı');
+await expectError(() => as(FO, `insert into expenses (spent_on, category, description, amount) values (current_date, 'reklam', 'Afiş', 10)`), /row-level/, 'esnaf gider yazamaz');
+await db.query(`delete from businesses where id = $1`, [fb]);
+const fkept = (await db.query(`select business_id, business_name from payments where id = $1`, [fpay.id])).rows[0];
+ok(fkept.business_id === null && fkept.business_name === 'Fatura Berber', 'işletme silinince ödeme kaydı kalır');
+
 console.log(failures ? `\n${failures} TEST BAŞARISIZ` : '\nTÜM TESTLER GEÇTİ');
 process.exit(failures ? 1 : 0);

@@ -1,5 +1,6 @@
 "use client";
 
+import { BillingForm } from "@/components/billing-form";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Loader2, ShieldCheck, X } from "lucide-react";
@@ -254,6 +255,12 @@ export default function SubscriptionPage() {
       {/* Ek dosya henüz çalıştırılmadıysa (davet sütunları yoksa) gizli kalır. */}
       {"referral_code" in business && <ReferralCard hasPaid={payments.some((p) => p.status === "paid")} />}
 
+      <section className="mt-10">
+        <h2 className="font-semibold">Fatura bilgileri</h2>
+        <p className="mt-1 text-sm text-ink-3">Faturanız bu bilgilerle düzenlenir. Ödemeden önce girin; ödeme anındaki bilgi esas alınır.</p>
+        <BillingForm businessId={business.id} />
+      </section>
+
       {payments.length > 0 && (
         <section className="mt-10">
           <h2 className="font-semibold">Ödeme geçmişi</h2>
@@ -277,6 +284,18 @@ export default function SubscriptionPage() {
                 >
                   {p.status === "paid" ? "Ödendi" : p.status === "failed" ? "Başarısız" : "Yarım kaldı"}
                 </span>
+                {p.status === "paid" && p.invoice_number && (
+                  <span className="w-full text-xs text-ink-3">
+                    Fatura no: {p.invoice_number}
+                    {p.invoice_date && ` · ${formatDate(p.invoice_date, { weekday: undefined, year: "numeric" })}`}
+                    {p.invoice_url && (
+                      <>
+                        {" · "}
+                        <a href={p.invoice_url} target="_blank" rel="noreferrer" className="underline">Faturayı aç</a>
+                      </>
+                    )}
+                  </span>
+                )}
               </li>
             ))}
           </ul>

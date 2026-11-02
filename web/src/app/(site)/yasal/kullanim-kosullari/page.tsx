@@ -57,6 +57,10 @@ export default function TermsPage() {
           paylaşmaz. Kendi müşterilerinin verileri bakımından İşletme de 6698 sayılı Kanun kapsamında ayrı veri sorumlusudur.
         </li>
         <li>Menüsünde ve sayfasında gösterdiği ürünlerin, hizmetlerin ve fiyatların doğruluğundan ve güncelliğinden sorumludur.</li>
+        <li>
+          Kupon, indirim ve sadakat kartında gerçeğe uygun davranır: indirimden önceki fiyatı doğru gösterir, duyurduğu şartları ve ödülü yerine getirir.
+        </li>
+        <li>Müşteri notlarına ve açıklamalara sağlık bilgisi gibi özel nitelikli kişisel veri yazmaz.</li>
         <li>Müşterilerine karşı vergi, fatura ve tüketici mevzuatından doğan yükümlülükleri kendisine aittir.</li>
       </ul>
 
@@ -81,17 +85,27 @@ export default function TermsPage() {
         </li>
       </ul>
 
-      <h2>7. Kuponlar</h2>
+      <h2>7. Kuponlar ve sadakat kartı</h2>
       <ul>
         <li>Kuponu İşletme hazırlar. İndirimi İşletme uygular ve indirimli tutarı İşletme tahsil eder.</li>
         <li>{SITE_NAME} indirimli fiyatı gösterir ve randevuda kaydeder; bunun için ödeme almaz.</li>
         <li>Kuponun şartlarına uygun olarak yerine getirilmesinden İşletme sorumludur.</li>
       </ul>
 
+      <p>
+        Sadakat kartı isteğe bağlıdır ve İşletme tarafından açılır. Tamamlanan her randevu bir damga sayılır. Ödülü İşletme belirler ve verir; ödülün
+        yerine getirilmesinden İşletme sorumludur. Kart kapatılırsa ya da paket sona ererse kazanılmış ödüllerin verilmesi için İşletme ile görüşülür.
+      </p>
+
       <h2>8. İçerik ve değerlendirmeler</h2>
       <p>
-        {SITE_NAME}; hukuka, bu koşullara veya genel ahlaka aykırı sayfa, görsel ve yorumları kaldırabilir. Gerçek bir randevuya dayanan
-        değerlendirmeler İşletme’nin isteğiyle silinmez; İşletme değerlendirmeye cevap yazabilir.
+        {SITE_NAME}; hukuka, bu koşullara veya genel ahlaka aykırı sayfa, görsel ve yorumları kaldırabilir. Gerçek bir randevuya ya da kullanılmış
+        kupona dayanan değerlendirmeler İşletme’nin isteğiyle silinmez; İşletme değerlendirmeye cevap yazabilir.
+      </p>
+      <p>
+        <strong>Hukuka aykırı içerik bildirimi:</strong> {SITE_NAME}, kullanıcıların eklediği içerikler bakımından 5651 sayılı Kanun kapsamında yer sağlayıcı
+        olarak hareket eder. Hakkınızı ihlal eden bir içerik görürseniz sayfa adresini, içeriği ve gerekçenizi{" "}
+        <a href={`mailto:${COMPANY.email}`}>{COMPANY.email}</a> adresine yazın; başvurunuz incelenir, hukuka aykırı içerik kaldırılır.
       </p>
 
       <h2>9. Askıya alma ve fesih</h2>

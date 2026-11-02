@@ -177,6 +177,22 @@ export type Payment = {
   status: "pending" | "paid" | "failed";
   created_at: string;
   paid_at: string | null;
+  business_name: string;
+  billing_snapshot: BillingSnapshot | null;
+  invoice_number: string | null;
+  invoice_date: string | null;
+  invoice_url: string | null;
+};
+
+export type BillingSnapshot = { kind: "individual" | "company"; legal_name: string; tax_id: string; tax_office: string; address: string };
+export type BillingProfile = BillingSnapshot & { business_id: string; updated_at: string };
+export type Expense = {
+  id: string;
+  spent_on: string;
+  category: "altyapi" | "reklam" | "baski" | "muhasebe" | "vergi" | "diger";
+  description: string;
+  amount: number;
+  created_at: string;
 };
 
 export type StaffService = { staff_id: string; service_id: string };

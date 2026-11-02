@@ -38,7 +38,8 @@ export default function PrivacyPage() {
       <ul>
         <li>Ad soyad, telefon, e-posta; işletmenin adı, adresi, iletişim bilgileri, hizmetleri, fiyatları, çalışma saatleri ve personel adları.</li>
         <li>Yüklenen logo, kapak ve galeri görselleri.</li>
-        <li>Paket ve ödeme kayıtları (tutar, tarih, ödeme numarası). Kart bilgileri bize ulaşmaz; ödeme kuruluşu PayTR tarafından işlenir.</li>
+        <li>Fatura bilgileri: ad soyad veya unvan, T.C. kimlik ya da vergi numarası, vergi dairesi, adres.</li>
+        <li>Paket ve ödeme kayıtları (tutar, tarih, ödeme numarası, fatura numarası). Kart bilgileri bize ulaşmaz; ödeme kuruluşu PayTR tarafından işlenir.</li>
       </ul>
       <h3>Tüm kullanıcılar</h3>
       <ul>
@@ -63,6 +64,23 @@ export default function PrivacyPage() {
           izleme hizmetine gönderilmez.
         </li>
       </ul>
+
+      <h3>Sadakat kartı ve gecikme haberleri</h3>
+      <ul>
+        <li>
+          <strong>Sadakat kartı:</strong> işletme kartı açtıysa o işletmedeki tamamlanan randevu sayınız ve verilen ödüller. Bunları işletme de görür.{" "}
+          <em>Hukuki sebep: sözleşmenin ifası (m. 5/2-c).</em>
+        </li>
+        <li>
+          <strong>Gecikme haberleri:</strong> randevunuza kaç dakika gecikeceğiniz ya da işletmenin gecikmesi. Karşı tarafa bildirilir, randevu kaydında durur.{" "}
+          <em>Hukuki sebep: sözleşmenin ifası (m. 5/2-c).</em>
+        </li>
+      </ul>
+      <h3>Özel nitelikli veriler</h3>
+      <p>
+        {SITE_NAME} sağlık bilgisi gibi özel nitelikli kişisel veri istemez. Klinik, diyetisyen veya benzeri bir işletmeden randevu alırken not alanına sağlık
+        bilginizi yazmayın. Aldığınız hizmetin adı randevu kaydında tutulur ve işletme tarafından görülür.
+      </p>
 
       <h2>3. İşleme amaçları ve hukuki sebepler</h2>
       <ul>
@@ -122,7 +140,7 @@ export default function PrivacyPage() {
           edilir, yorumlarınızdaki adınız kaldırılır.
         </li>
         <li>Randevu kayıtları, işletmenin randevu defteri olarak işletme hesabı açık kaldığı sürece saklanır.</li>
-        <li>Ödeme ve muhasebe kayıtları ilgili mevzuatın öngördüğü süre boyunca saklanır.</li>
+        <li>Ödeme, fatura ve muhasebe kayıtları, hesabınız silinse de ilgili mevzuatın öngördüğü süre boyunca saklanır.</li>
         <li>Bildirim adresleri, oturum kapatıldığında veya uygulama kaldırıldığında silinir.</li>
         <li>Bekleme listesi kayıtları ilgili gün geçince silinir. Hata kayıtları en fazla 90 gün saklanır.</li>
       </ul>

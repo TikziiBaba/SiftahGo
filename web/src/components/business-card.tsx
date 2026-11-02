@@ -62,7 +62,7 @@ export function BusinessCard({ b, distanceKm, morph = false }: { b: BusinessCard
         </Morph>
         <div className="flex gap-3 p-4">
           <Morph id={b.id} part="logo" on={morph}>
-            <div className="-mt-10 size-14 shrink-0 overflow-hidden rounded-xl border-4 border-bg bg-brand-700 shadow">
+            <div className="relative z-10 -mt-10 size-14 shrink-0 overflow-hidden rounded-xl border-4 border-bg bg-brand-700 shadow">
               {b.logo_url ? (
                 <Image src={b.logo_url} alt="" width={56} height={56} className="size-full object-cover" />
               ) : (

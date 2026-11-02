@@ -11,6 +11,8 @@
 drop trigger if exists on_auth_user_created on auth.users;
 
 drop table if exists
+  public.expenses,
+  public.billing_profiles,
   public.loyalty_rewards,
   public.menu_items,
   public.coupon_code_attempts,
@@ -85,7 +87,7 @@ begin
         'coupon_redeem_problem', 'coupon_lookup', 'save_coupon', 'set_coupon_active', 'delete_coupon',
         'claim_coupon', 'find_coupon_code', 'redeem_coupon_code', 'undo_coupon_redeem', 'my_coupons', 'business_coupons',
         'enforce_menu_limit', 'enforce_working_hours', 'add_coupon_review', 'claim_coupon_review_requests', 'claim_coupon_review_notices',
-        'loyalty_stamps', 'my_loyalty', 'business_loyalty', 'give_loyalty_reward'
+        'loyalty_stamps', 'my_loyalty', 'business_loyalty', 'give_loyalty_reward', 'payments_fill_billing', 'admin_set_invoice'
       )
   loop
     execute 'drop function if exists ' || r.sig || ' cascade';
@@ -499,7 +501,8 @@ create index menu_items_business_idx on public.menu_items (business_id, sort_ord
 -- PayTR ödemeleri
 create table public.payments (
   id           uuid primary key default gen_random_uuid(),
-  business_id  uuid not null references public.businesses (id) on delete cascade,
+  -- İşletme silinse de ödeme kaydı kalır (yasal saklama).
+  business_id  uuid references public.businesses (id) on delete set null,
   plan_id      text not null references public.plans (id),
   merchant_oid text not null unique,
   amount       numeric(10, 2) not null,
@@ -507,7 +510,14 @@ create table public.payments (
   months       int not null default 1 check (months in (1, 12)),
   status       text not null default 'pending' check (status in ('pending', 'paid', 'failed')),
   created_at   timestamptz not null default now(),
-  paid_at      timestamptz
+  paid_at      timestamptz,
+  business_name text not null default '',
+  -- Ödeme onaylandığı andaki fatura bilgisi; faturayı yönetici kesip numarasını yazar (admin_set_invoice).
+  billing_snapshot jsonb,
+  invoice_number text check (length(invoice_number) between 1 and 40),
+  invoice_date date,
+  invoice_url  text check (invoice_url ~ '^https://\S+$' and length(invoice_url) <= 500),
+  constraint payments_invoice_check check ((invoice_number is null) = (invoice_date is null))
 );
 create index payments_business_idx on public.payments (business_id, created_at desc);
 
@@ -4770,6 +4780,96 @@ begin
     raise exception 'Bu müşterinin bekleyen ödülü yok.';
   end if;
   insert into public.loyalty_rewards (business_id, customer_id) values (p_business_id, p_customer_id);
+end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- Fatura ve muhasebe
+-- ---------------------------------------------------------------------
+-- Fatura bilgileri ayrı tabloda: işletme satırı herkese açık, vergi ve T.C. kimlik numarası değil.
+create table public.billing_profiles (
+  business_id uuid primary key references public.businesses (id) on delete cascade,
+  kind        text not null check (kind in ('individual', 'company')),
+  legal_name  text not null check (length(trim(legal_name)) between 2 and 200),
+  tax_id      text not null,
+  tax_office  text not null default '' check (length(tax_office) <= 100),
+  address     text not null check (length(trim(address)) between 5 and 300),
+  updated_at  timestamptz not null default now(),
+  constraint billing_profiles_tax_check check (
+    (kind = 'individual' and tax_id ~ '^[0-9]{11}$')
+    or (kind = 'company' and tax_id ~ '^[0-9]{10}$' and length(trim(tax_office)) > 1)
+  )
+);
+alter table public.billing_profiles enable row level security;
+create policy "fatura: sahibi okur" on public.billing_profiles
+  for select using ((select public.is_business_owner(business_id)));
+create policy "fatura: sahibi ekler" on public.billing_profiles
+  for insert with check ((select public.is_business_owner(business_id)));
+create policy "fatura: sahibi günceller" on public.billing_profiles
+  for update using ((select public.is_business_owner(business_id))) with check ((select public.is_business_owner(business_id)));
+create policy "fatura: yönetici okur" on public.billing_profiles
+  for select using ((select public.is_admin()));
+
+-- Giderler: yalnızca yönetici.
+create table public.expenses (
+  id          uuid primary key default gen_random_uuid(),
+  spent_on    date not null,
+  category    text not null check (category in ('altyapi', 'reklam', 'baski', 'muhasebe', 'vergi', 'diger')),
+  description text not null check (length(trim(description)) between 2 and 200),
+  amount      numeric(10, 2) not null check (amount > 0),
+  created_at  timestamptz not null default now()
+);
+create index expenses_spent_on_idx on public.expenses (spent_on desc);
+alter table public.expenses enable row level security;
+create policy "gider: yönetici okur" on public.expenses for select using ((select public.is_admin()));
+create policy "gider: yönetici ekler" on public.expenses for insert with check ((select public.is_admin()));
+create policy "gider: yönetici siler" on public.expenses for delete using ((select public.is_admin()));
+
+-- Ödeme kaydına işletme adı; ödeme onaylanınca o anki fatura bilgisi. Sonradan değişen bilgi eski kaydı etkilemez.
+create function public.payments_fill_billing()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  v_profile public.billing_profiles;
+begin
+  if new.business_id is not null and new.business_name = '' then
+    select b.name into new.business_name from public.businesses b where b.id = new.business_id;
+    new.business_name := coalesce(new.business_name, '');
+  end if;
+  if new.status = 'paid' and new.billing_snapshot is null and new.business_id is not null
+     and (tg_op = 'INSERT' or old.status <> 'paid') then
+    select * into v_profile from public.billing_profiles p where p.business_id = new.business_id;
+    if found then
+      new.billing_snapshot := jsonb_build_object(
+        'kind', v_profile.kind, 'legal_name', v_profile.legal_name, 'tax_id', v_profile.tax_id,
+        'tax_office', v_profile.tax_office, 'address', v_profile.address
+      );
+    end if;
+  end if;
+  return new;
+end;
+$$;
+create trigger payments_fill_billing
+  before insert or update on public.payments
+  for each row execute function public.payments_fill_billing();
+
+-- Yönetici kestiği faturayı ödemeye işler; numara boşsa kayıt silinir.
+create function public.admin_set_invoice(p_id uuid, p_number text, p_date date, p_url text default null)
+returns void
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  v_number text := nullif(trim(coalesce(p_number, '')), '');
+begin
+  if not public.is_admin() then raise exception 'Yetkiniz yok.'; end if;
+  if v_number is not null and p_date is null then raise exception 'Fatura tarihini girin.'; end if;
+  update public.payments
+  set invoice_number = v_number,
+      invoice_date = case when v_number is null then null else p_date end,
+      invoice_url = case when v_number is null then null else nullif(trim(coalesce(p_url, '')), '') end
+  where id = p_id and status = 'paid';
+  if not found then raise exception 'Ödenmiş kayıt bulunamadı.'; end if;
 end;
 $$;
 

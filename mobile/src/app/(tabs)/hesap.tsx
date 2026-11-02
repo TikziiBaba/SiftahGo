@@ -122,6 +122,7 @@ export default function AccountScreen() {
         </Group>
 
         <Group style={{ marginTop: 12 }}>
+          <ListRow icon="document-text-outline" title="Yasal metinler" subtitle="Hizmet şartları, gizlilik ve çerezler" onPress={() => Linking.openURL(`${WEB_URL}/yasal/kullanim-kosullari`)} />
           <ListRow icon="log-out-outline" title="Çıkış yap" destructive chevron={false} onPress={logout} />
         </Group>
         {version ? <Version version={version} /> : null}

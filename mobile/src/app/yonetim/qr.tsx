@@ -54,7 +54,7 @@ export default function QrScreen() {
       </View>
       <Button title="Sayfamı aç" icon="open-outline" variant="ghost" onPress={() => WebBrowser.openBrowserAsync(link)} />
       <Text variant="caption" tone="muted" style={{ textAlign: 'center' }}>
-        Afiş tarayıcıda A4 olarak açılır: Yazdır’a dokunup yazıcıya gönderin ya da PDF olarak kaydedip bir kırtasiyede bastırın.
+        Afiş tarayıcıda A3 olarak açılır, isterseniz A4 seçebilirsiniz: Yazdır’a dokunup yazıcıya gönderin ya da PDF olarak kaydedip bir kırtasiyede bastırın.
       </Text>
     </ScrollView>
   );

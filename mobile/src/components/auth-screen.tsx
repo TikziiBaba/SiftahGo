@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, View } from 'react-native';
 
 import { AuthShell, GoogleButton, PasswordField, useKeyboardOpen } from '@/components/auth-shell';
 import { Reveal } from '@/components/motion';
@@ -228,6 +228,17 @@ export function AuthScreen({ initial, business }: { initial: Mode; business?: bo
           ) : null}
           {captcha.widget}
           {errorBanner}
+          <Text variant="caption" tone="muted">
+            Hesap açarak{' '}
+            <Text variant="caption" tone="brand" onPress={() => Linking.openURL(`${WEB_URL}/yasal/kullanim-kosullari`)}>
+              Hizmet Şartları
+            </Text>
+            ’nı kabul etmiş olursunuz; verileriniz{' '}
+            <Text variant="caption" tone="brand" onPress={() => Linking.openURL(`${WEB_URL}/yasal/gizlilik`)}>
+              Gizlilik ve KVKK metni
+            </Text>
+            ’ne göre işlenir.
+          </Text>
           <Button title={role === 'business' ? 'İşletme hesabı aç' : 'Hesap aç'} size="lg" onPress={signup} loading={busy} disabled={!captcha.ready} />
         </Reveal>
       )}

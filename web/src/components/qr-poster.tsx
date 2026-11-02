@@ -38,13 +38,13 @@ const STEPS = ["Kodu okutun", "Saati seçin", "Randevunuz hazır"];
 const SHOWCASE_STEPS = ["Kodu okutun", "Menüyü görün", "Kuponu alın"];
 
 /**
- * Cama asılacak A4 afiş. Ölçüler afiş genişliğine göre (cqw) verildiği için ekrandaki küçük önizlemede de baskıda
- * da (210 x 297 mm) aynı görünür. Koyu bant ve renkler baskıda da çıksın diye print-color-adjust: exact.
+ * Cama asılacak afiş. Ölçüler afiş genişliğine göre (cqw) verildiği için önizlemede de A3 ve A4 baskıda da aynı görünür;
+ * kâğıt ölçüsünü afiş sayfası verir (poster-sheet). Koyu bant ve renkler baskıda da çıksın diye print-color-adjust: exact.
  */
 export function QrPoster({ business: b, link, showcase = false }: { business: PosterBusiness; link: string; showcase?: boolean }) {
   const place = [b.district, b.city].filter(Boolean).join(", ");
   return (
-    <div className="@container relative flex aspect-[210/297] w-full flex-col overflow-hidden bg-white text-[#0b2e2b] [-webkit-print-color-adjust:exact] [print-color-adjust:exact] print:aspect-auto print:h-[297mm] print:w-[210mm]">
+    <div className="poster-sheet @container relative flex aspect-[210/297] w-full flex-col overflow-hidden bg-white text-[#0b2e2b] [-webkit-print-color-adjust:exact] [print-color-adjust:exact]">
       <header className="flex items-center gap-[4cqw] bg-[#134e4a] px-[7cqw] py-[5cqw] text-white">
         {b.logo_url ? (
           <img src={b.logo_url} alt="" className="size-[13cqw] shrink-0 rounded-[3cqw] bg-white object-cover" />

@@ -237,8 +237,7 @@ function HeroVisual() {
         <div className="bezel rounded-3xl p-1 backdrop-blur-md">
           <div className="flex items-center gap-2 rounded-[calc(1.5rem-0.25rem)] bg-surface-2/90 px-4 py-3 shadow-[inset_0_1px_1px_rgb(255_255_255/0.06)]">
             <Star className="size-4 fill-gold text-gold" />
-            <span className="text-sm font-semibold">4,9</span>
-            <span className="text-xs text-ink-3">müşteri puanı</span>
+            <span className="text-sm font-semibold">Müşteri yorumları</span>
           </div>
         </div>
       </div>
@@ -527,7 +526,7 @@ function ReviewMock() {
       <p className="mt-3 text-sm leading-relaxed text-ink-2">
         “Sıra beklemeden girdim, tam saatinde. Artık hep buradan alıyorum.”
       </p>
-      <p className="mt-2 text-xs text-ink-3">Zeynep A.</p>
+      <p className="mt-2 text-xs text-ink-3">Örnek görünüm</p>
     </div>
   );
 }
@@ -687,6 +686,7 @@ async function Pricing() {
         }
         text="İlk 2 ay ücretsiz, sonra aylık ödeme ya da yıllık ödemede 2 ay bedava; taahhüt yok. Müşterileriniz için randevu her zaman ücretsiz."
       />
+      <p className="mt-6 text-center text-sm text-ink-3">Fiyatlar ödenecek son tutardır; ek ücret alınmaz.</p>
       <div className="mt-16 grid gap-4 md:grid-cols-3">
         {plans.map((plan, i) => {
           const popular = plan.id === "esnaf";
