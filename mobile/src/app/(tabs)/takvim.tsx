@@ -47,6 +47,20 @@ function freeGaps(day: string, active: Interval[], hours: WorkingHour | null, of
   return gaps;
 }
 
+/** Müşteri "geç kalacağım" dediyse satırda ve onay bekleyen kartında uyarı */
+function DelayNote({ row }: { row: AgendaRow }) {
+  const label = delayLabel(row);
+  if (!label) return null;
+  return (
+    <View style={styles.rowCenter}>
+      <Ionicons name="time-outline" size={13} color={colors.warning} />
+      <Text variant="caption" tone="warning" numberOfLines={1} style={{ flex: 1 }}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
 export default function CalendarTab() {
   const { business } = useAuth();
   return business ? <Agenda business={business} /> : null;
@@ -69,7 +83,7 @@ function Agenda({ business }: { business: Business }) {
   const [showCancelled, setShowCancelled] = useState(false);
   const [pending, setPending] = useState<AgendaRow[]>([]);
   const [staff, setStaff] = useState<{ id: string; name: string }[]>([]);
-  const [counts, setCounts]= useState<Record<string, number>>({});
+  const [counts, setCounts] = useState<Record<string, number>>({});
   const [refreshing, setRefreshing] = useState(false);
   const [selected, setSelected] = useState<AgendaRow | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -228,14 +242,7 @@ function Agenda({ business }: { business: Business }) {
           {item.staff ? ` · ${item.staff.name}` : ''} · {formatPrice(item.price)}
         </Text>
         <FlaggedNote row={item} />
-        {delayLabel(item) ? (
-          <View style={styles.rowCenter}>
-            <Ionicons name="time-outline" size={13} color={colors.warning} />
-            <Text variant="caption" tone="warning" numberOfLines={1} style={{ flex: 1 }}>
-              {delayLabel(item)}
-            </Text>
-          </View>
-        ) : null}
+        <DelayNote row={item} />
         {item.note ? (
           <Text variant="caption" tone="secondary" numberOfLines={1} style={{ fontStyle: 'italic' }}>
             “{item.note}”
@@ -338,6 +345,7 @@ function Agenda({ business }: { business: Business }) {
                         {relativeDay(dayOf(r.starts_at))} · {formatTime(r.starts_at)} · {r.service_name}
                       </Text>
                       <FlaggedNote row={r} />
+                      <DelayNote row={r} />
                     </Pressable>
                     <View style={{ flexDirection: 'row', gap: 8 }}>
                       <Button title="Onayla" icon="checkmark" size="sm" style={{ flex: 1 }} onPress={() => quickStatus(r.id, 'confirmed', r.customer_name)} />
