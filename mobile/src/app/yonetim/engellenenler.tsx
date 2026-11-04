@@ -1,10 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { FlatList, View } from 'react-native';
 
 import { RevealCell } from '@/components/motion';
 import { useToast } from '@/components/toast';
-import { Button, Card, Empty, Skeleton, styles, Text } from '@/components/ui';
+import { Button, Card, Empty, LoadError, Skeleton, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { errorMessage, formatDate } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
@@ -21,15 +21,21 @@ function BlockedList({ business }: { business: Business }) {
   const toast = useToast();
   const [rows, setRows] = useState<BlockedCustomer[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setFailed(false);
     supabase
       .from('blocked_customers')
       .select('*')
       .eq('business_id', business.id)
       .order('created_at', { ascending: false })
-      .then(({ data }) => setRows((data ?? []) as BlockedCustomer[]));
+      .then(({ data, error }) => (error ? setFailed(true) : setRows((data ?? []) as BlockedCustomer[])));
   }, [business.id]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- ilk açılışta yükle
+    load();
+  }, [load]);
 
   async function unblock(row: BlockedCustomer) {
     setBusy(row.id);
@@ -55,7 +61,9 @@ function BlockedList({ business }: { business: Business }) {
         </Text>
       }
       ListEmptyComponent={
-        rows === null ? (
+        failed ? (
+          <LoadError onRetry={load} />
+        ) : rows === null ? (
           <View style={{ gap: 10 }}>
             <Skeleton height={64} />
             <Skeleton height={64} />

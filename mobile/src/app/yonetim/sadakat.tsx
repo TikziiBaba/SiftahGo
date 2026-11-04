@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 
+import { KeyboardScreen } from '@/components/keyboard-screen';
 import { PlanGate } from '@/components/plan-gate';
 import { Banner, Button, Card, Field, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
@@ -64,7 +65,7 @@ function Loyalty({ business }: { business: Business }) {
   }
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={90}>
+    <KeyboardScreen style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text tone="muted">İsterseniz açın: tamamlanan her randevu müşteriye bir damga kazandırır, ödülü siz verirsiniz.</Text>
         {error ? <Banner tone="danger" icon="alert-circle-outline" text={error} /> : null}
@@ -90,6 +91,6 @@ function Loyalty({ business }: { business: Business }) {
             </Card>
           ))}
       </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardScreen>
   );
 }

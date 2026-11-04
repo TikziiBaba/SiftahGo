@@ -11,7 +11,7 @@ import { RevealCell } from '@/components/motion';
 import { CalendarSheet } from '@/components/pickers';
 import { useToast } from '@/components/toast';
 import { TopBar, useScrollY } from '@/components/top-bar';
-import { Banner, Button, Card, Empty, IconButton, ScreenHeader, SectionTitle, Skeleton, Stat, StatusBadge, styles, Text } from '@/components/ui';
+import { Banner, Button, Card, Empty, IconButton, LoadError, ScreenHeader, SectionTitle, Skeleton, Stat, StatusBadge, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { isSubscribed, isTrial, STATUS, WEEKDAYS } from '@/lib/constants';
 import { formatMoney } from '@/lib/coupons';
@@ -86,6 +86,8 @@ function Agenda({ business }: { business: Business }) {
   const [staff, setStaff] = useState<{ id: string; name: string }[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [refreshing, setRefreshing] = useState(false);
+  // Yüklenemeyen gün: bağlantı hatası "Bu gün boş" gibi görünmesin.
+  const [failedDay, setFailedDay] = useState<string | null>(null);
   const [selected, setSelected] = useState<AgendaRow | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const subscribed = isSubscribed(business);
@@ -120,13 +122,15 @@ function Agenda({ business }: { business: Business }) {
       supabase.from('time_off').select('starts_at, ends_at').eq('business_id', business.id).is('staff_id', null).lt('starts_at', to).gt('ends_at', from),
       supabase.from('staff').select('id, name').eq('business_id', business.id).eq('is_active', true).order('sort_order').order('created_at'),
     ]);
+    setRefreshing(false);
+    if (a.error) return setFailedDay(day);
+    setFailedDay(null);
     setStaff((st.data ?? []) as { id: string; name: string }[]);
     const perDay: Record<string, number> = {};
     for (const r of (w.data ?? []) as { starts_at: string }[]) perDay[dayOf(r.starts_at)] = (perDay[dayOf(r.starts_at)] ?? 0) + 1;
     setRows({ day, list: (a.data ?? []) as AgendaRow[], hours: h.data as WorkingHour | null, off: (off.data ?? []) as Interval[] });
     setPending((p.data ?? []) as AgendaRow[]);
     setCounts(perDay);
-    setRefreshing(false);
   }, [business.id, day, weekStart]);
 
   // Ekrana her dönüşte (ör. randevu ekledikten sonra) tazele.
@@ -378,7 +382,9 @@ function Agenda({ business }: { business: Business }) {
           </View>
         }
         ListEmptyComponent={
-          list === null ? (
+          list === null && failedDay === day ? (
+            <LoadError onRetry={load} />
+          ) : list === null ? (
             <View style={{ gap: 10 }}>
               <Skeleton height={84} />
               <Skeleton height={84} />

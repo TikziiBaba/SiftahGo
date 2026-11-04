@@ -1,7 +1,8 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 
+import { KeyboardScreen } from '@/components/keyboard-screen';
 import { CalendarSheet, SelectField, TimeSheet } from '@/components/pickers';
 import { useToast } from '@/components/toast';
 import { Banner, Button, Card, Chip, Field, SectionTitle, styles, SwitchRow } from '@/components/ui';
@@ -62,7 +63,7 @@ function TimeOffForm({ business }: { business: Business }) {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
+    <KeyboardScreen>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <SectionTitle title="Kim için?" />
         <View style={styles.wrap}>
@@ -114,6 +115,6 @@ function TimeOffForm({ business }: { business: Business }) {
       <CalendarSheet key={`e${end.day}`} visible={picker === 'endDay'} onClose={() => setPicker(null)} title="Bitiş günü" value={end.day} min={start.day} onSelect={(day) => setEnd({ ...end, day })} />
       <TimeSheet visible={picker === 'startTime'} onClose={() => setPicker(null)} title="Başlangıç saati" value={start.time} onSelect={(time) => setStart({ ...start, time })} step={15} />
       <TimeSheet visible={picker === 'endTime'} onClose={() => setPicker(null)} title="Bitiş saati" value={end.time} onSelect={(time) => setEnd({ ...end, time })} step={15} />
-    </KeyboardAvoidingView>
+    </KeyboardScreen>
   );
 }

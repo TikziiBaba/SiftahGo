@@ -20,7 +20,7 @@ import { categoryIcon, categoryLabel, isShowcase, isSubscribed, WEB_URL, WEEKDAY
 import { addDays, errorMessage, formatDate, formatDuration, formatPrice, formatTime, isoWeekday, mapsLink, todayStr, whatsappLink } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 import { supabase } from '@/lib/supabase';
-import { accentOf, alpha, colors, radius } from '@/lib/theme';
+import { accentOf, accentText, alpha, colors, radius } from '@/lib/theme';
 import type { Business, Review, Service, Staff, StaffService, WorkingHour } from '@/lib/types';
 
 type Data = { business: Business; services: Service[]; staff: Staff[]; links: StaffService[]; hours: WorkingHour[]; reviews: Review[]; features: string[] };
@@ -308,7 +308,7 @@ export default function BusinessScreen() {
                   <Text tone="muted">· {business.rating_count} değerlendirme</Text>
                 </View>
               ) : (
-                <Badge label="Yeni işletme" fg={accent.soft} bg={alpha(accent.base, 0.12)} icon="sparkles-outline" />
+                <Badge label="Yeni işletme" fg={accentText(accent)} bg={alpha(accent.base, 0.12)} icon="sparkles-outline" />
               )}
             </View>
 
@@ -321,7 +321,7 @@ export default function BusinessScreen() {
             {announcement ? (
               <View style={[s.announcement, { backgroundColor: alpha(accent.base, 0.1), borderColor: alpha(accent.base, 0.25) }]}>
                 <View style={[s.announcementIcon, { backgroundColor: alpha(accent.base, 0.16) }]}>
-                  <Ionicons name="megaphone-outline" size={18} color={accent.soft} />
+                  <Ionicons name="megaphone-outline" size={18} color={accentText(accent)} />
                 </View>
                 <Text style={{ flex: 1 }}>{announcement}</Text>
               </View>
@@ -335,7 +335,7 @@ export default function BusinessScreen() {
                     {business.description}
                   </Text>
                   {business.description.length > 110 && (
-                    <Text variant="label" style={{ marginTop: 4, color: accent.soft }}>
+                    <Text variant="label" style={{ marginTop: 4, color: accentText(accent) }}>
                       {aboutOpen ? 'Daha az' : 'Devamını gör'}
                     </Text>
                   )}
@@ -450,7 +450,7 @@ export default function BusinessScreen() {
                     {isOpen(day) &&
                       (waitDays.includes(day) ? (
                         <View style={[styles.rowCenter, { gap: 10 }]}>
-                          <Ionicons name="notifications" size={18} color={accent.soft} />
+                          <Ionicons name="notifications" size={18} color={accentText(accent)} />
                           <Text tone="secondary" style={{ flex: 1 }}>
                             Saat boşalırsa size haber vereceğiz.
                           </Text>
@@ -479,7 +479,7 @@ export default function BusinessScreen() {
             <Card style={{ gap: 10 }}>
               {hours.map((h) => (
                 <View key={h.weekday} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text variant={h.weekday === today ? 'bodyStrong' : 'body'} tone="secondary" style={h.weekday === today && { color: accent.soft }}>
+                  <Text variant={h.weekday === today ? 'bodyStrong' : 'body'} tone="secondary" style={h.weekday === today && { color: accentText(accent) }}>
                     {WEEKDAYS[h.weekday - 1]}
                     {h.weekday === today ? ' · Bugün' : ''}
                   </Text>
@@ -490,7 +490,7 @@ export default function BusinessScreen() {
               ))}
               {location ? (
                 <Pressable onPress={() => Linking.openURL(mapsLink(`${business.name} ${location}`))} style={s.address} accessibilityRole="link">
-                  <Ionicons name="location-outline" size={18} color={accent.soft} />
+                  <Ionicons name="location-outline" size={18} color={accentText(accent)} />
                   <Text tone="secondary" style={{ flex: 1 }}>
                     {location}
                   </Text>
@@ -538,7 +538,7 @@ export default function BusinessScreen() {
                     {r.comment ? <Text tone="secondary">{r.comment}</Text> : null}
                     {r.reply ? (
                       <View style={s.reply}>
-                        <Text variant="caption" style={{ color: accent.soft }}>
+                        <Text variant="caption" style={{ color: accentText(accent) }}>
                           İşletmenin cevabı
                         </Text>
                         <Text tone="secondary">{r.reply}</Text>

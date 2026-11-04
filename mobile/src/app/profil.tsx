@@ -1,12 +1,15 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { ScrollView } from 'react-native';
 
+import { KeyboardScreen } from '@/components/keyboard-screen';
 import { useToast } from '@/components/toast';
 import { Button, Card, Field, SectionTitle, styles, Text } from '@/components/ui';
-import { useAuth } from '@/lib/auth';
+import { signOut, useAuth } from '@/lib/auth';
+import { WEB_URL } from '@/lib/constants';
 import { errorMessage } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
+import { colors } from '@/lib/theme';
 
 export default function ProfileScreen() {
   const { session, profile, refresh } = useAuth();
@@ -15,7 +18,9 @@ export default function ProfileScreen() {
   const [password, setPassword] = useState({ next: '', again: '' });
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState<'profile' | 'password' | null>(null);
-  const [errors, setErrors] = useState<{ profile?: string; password?: string }>({});
+  const [errors, setErrors] = useState<{ profile?: string; password?: string; delete?: string }>({});
+  const [confirmText, setConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   async function saveProfile() {
     if (!session) return;
@@ -45,8 +50,26 @@ export default function ProfileScreen() {
     toast('Şifreniz değiştirildi.');
   }
 
+  // Silme sitede yapılır (yönetici anahtarı gerekir); uygulama oturumu erişim anahtarıyla gider.
+  async function deleteAccount() {
+    setDeleting(true);
+    setErrors({});
+    const { data } = await supabase.auth.getSession();
+    const res = await fetch(`${WEB_URL}/api/account/delete`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${data.session?.access_token ?? ''}` },
+    }).catch(() => null);
+    const body = (await res?.json().catch(() => ({}))) as { error?: string } | undefined;
+    if (!res?.ok) {
+      setDeleting(false);
+      return setErrors({ delete: body?.error ?? 'Hesap silinemedi. İnternet bağlantınızı kontrol edin.' });
+    }
+    toast('Hesabınız silindi.');
+    await signOut();
+  }
+
   return (
-    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}>
+    <KeyboardScreen>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <SectionTitle title="Kişisel bilgiler" />
         <Card style={{ gap: 14 }}>
@@ -96,7 +119,32 @@ export default function ProfileScreen() {
           ) : null}
           <Button title="Şifreyi değiştir" variant="secondary" onPress={savePassword} loading={busy === 'password'} disabled={!password.next} />
         </Card>
+
+        <SectionTitle title="Hesabımı sil" />
+        {profile?.role === 'business' ? (
+          <Card style={{ gap: 12 }}>
+            <Text tone="muted">İşletme hesabı uygulamadan silinmez; abonelik ve randevular için ekibimiz kapatır. Destek talebi açın.</Text>
+            <Button title="Destek talebi aç" icon="help-buoy-outline" variant="secondary" onPress={() => router.push('/destek')} />
+          </Card>
+        ) : (
+          <Card style={{ gap: 12, borderColor: colors.dangerLine }}>
+            <Text tone="muted">Yaklaşan randevularınız iptal edilir, favorileriniz ve bildirimleriniz silinir, yorumlarınızdaki adınız kaldırılır. Bu işlem geri alınamaz.</Text>
+            <Field label="Onaylamak için SİL yazın" value={confirmText} onChangeText={setConfirmText} autoCapitalize="characters" autoCorrect={false} autoComplete="off" />
+            {errors.delete ? (
+              <Text variant="label" tone="danger">
+                {errors.delete}
+              </Text>
+            ) : null}
+            <Button
+              title="Hesabımı kalıcı olarak sil"
+              variant="danger"
+              onPress={deleteAccount}
+              loading={deleting}
+              disabled={confirmText.trim().toLocaleUpperCase('tr') !== 'SİL'}
+            />
+          </Card>
+        )}
       </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardScreen>
   );
 }

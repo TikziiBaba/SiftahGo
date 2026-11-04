@@ -5,7 +5,7 @@ import { FlatList, View } from 'react-native';
 
 import { HeaderButton } from '@/components/header-button';
 import { RevealCell } from '@/components/motion';
-import { Badge, Button, Card, Empty, Skeleton, styles, Text } from '@/components/ui';
+import { Badge, Button, Card, Empty, LoadError, Skeleton, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { formatDuration, formatPrice } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
@@ -19,19 +19,20 @@ export default function ServicesScreen() {
 
 function Services({ business }: { business: Business }) {
   const [services, setServices] = useState<Service[] | null>(null);
+  const [failed, setFailed] = useState(false);
   const add = () => router.push({ pathname: '/yonetim/hizmetler/[id]', params: { id: 'yeni' } });
 
-  useFocusEffect(
-    useCallback(() => {
-      supabase
-        .from('services')
-        .select('*')
-        .eq('business_id', business.id)
-        .order('sort_order')
-        .order('created_at')
-        .then(({ data }) => setServices((data ?? []) as Service[]));
-    }, [business.id]),
-  );
+  const load = useCallback(() => {
+    setFailed(false);
+    supabase
+      .from('services')
+      .select('*')
+      .eq('business_id', business.id)
+      .order('sort_order')
+      .order('created_at')
+      .then(({ data, error }) => (error ? setFailed(true) : setServices((data ?? []) as Service[])));
+  }, [business.id]);
+  useFocusEffect(load);
 
   return (
     <View style={styles.screen}>
@@ -42,7 +43,9 @@ function Services({ business }: { business: Business }) {
         contentContainerStyle={styles.content}
         ListHeaderComponent={<Text tone="muted">Müşterilerin randevu alabileceği hizmetler, süreleri ve fiyatları.</Text>}
         ListEmptyComponent={
-          services === null ? (
+          failed ? (
+            <LoadError onRetry={load} />
+          ) : services === null ? (
             <View style={{ gap: 10 }}>
               <Skeleton height={72} />
               <Skeleton height={72} />

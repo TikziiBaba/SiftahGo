@@ -1,9 +1,10 @@
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import { Alert, ScrollView, View } from 'react-native';
 
+import { KeyboardScreen } from '@/components/keyboard-screen';
 import { PlanGate } from '@/components/plan-gate';
-import { Badge, Banner, Button, Card, Chip, Empty, Field, IconButton, Skeleton, styles, SwitchRow, Text } from '@/components/ui';
+import { Badge, Banner, Button, Card, Chip, Empty, Field, IconButton, LoadError, Skeleton, SwitchRow, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { menuLabel } from '@/lib/constants';
 import { errorMessage, formatPrice } from '@/lib/format';
@@ -37,9 +38,12 @@ function Menu({ business }: { business: Business }) {
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+  const [failed, setFailed] = useState(false);
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from('menu_items').select('*').eq('business_id', business.id).order('sort_order').order('created_at');
+    setFailed(false);
+    const { data, error: loadError } = await supabase.from('menu_items').select('*').eq('business_id', business.id).order('sort_order').order('created_at');
+    if (loadError) return setFailed(true);
     setItems(((data ?? []) as MenuItem[]).map((i) => ({ ...i, price: Number(i.price) })));
   }, [business.id]);
 
@@ -153,7 +157,7 @@ function Menu({ business }: { business: Business }) {
   }
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
+    <KeyboardScreen style={{ flex: 1 }}>
       <ScrollView ref={scrollRef} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text tone="muted">
           {label === 'Menü' ? 'Yemek ve içeceklerinizi' : 'Ürünlerinizi'} fiyatıyla sayfanızda gösterin.{items ? ` ${items.length}/${MAX_ITEMS}` : ''}
@@ -207,7 +211,8 @@ function Menu({ business }: { business: Business }) {
           </Card>
         )}
 
-        {items === null && <Skeleton height={80} />}
+        {failed && items === null && <LoadError onRetry={load} />}
+        {!failed && items === null && <Skeleton height={80} />}
         {items?.length === 0 && !editing && <Empty icon="restaurant-outline" title="Henüz ürün yok" text="İlk ürününüzü ekleyin." />}
         {groups.map(([category, list]) => (
           <View key={category || 'diger'} style={{ gap: 8 }}>
@@ -240,8 +245,8 @@ function Menu({ business }: { business: Business }) {
                   </View>
                 </View>
                 <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
-                  <IconButton icon="arrow-up" label="Yukarı taşı" size={34} style={n === 0 && { opacity: 0.3 }} onPress={() => n > 0 && move(i, -1)} />
-                  <IconButton icon="arrow-down" label="Aşağı taşı" size={34} style={n === list.length - 1 && { opacity: 0.3 }} onPress={() => n < list.length - 1 && move(i, 1)} />
+                  <IconButton icon="arrow-up" label="Yukarı taşı" size={34} disabled={n === 0} onPress={() => move(i, -1)} />
+                  <IconButton icon="arrow-down" label="Aşağı taşı" size={34} disabled={n === list.length - 1} onPress={() => move(i, 1)} />
                   <IconButton icon={i.is_active ? 'eye-outline' : 'eye-off-outline'} label={i.is_active ? 'Gizle' : 'Göster'} size={34} onPress={() => toggle(i)} />
                   <IconButton
                     icon="create-outline"
@@ -261,6 +266,6 @@ function Menu({ business }: { business: Business }) {
           </View>
         ))}
       </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardScreen>
   );
 }

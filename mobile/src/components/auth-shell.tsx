@@ -50,7 +50,7 @@ export function AuthShell({
   const insets = useSafeAreaInsets();
   const keyboard = useKeyboardOpen();
   return (
-    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={styles.screen} behavior="padding">
       <View style={[s.floor, { top: insets.top }]}>
         <GridFlow height={300} />
       </View>

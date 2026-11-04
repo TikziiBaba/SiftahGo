@@ -85,6 +85,11 @@ export function formatDate(isoOrDay: string, withWeekday = true) {
   return withWeekday ? `${text} ${DAYS[d.getUTCDay()]}` : text;
 }
 
+/** "12 Ekim 14:30": mesaj ve talep zamanları */
+export function formatDateTime(iso: string) {
+  return `${formatDate(iso, false)} ${formatTime(iso)}`;
+}
+
 /** "Bugün", "Yarın", "Dün" veya "12 Ekim Cumartesi" */
 export function relativeDay(day: string) {
   const today = todayStr();

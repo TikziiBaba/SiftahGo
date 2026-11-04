@@ -1,8 +1,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Location from 'expo-location';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 
+import { KeyboardScreen } from '@/components/keyboard-screen';
 import { OptionSheet, SelectField } from '@/components/pickers';
 import { SaveBar } from '@/components/save-bar';
 import { useToast } from '@/components/toast';
@@ -95,7 +96,7 @@ function Info({ business }: { business: Business }) {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
+    <KeyboardScreen>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <SectionTitle title="Genel" />
         <Field label="İşletme adı" icon="storefront-outline" value={form.name} onChangeText={(name) => set({ name })} />
@@ -156,6 +157,6 @@ function Info({ business }: { business: Business }) {
         onSelect={(category) => set({ category })}
       />
       <OptionSheet visible={picker === 'city'} onClose={() => setPicker(null)} title="Şehir" options={CITY_OPTIONS} value={form.city} onSelect={(city) => set({ city })} searchable />
-    </KeyboardAvoidingView>
+    </KeyboardScreen>
   );
 }

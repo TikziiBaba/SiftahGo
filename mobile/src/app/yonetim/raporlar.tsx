@@ -2,15 +2,26 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { PlanGate } from '@/components/plan-gate';
-import { Card, Chip, Skeleton, Stat, styles, Text } from '@/components/ui';
+import { Card, Chip, LoadError, Skeleton, Stat, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
-import { addDays, dayBounds, dayOf, formatDate, formatPrice, todayStr } from '@/lib/format';
+import { STATUS, WEEKDAYS } from '@/lib/constants';
+import { addDays, dayBounds, dayOf, formatDate, formatPrice, formatTime, isoWeekday, phoneKey, todayStr } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 import { supabase } from '@/lib/supabase';
 import { colors, radius } from '@/lib/theme';
 import type { AppointmentStatus, Business, ReportSummary } from '@/lib/types';
 
-type Row = { starts_at: string; status: AppointmentStatus; price: number; service_name: string; staff: { name: string } | null };
+type Row = {
+  starts_at: string;
+  created_at: string;
+  status: AppointmentStatus;
+  price: number;
+  service_name: string;
+  customer_id: string | null;
+  customer_name: string;
+  customer_phone: string;
+  staff: { name: string } | null;
+};
 
 // Web ile aynı dönemler ve hesap (web/src/app/panel/raporlar/page.tsx)
 const PERIODS = [
@@ -49,6 +60,9 @@ export default function ReportsScreen() {
 function Reports({ business }: { business: Business }) {
   const [period, setPeriod] = useState<string>('30');
   const [result, setResult] = useState<{ period: string; rows: Row[]; summary: ReportSummary | null } | null>(null);
+  // Yüklenemeyen dönem ve "Tekrar dene" sayacı
+  const [failed, setFailed] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const { from, to } = range(period);
   const rows = result?.period === period ? result.rows : null;
   const summary = result?.period === period ? result.summary : null;
@@ -58,19 +72,22 @@ function Reports({ business }: { business: Business }) {
     Promise.all([
       supabase
         .from('appointments')
-        .select('starts_at, status, price, service_name, staff(name)')
+        .select('starts_at, created_at, status, price, service_name, customer_id, customer_name, customer_phone, staff(name)')
         .eq('business_id', business.id)
         .gte('starts_at', dayBounds(from).from)
         .lt('starts_at', dayBounds(to).to)
         .limit(5000),
       supabase.rpc('get_report_summary', { p_business_id: business.id, p_from: from, p_to: to }),
-    ]).then(([{ data }, { data: summaryData }]) => {
-      if (active) setResult({ period, rows: (data ?? []) as unknown as Row[], summary: (summaryData ?? null) as ReportSummary | null });
+    ]).then(([{ data, error }, { data: summaryData }]) => {
+      if (!active) return;
+      if (error) return setFailed(period);
+      setFailed(null);
+      setResult({ period, rows: (data ?? []) as unknown as Row[], summary: (summaryData ?? null) as ReportSummary | null });
     });
     return () => {
       active = false;
     };
-  }, [business.id, period, from, to]);
+  }, [business.id, period, from, to, attempt]);
 
   const stats = useMemo(() => {
     if (!rows) return null;
@@ -101,7 +118,41 @@ function Reports({ business }: { business: Business }) {
       return [...map.values()].sort((a, b) => b.revenue - a.revenue || b.count - a.count);
     };
 
+    // En değerli müşteriler: aynı telefon tek kişi sayılır (web ile aynı).
+    const customers = new Map<string, { name: string; count: number; revenue: number }>();
+    for (const r of valid) {
+      const k = phoneKey(r.customer_phone) || r.customer_name;
+      const g = customers.get(k) ?? { name: r.customer_name, count: 0, revenue: 0 };
+      g.count += 1;
+      g.revenue += Number(r.price);
+      customers.set(k, g);
+    }
+
+    // Gün (1-7) ve saate göre randevu sayısı
+    const heat = new Map<string, number>();
+    for (const r of valid) {
+      const key = `${isoWeekday(dayOf(r.starts_at))}-${Number(formatTime(r.starts_at).slice(0, 2))}`;
+      heat.set(key, (heat.get(key) ?? 0) + 1);
+    }
+
+    // Online randevuların ne kadar önceden alındığı
+    const lead = [
+      { name: '2 saatten az', count: 0 },
+      { name: 'Aynı gün', count: 0 },
+      { name: '1–3 gün', count: 0 },
+      { name: '3–7 gün', count: 0 },
+      { name: '1 haftadan fazla', count: 0 },
+    ];
+    for (const r of rows.filter((x) => x.customer_id)) {
+      const h = (new Date(r.starts_at).getTime() - new Date(r.created_at).getTime()) / 36e5;
+      lead[h < 2 ? 0 : h < 24 ? 1 : h < 72 ? 2 : h < 168 ? 3 : 4].count += 1;
+    }
+
     return {
+      customers: [...customers.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 6),
+      heat,
+      lead,
+      statuses: (Object.keys(STATUS) as AppointmentStatus[]).map((st) => ({ name: STATUS[st].label, count: rows.filter((r) => r.status === st).length, color: STATUS[st].fg })),
       revenue,
       count: valid.length,
       average: valid.length ? revenue / valid.length : 0,
@@ -124,7 +175,9 @@ function Reports({ business }: { business: Business }) {
         {formatDate(from, false)} – {formatDate(to, false)} · iptal ve gelmeyenler ciroya dahil değil
       </Text>
 
-      {!stats ? (
+      {failed === period && !stats ? (
+        <LoadError onRetry={() => setAttempt((n) => n + 1)} />
+      ) : !stats ? (
         <>
           <Skeleton height={180} />
           <Skeleton height={220} />
@@ -158,6 +211,10 @@ function Reports({ business }: { business: Business }) {
           <DailyChart days={stats.days} />
           <Breakdown title="Hizmetlere göre" items={stats.byService} />
           <Breakdown title="Personele göre" items={stats.byStaff} />
+          <Breakdown title="En değerli müşteriler" items={stats.customers} />
+          <Heatmap heat={stats.heat} />
+          <Counts title="Randevu durumları" items={stats.statuses} />
+          <Counts title="Ne kadar önceden randevu alınıyor?" items={stats.lead} empty="Bu dönemde online randevu yok." />
         </>
       )}
     </ScrollView>
@@ -245,7 +302,89 @@ function Breakdown({ title, items }: { title: string; items: { name: string; cou
   );
 }
 
+/** Gün ve saate göre yoğunluk: koyu hücre daha çok randevu. */
+function Heatmap({ heat }: { heat: Map<string, number> }) {
+  const hours = [...heat.keys()].map((k) => Number(k.split('-')[1]));
+  const max = Math.max(...heat.values(), 1);
+  const first = hours.length ? Math.min(...hours) : 9;
+  const last = hours.length ? Math.max(...hours) : 18;
+  const range = Array.from({ length: last - first + 1 }, (_, i) => first + i);
+  return (
+    <Card style={{ gap: 10 }}>
+      <View style={{ gap: 2 }}>
+        <Text variant="heading">En yoğun gün ve saatler</Text>
+        <Text variant="caption" tone="muted">
+          Personel planını ve kampanya saatlerini buna göre ayarlayın.
+        </Text>
+      </View>
+      {heat.size === 0 ? (
+        <Text tone="muted">Veri yok.</Text>
+      ) : (
+        <View style={{ gap: 3 }}>
+          <View style={{ flexDirection: 'row', gap: 3 }}>
+            <View style={s.heatDay} />
+            {range.map((h) => (
+              <Text key={h} variant="caption" tone="muted" style={s.heatHour} numberOfLines={1}>
+                {(h - first) % 2 === 0 ? h : ''}
+              </Text>
+            ))}
+          </View>
+          {WEEKDAYS.map((name, i) => (
+            <View key={name} style={{ flexDirection: 'row', gap: 3, alignItems: 'center' }}>
+              <Text variant="caption" tone="muted" style={s.heatDay}>
+                {name.slice(0, 3)}
+              </Text>
+              {range.map((h) => {
+                const c = heat.get(`${i + 1}-${h}`) ?? 0;
+                return (
+                  <View
+                    key={h}
+                    accessible
+                    accessibilityLabel={`${name} ${h}.00, ${c} randevu`}
+                    style={[s.heatCell, c ? { backgroundColor: colors.brand, opacity: 0.25 + 0.75 * (c / max) } : null]}
+                  />
+                );
+              })}
+            </View>
+          ))}
+        </View>
+      )}
+    </Card>
+  );
+}
+
+function Counts({ title, items, empty = 'Veri yok.' }: { title: string; items: { name: string; count: number; color?: string }[]; empty?: string }) {
+  const max = Math.max(...items.map((i) => i.count), 1);
+  return (
+    <Card style={{ gap: 14 }}>
+      <Text variant="heading">{title}</Text>
+      {items.every((i) => i.count === 0) ? (
+        <Text tone="muted">{empty}</Text>
+      ) : (
+        items.map((i) => (
+          <View key={i.name} style={{ gap: 6 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
+              <Text style={{ flex: 1 }} numberOfLines={1}>
+                {i.name}
+              </Text>
+              <Text variant="bodyStrong" style={{ fontVariant: ['tabular-nums'] }}>
+                {i.count}
+              </Text>
+            </View>
+            <View style={s.track}>
+              <View style={[s.fill, { width: `${(i.count / max) * 100}%` }, i.color ? { backgroundColor: i.color } : null]} />
+            </View>
+          </View>
+        ))
+      )}
+    </Card>
+  );
+}
+
 const s = StyleSheet.create({
+  heatDay: { width: 30 },
+  heatHour: { flex: 1, textAlign: 'center', fontSize: 10 },
+  heatCell: { flex: 1, aspectRatio: 1, borderRadius: 4, backgroundColor: colors.surface2 },
   chart: { height: 170, marginTop: 4 },
   gridLine: { position: 'absolute', top: 0, left: 0, right: 0, borderTopWidth: 1, borderStyle: 'dashed', borderColor: colors.line },
   maxLabel: { position: 'absolute', top: -8, right: 0, backgroundColor: colors.surface, paddingLeft: 4 },

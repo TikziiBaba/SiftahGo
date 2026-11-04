@@ -1,13 +1,14 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppointmentTicket } from '@/components/appointment-ticket';
 import { Glow } from '@/components/brand';
 import { Logo } from '@/components/business-logo';
+import { KeyboardScreen } from '@/components/keyboard-screen';
 import { Banner, Button, Card, Empty, Field, Loading, SectionTitle, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { categoryIcon, categoryLabel, isShowcase, isSubscribed, type IconName } from '@/lib/constants';
@@ -173,7 +174,7 @@ export default function BookingScreen() {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}>
+    <KeyboardScreen>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Summary data={data} time={time} ends={ends} onChange={() => router.back()} discounted={chosen ? couponPrice(Number(service.price), chosen) : null} />
 
@@ -269,7 +270,7 @@ export default function BookingScreen() {
           disabled={taken || !session}
         />
       </View>
-    </KeyboardAvoidingView>
+    </KeyboardScreen>
   );
 }
 

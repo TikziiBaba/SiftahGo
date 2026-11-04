@@ -5,7 +5,7 @@ import { FlatList, View } from 'react-native';
 
 import { HeaderButton } from '@/components/header-button';
 import { RevealCell } from '@/components/motion';
-import { Avatar, Badge, Banner, Button, Card, Empty, Skeleton, styles, Text } from '@/components/ui';
+import { Avatar, Badge, Banner, Button, Card, Empty, LoadError, Skeleton, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { usePlan } from '@/lib/plan';
 import { supabase } from '@/lib/supabase';
@@ -23,32 +23,34 @@ type Data = { staff: Staff[]; services: Service[]; links: StaffService[]; custom
 function StaffList({ business }: { business: Business }) {
   const plan = usePlan(business.plan_id);
   const [data, setData] = useState<Data | null>(null);
+  const [failed, setFailed] = useState(false);
   const add = () => router.push({ pathname: '/yonetim/personel/[id]', params: { id: 'yeni' } });
 
-  useFocusEffect(
-    useCallback(() => {
-      (async () => {
-        const [st, sv] = await Promise.all([
-          supabase.from('staff').select('*').eq('business_id', business.id).order('sort_order').order('created_at'),
-          supabase.from('services').select('*').eq('business_id', business.id).order('sort_order').order('created_at'),
-        ]);
-        const staff = (st.data ?? []) as Staff[];
-        const ids = staff.map((x) => x.id);
-        const [{ data: links }, { data: hours }] = staff.length
-          ? await Promise.all([
-              supabase.from('staff_services').select('*').in('staff_id', ids),
-              supabase.from('staff_hours').select('staff_id').in('staff_id', ids),
-            ])
-          : [{ data: [] }, { data: [] }];
-        setData({
-          staff,
-          services: (sv.data ?? []) as Service[],
-          links: (links ?? []) as StaffService[],
-          customHours: (hours ?? []).map((h: { staff_id: string }) => h.staff_id),
-        });
-      })();
-    }, [business.id]),
-  );
+  const load = useCallback(() => {
+    setFailed(false);
+    (async () => {
+      const [st, sv] = await Promise.all([
+        supabase.from('staff').select('*').eq('business_id', business.id).order('sort_order').order('created_at'),
+        supabase.from('services').select('*').eq('business_id', business.id).order('sort_order').order('created_at'),
+      ]);
+      if (st.error || sv.error) return setFailed(true);
+      const staff = (st.data ?? []) as Staff[];
+      const ids = staff.map((x) => x.id);
+      const [{ data: links }, { data: hours }] = staff.length
+        ? await Promise.all([
+            supabase.from('staff_services').select('*').in('staff_id', ids),
+            supabase.from('staff_hours').select('staff_id').in('staff_id', ids),
+          ])
+        : [{ data: [] }, { data: [] }];
+      setData({
+        staff,
+        services: (sv.data ?? []) as Service[],
+        links: (links ?? []) as StaffService[],
+        customHours: (hours ?? []).map((h: { staff_id: string }) => h.staff_id),
+      });
+    })();
+  }, [business.id]);
+  useFocusEffect(load);
 
   // Not: data! gibi ifadeler React Compiler'ın null kontrolünü kaldırmasına yol açıyor; yerel değişken kullanın.
   const staffList = data ? data.staff : [];
@@ -76,7 +78,9 @@ function StaffList({ business }: { business: Business }) {
           </View>
         }
         ListEmptyComponent={
-          data === null ? (
+          failed ? (
+            <LoadError onRetry={load} />
+          ) : data === null ? (
             <View style={{ gap: 10 }}>
               <Skeleton height={72} />
               <Skeleton height={72} />

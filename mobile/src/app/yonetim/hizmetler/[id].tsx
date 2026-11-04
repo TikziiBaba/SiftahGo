@@ -1,7 +1,8 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import { Alert, ScrollView, View } from 'react-native';
 
+import { KeyboardScreen } from '@/components/keyboard-screen';
 import { useToast } from '@/components/toast';
 import { Banner, Button, Card, Chip, Field, Loading, SectionTitle, styles, SwitchRow } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
@@ -82,7 +83,7 @@ function ServiceForm({ business, id }: { business: Business; id: string }) {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
+    <KeyboardScreen>
       <Stack.Screen options={{ title: isNew ? 'Yeni hizmet' : 'Hizmeti düzenle' }} />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Field label="Hizmet adı" placeholder="Örn. Saç Kesimi" value={v.name} onChangeText={(name) => set({ name })} autoFocus={isNew} autoCapitalize="sentences" />
@@ -106,6 +107,6 @@ function ServiceForm({ business, id }: { business: Business; id: string }) {
         <Button title="Kaydet" size="lg" onPress={save} loading={busy} />
         {!isNew && <Button title="Hizmeti sil" icon="trash-outline" variant="dangerGhost" onPress={remove} />}
       </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardScreen>
   );
 }

@@ -1,9 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Glow, Wordmark } from '@/components/brand';
+import { KeyboardScreen } from '@/components/keyboard-screen';
 import { OptionSheet, SelectField } from '@/components/pickers';
 import { router } from 'expo-router';
 import { Banner, Button, Field, Group, ListRow, SectionTitle, styles, Text } from '@/components/ui';
@@ -88,7 +89,7 @@ function ApplicationForm({ business }: { business: Business | null }) {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardScreen>
       <Glow height={420} opacity={0.24} />
       <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + 16 }]} keyboardShouldPersistTaps="handled">
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -220,7 +221,7 @@ function ApplicationForm({ business }: { business: Business | null }) {
         <Button title={business ? 'Yeniden gönder' : 'Başvuruyu gönder'} icon="arrow-forward" size="lg" onPress={submit} loading={busy} style={{ marginTop: 8 }} />
       </ScrollView>
       <OptionSheet visible={cityOpen} onClose={() => setCityOpen(false)} title="Şehir seçin" options={CITY_OPTIONS} value={form.city} onSelect={(city) => setForm({ ...form, city })} searchable />
-    </KeyboardAvoidingView>
+    </KeyboardScreen>
   );
 }
 

@@ -1,7 +1,8 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Switch, View } from 'react-native';
 
+import { KeyboardScreen } from '@/components/keyboard-screen';
 import { TimePill, TimeSheet } from '@/components/pickers';
 import { useToast } from '@/components/toast';
 import { Banner, Button, Card, Chip, Field, Loading, SectionTitle, styles, SwitchRow, Text } from '@/components/ui';
@@ -124,7 +125,7 @@ function StaffForm({ business, id }: { business: Business; id: string }) {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
+    <KeyboardScreen>
       <Stack.Screen options={{ title: isNew ? 'Yeni personel' : 'Personeli düzenle' }} />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Field label="Ad Soyad" icon="person-outline" value={v.name} onChangeText={(name) => set({ name })} autoFocus={isNew} autoCapitalize="words" />
@@ -214,7 +215,7 @@ function StaffForm({ business, id }: { business: Business; id: string }) {
         value={current && editingTime ? current[editingTime.field].slice(0, 5) : null}
         onSelect={(t) => editingTime && setDay(editingTime.weekday, editingTime.field === 'open_time' ? { open_time: t } : { close_time: t })}
       />
-    </KeyboardAvoidingView>
+    </KeyboardScreen>
   );
 }
 

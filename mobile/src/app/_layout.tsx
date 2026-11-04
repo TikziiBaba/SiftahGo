@@ -1,8 +1,11 @@
 import { Geist_400Regular, Geist_500Medium, Geist_600SemiBold, Geist_700Bold, useFonts } from '@expo-google-fonts/geist';
-import { DarkTheme, Stack, ThemeProvider, type Theme } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider, type Theme } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import * as SystemUI from 'expo-system-ui';
+import * as Updates from 'expo-updates';
+import { useEffect, useState } from 'react';
+import { DevSettings } from 'react-native';
 
 import { ToastProvider } from '@/components/toast';
 import { WhatsNew } from '@/components/whats-new';
@@ -12,17 +15,20 @@ import { installErrorHandler } from '@/lib/error-log';
 import { InboxProvider } from '@/lib/inbox';
 import { useIntroSeen } from '@/lib/intro';
 import { useNotificationTaps, usePushRegistration } from '@/lib/notifications';
-import { colors, fonts, type } from '@/lib/theme';
+import { colors, fonts, isLight, THEME_KEY, themeMode, type ThemeMode, type } from '@/lib/theme';
 
 SplashScreen.preventAutoHideAsync();
+// Ekran geçişlerinde görünen kök zemin temayla aynı olsun (app.json'daki koyu renk yerine).
+SystemUI.setBackgroundColorAsync(colors.bg).catch(() => {});
 
 // Hata kaydı: yakalanmayan hatalar Supabase'deki error_logs tablosuna gider (web yönetim > Hatalar).
 installErrorHandler();
 
+const base = isLight ? DefaultTheme : DarkTheme;
 const theme: Theme = {
-  ...DarkTheme,
+  ...base,
   colors: {
-    ...DarkTheme.colors,
+    ...base.colors,
     primary: colors.brand300,
     background: colors.bg,
     card: colors.bg,
@@ -45,7 +51,7 @@ export default function RootLayout() {
       <InboxProvider>
         <ThemeProvider value={theme}>
           <ToastProvider>
-            <StatusBar style="light" />
+            <StatusBar style={isLight ? 'dark' : 'light'} />
             <RootStack fontsReady={fontsLoaded || !!fontError} />
           </ToastProvider>
         </ThemeProvider>
@@ -57,7 +63,25 @@ export default function RootLayout() {
 function RootStack({ fontsReady }: { fontsReady: boolean }) {
   const { session, profile, business, loading } = useAuth();
   const introSeen = useIntroSeen();
-  const ready = fontsReady && !loading;
+  // Tema hesap türüne bağlı (müşteri açık, işletme koyu; lib/theme.ts). Uyuşmazsa kaydedilip uygulama yeniden
+  // yüklenir; bu sırada açılış ekranı kalır. Kayıt ya da yükleme olmazsa mevcut temayla devam edilir.
+  const wanted: ThemeMode = loading || !profile ? themeMode : profile.role === 'business' ? 'dark' : 'light';
+  const [themeFailed, setThemeFailed] = useState(false);
+  const switching = wanted !== themeMode && !themeFailed;
+  const ready = fontsReady && !loading && !switching;
+
+  useEffect(() => {
+    if (!switching) return;
+    try {
+      localStorage.setItem(THEME_KEY, wanted);
+      if (localStorage.getItem(THEME_KEY) !== wanted) throw new Error('kaydedilemedi');
+      if (__DEV__) DevSettings.reload();
+      else Updates.reloadAsync().catch(() => setThemeFailed(true));
+    } catch {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- kayıt yoksa yükleme döngüsüne girilmez
+      setThemeFailed(true);
+    }
+  }, [switching, wanted]);
 
   useEffect(() => {
     if (ready) SplashScreen.hideAsync();
@@ -116,6 +140,8 @@ function RootStack({ fontsReady }: { fontsReady: boolean }) {
           <Stack.Screen name="bildirimler" options={{ title: 'Bildirimler' }} />
           <Stack.Screen name="randevularim" options={{ title: 'Randevularım' }} />
           <Stack.Screen name="kuponlarim" options={{ title: 'Kuponlarım' }} />
+          <Stack.Screen name="destek/index" options={{ title: 'Destek' }} />
+          <Stack.Screen name="destek/[id]" options={{ title: 'Destek talebi' }} />
         </Stack.Protected>
 
         <Stack.Protected guard={isBusiness && approved}>
@@ -127,6 +153,7 @@ function RootStack({ fontsReady }: { fontsReady: boolean }) {
           <Stack.Screen name="yonetim/kuponlar" options={{ title: 'Kuponlar' }} />
           <Stack.Screen name="yonetim/yorumlar" options={{ title: 'Yorumlar' }} />
           <Stack.Screen name="yonetim/abonelik" options={{ title: 'Abonelik' }} />
+          <Stack.Screen name="yonetim/fatura" options={{ title: 'Fatura bilgileri' }} />
           <Stack.Screen name="yonetim/dondurma" options={{ title: 'Dondurma talebi' }} />
         </Stack.Protected>
 

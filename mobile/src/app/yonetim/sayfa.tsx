@@ -1,10 +1,11 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Cover } from '@/components/brand';
 import { Logo } from '@/components/business-logo';
+import { KeyboardScreen } from '@/components/keyboard-screen';
 import { SaveBar } from '@/components/save-bar';
 import { Badge, Button, Card, Field, SectionTitle, styles, Text } from '@/components/ui';
 import { AccentProvider } from '@/lib/accent';
@@ -72,7 +73,7 @@ function Appearance({ business }: { business: Business }) {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
+    <KeyboardScreen>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Preview business={business} form={form} has={has} />
         <Button title="Logo ve kapak fotoğrafı" icon="images-outline" variant="secondary" size="sm" onPress={() => router.push('/yonetim/gorseller')} />
@@ -168,7 +169,7 @@ function Appearance({ business }: { business: Business }) {
       </ScrollView>
 
       <SaveBar dirty={dirty} error={error} onSave={save} />
-    </KeyboardAvoidingView>
+    </KeyboardScreen>
   );
 }
 

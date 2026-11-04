@@ -20,7 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAccent } from '@/lib/accent';
 import { STATUS, type IconName } from '@/lib/constants';
 import { haptic } from '@/lib/haptics';
-import { alpha, colors, fonts, radius, type } from '@/lib/theme';
+import { alpha, colors, fonts, isLight, radius, shadows, type } from '@/lib/theme';
 import type { AppointmentStatus } from '@/lib/types';
 
 type Tone = 'default' | 'secondary' | 'muted' | 'brand' | 'gold' | 'danger' | 'success' | 'warning' | 'onBrand';
@@ -150,6 +150,7 @@ export function IconButton({
   onPress,
   color = colors.ink,
   size = 40,
+  disabled,
   style,
 }: {
   icon: IconName;
@@ -157,6 +158,7 @@ export function IconButton({
   onPress: () => void;
   color?: string;
   size?: number;
+  disabled?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
   return (
@@ -167,9 +169,11 @@ export function IconButton({
       }}
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
       hitSlop={6}
       scale={0.9}
-      style={[s.iconButton, { width: size, height: size, borderRadius: size / 2 }, style]}>
+      style={[s.iconButton, { width: size, height: size, borderRadius: size / 2 }, disabled && { opacity: 0.3 }, style]}>
       <Ionicons name={icon} size={Math.round(size * 0.48)} color={color} />
     </PressableScale>
   );
@@ -204,7 +208,7 @@ export function Field({
           placeholderTextColor={colors.ink3}
           selectionColor={colors.brand}
           cursorColor={colors.brand}
-          keyboardAppearance="dark"
+          keyboardAppearance={isLight ? 'light' : 'dark'}
           {...props}
           multiline={multiline}
           onFocus={(e) => {
@@ -270,7 +274,7 @@ export function Chip({
   style?: StyleProp<ViewStyle>;
 }) {
   const accent = useAccent();
-  const fg = selected ? (solid ? accent.ink : accent.light) : colors.ink2;
+  const fg = selected ? (solid ? accent.ink : isLight ? accent.deep : accent.light) : colors.ink2;
   return (
     <PressableScale
       onPress={() => {
@@ -342,6 +346,15 @@ export function Empty({
       ) : null}
       {children ? <View style={{ alignSelf: 'stretch', gap: 10, marginTop: 8 }}>{children}</View> : null}
     </View>
+  );
+}
+
+/** Veri gelmediğinde gösterilir; bağlantı hatası "henüz yok" gibi görünmesin. */
+export function LoadError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <Empty icon="cloud-offline-outline" title="Yüklenemedi" text="İnternet bağlantınızı kontrol edip tekrar deneyin.">
+      <Button title="Tekrar dene" icon="refresh" variant="secondary" onPress={onRetry} />
+    </Empty>
   );
 }
 
@@ -698,6 +711,8 @@ const s = StyleSheet.create({
     borderColor: colors.line,
     borderTopColor: colors.edge,
     padding: 16,
+    // Açık temada kartlar web gibi yumuşak gölgeyle ayrılır.
+    ...(isLight && { boxShadow: shadows.card }),
   },
   chip: {
     flexDirection: 'row',

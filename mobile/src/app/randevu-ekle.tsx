@@ -1,9 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { KeyboardScreen } from '@/components/keyboard-screen';
 import { CalendarSheet, DayStrip, TimeSheet } from '@/components/pickers';
 import { useToast } from '@/components/toast';
 import { Banner, Button, Chip, Empty, Field, Loading, SectionTitle, Skeleton, styles, Text } from '@/components/ui';
@@ -127,7 +128,7 @@ function AddAppointment({ business, params }: { business: Business; params: { da
   }
 
   return (
-    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
+    <KeyboardScreen>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text tone="muted">Telefonla veya dükkânda alınan randevuları girin; onaylı olarak kaydedilir.</Text>
 
@@ -245,7 +246,7 @@ function AddAppointment({ business, params }: { business: Business; params: { da
           setTime(null);
         }}
       />
-    </KeyboardAvoidingView>
+    </KeyboardScreen>
   );
 }
 

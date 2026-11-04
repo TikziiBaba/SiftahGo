@@ -1,7 +1,7 @@
 import type Ionicons from '@expo/vector-icons/Ionicons';
 
 import { colors } from './theme';
-import type { AppointmentStatus, BusinessType, SuspensionReason } from './types';
+import type { AppointmentStatus, BusinessType, SupportCategory, SupportStatus, SuspensionReason } from './types';
 
 export const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://siftahgo.app';
 /** Sayfa adreslerinde gösterilen alan adı (örn. siftahgo.app/usta-berber) */
@@ -104,6 +104,22 @@ export const SUSPENSION_REASONS: Record<SuspensionReason, string> = {
   sikayet: 'Müşteri şikâyeti',
   sahip_talebi: 'İşletme sahibinin talebi',
   diger: 'Diğer',
+};
+
+// Destek talebi konuları ve durumları (support_tickets). Web'dekiyle aynı.
+export const SUPPORT_CATEGORIES: Record<SupportCategory, string> = {
+  randevu: 'Randevu',
+  odeme: 'Ödeme ve abonelik',
+  hesap: 'Hesap',
+  teknik: 'Teknik sorun',
+  sikayet: 'Şikâyet',
+  diger: 'Diğer',
+};
+
+export const SUPPORT_STATUS: Record<SupportStatus, { label: string; fg: string; bg: string }> = {
+  waiting: { label: 'Yanıt bekliyor', fg: colors.warning, bg: colors.warningTint },
+  answered: { label: 'Yanıtlandı', fg: colors.success, bg: colors.successTint },
+  closed: { label: 'Kapalı', fg: colors.ink3, bg: colors.white04 },
 };
 
 // Randevu onay modları (businesses.auto_confirm + auto_confirm_known_only). Sık iptal eden müşteri her modda onaya düşer.

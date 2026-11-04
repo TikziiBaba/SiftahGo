@@ -1,5 +1,25 @@
+import './local-storage';
+
+export type ThemeMode = 'dark' | 'light';
+export const THEME_KEY = 'siftahgo.theme';
+
+/**
+ * Web'deki gibi müşteri tarafı açık, işletme paneli koyu (web/src/app/globals.css, .theme-light).
+ * Stiller modül yüklenirken bir kez oluştuğu için tema açılışta seçilir; hesap türü değişince
+ * uygulama yeniden yüklenir (app/_layout.tsx). Yeni kurulum açık başlar.
+ */
+function storedMode(): ThemeMode {
+  try {
+    return globalThis.localStorage?.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light';
+  } catch {
+    return 'light';
+  }
+}
+export const themeMode: ThemeMode = storedMode();
+export const isLight = themeMode === 'light';
+
 // Web sitesiyle aynı koyu tema (web/src/app/globals.css).
-export const colors = {
+const dark = {
   // Zemin ve yüzeyler (koyudan açığa)
   bg: '#060808',
   surface: '#0d1112',
@@ -58,7 +78,67 @@ export const colors = {
   black: '#000000',
   white04: 'rgba(255,255,255,0.04)',
   white08: 'rgba(255,255,255,0.08)',
+  // Yazı logosundaki "g"
+  logoG: '#2dd4bf',
 };
+
+// Açık tema: aynı adlar, açık zemine göre koyulaştırılmış tonlar. white04/white08 "hafif ton" anlamında kalır.
+const light: typeof dark = {
+  bg: '#f4f6f6',
+  surface: '#ffffff',
+  surface2: '#f1f4f4',
+  surface3: '#e6ebea',
+
+  line: 'rgba(15,26,25,0.08)',
+  lineStrong: 'rgba(15,26,25,0.14)',
+  edge: 'rgba(15,26,25,0.08)',
+
+  ink: '#0f1a19',
+  ink2: '#44514e',
+  ink3: '#63706c',
+
+  brand: '#2dd4bf',
+  // Açık zeminde yazı/ikon olarak kullanılan tonlar koyulaşır (web: --color-accent brand-700).
+  brand300: '#0f766e',
+  brand200: '#115e59',
+  brand500: '#14b8a6',
+  brand700: '#0f766e',
+  brand800: '#115e59',
+  brand900: '#134e4a',
+  brandInk: '#042f2e',
+  brandSoft: 'rgba(20,184,166,0.07)',
+  brandTint: 'rgba(20,184,166,0.12)',
+  brandLine: 'rgba(15,118,110,0.25)',
+  brandRing: 'rgba(15,118,110,0.45)',
+
+  gold: '#b06f0c',
+  goldTint: 'rgba(204,132,0,0.12)',
+
+  danger: '#be123c',
+  dangerSolid: '#e11d48',
+  dangerTint: 'rgba(190,18,60,0.08)',
+  dangerLine: 'rgba(190,18,60,0.2)',
+  success: '#047857',
+  successTint: 'rgba(4,120,87,0.08)',
+  successLine: 'rgba(4,120,87,0.2)',
+  warning: '#b45309',
+  warningSoft: 'rgba(180,83,9,0.04)',
+  warningTint: 'rgba(180,83,9,0.08)',
+  warningLine: 'rgba(180,83,9,0.22)',
+  info: '#0369a1',
+  infoTint: 'rgba(3,105,161,0.08)',
+
+  overlay: 'rgba(15,26,25,0.45)',
+  bgGlass: 'rgba(244,246,246,0.75)',
+  bgClear: 'rgba(244,246,246,0)',
+  white: '#ffffff',
+  black: '#000000',
+  white04: 'rgba(15,26,25,0.04)',
+  white08: 'rgba(15,26,25,0.08)',
+  logoG: '#0f766e',
+};
+
+export const colors = isLight ? light : dark;
 
 export const radius = { sm: 10, md: 14, lg: 20, xl: 28, pill: 999 };
 
@@ -95,6 +175,8 @@ export const shadows = {
   float: '0 12px 32px -8px rgba(0,0,0,0.6)',
   // Logodaki altın nokta
   goldDot: '0 0 10px rgba(245,181,68,0.9)',
+  // Açık temada kart
+  card: '0 1px 2px rgba(15,26,25,0.04), 0 10px 30px -18px rgba(15,26,25,0.18)',
 };
 
 // Dükkân sayfası renkleri (Pro paketi); web/src/lib/constants.ts ile aynı tutun.
@@ -119,4 +201,9 @@ export function accentOf(id: string | undefined): Accent {
 export function alpha(hex: string, a: number) {
   const n = parseInt(hex.slice(1), 16);
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+
+/** Sayfa renginin yazı/ikon tonu: koyu zeminde açık (300), açık zeminde koyu (900). */
+export function accentText(a: Accent) {
+  return isLight ? a.deep : a.soft;
 }

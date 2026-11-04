@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import { Alert, ScrollView, View } from 'react-native';
 
 import { CouponForm } from '@/components/coupon-form';
 import { CouponRedeem } from '@/components/coupon-redeem';
+import { KeyboardScreen } from '@/components/keyboard-screen';
 import { PlanGate } from '@/components/plan-gate';
-import { Badge, Banner, Button, Card, Empty, IconButton, Skeleton, styles, Text } from '@/components/ui';
+import { Badge, Banner, Button, Card, Empty, IconButton, LoadError, Skeleton, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { isShowcase } from '@/lib/constants';
 import { formatCouponWhen, formatDiscount } from '@/lib/coupons';
@@ -32,16 +33,18 @@ function Coupons({ business }: { business: Business }) {
   // editing: null kapalı, "new" yeni kupon, Coupon düzenleme
   const [editing, setEditing] = useState<Coupon | 'new' | null>(null);
   const [error, setError] = useState('');
+  const [failed, setFailed] = useState(false);
   const showcase = isShowcase(business);
 
   const load = useCallback(async () => {
+    setFailed(false);
     const [c, s] = await Promise.all([
       supabase.rpc('business_coupons', { p_business_id: business.id }),
       showcase
         ? Promise.resolve({ data: [] })
         : supabase.from('services').select('*').eq('business_id', business.id).order('sort_order').order('created_at'),
     ]);
-    if (c.error) setError(errorMessage(c.error));
+    if (c.error) return setFailed(true);
     setCoupons((c.data ?? []) as Coupon[]);
     setServices((s.data ?? []) as Service[]);
   }, [business.id, showcase]);
@@ -81,7 +84,7 @@ function Coupons({ business }: { business: Business }) {
   }
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
+    <KeyboardScreen style={{ flex: 1 }}>
       <ScrollView ref={scrollRef} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text tone="muted">Müşterilerinize gerçek indirim verin; kasada kodla kullandırın.</Text>
         <Button title="Kupon aç" icon="add" onPress={() => open('new')} />
@@ -104,7 +107,8 @@ function Coupons({ business }: { business: Business }) {
           />
         )}
 
-        {coupons === null && <Skeleton height={96} />}
+        {failed && coupons === null && <LoadError onRetry={load} />}
+        {!failed && coupons === null && <Skeleton height={96} />}
         {coupons?.length === 0 && !editing && <Empty icon="ticket-outline" title="Henüz kupon yok" text="İlk kuponunuzu açın." />}
         {coupons?.map((c) => (
           <Card key={c.id} style={[{ flexDirection: 'row', alignItems: 'center', gap: 8 }, !c.is_active && { opacity: 0.6 }]}>
@@ -127,6 +131,6 @@ function Coupons({ business }: { business: Business }) {
           </Card>
         ))}
       </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardScreen>
   );
 }

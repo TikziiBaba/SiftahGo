@@ -100,7 +100,7 @@ export default function AccountScreen() {
 
         <SectionTitle title="Hesap" />
         <Group>
-          <ListRow icon="person-outline" title="Profil bilgileri" subtitle="Ad, telefon ve şifre" onPress={() => router.push('/profil')} />
+          <ListRow icon="person-outline" title="Profil bilgileri" subtitle="Ad, telefon, şifre ve hesap silme" onPress={() => router.push('/profil')} />
           {isBusiness ? (
             <ListRow icon="calendar-outline" title="Randevularım" subtitle="Başka işletmelerden aldığınız randevular" onPress={() => router.push('/randevularim')} />
           ) : null}
@@ -120,7 +120,7 @@ export default function AccountScreen() {
             icon="help-buoy-outline"
             title="Destek"
             subtitle="Talep açın, yanıtınız e-postanıza gelsin"
-            onPress={() => Linking.openURL(`${WEB_URL}${business?.approval_status === 'approved' ? '/panel/destek' : '/hesabim?sekme=destek'}`)}
+            onPress={() => router.push('/destek')}
           />
         </Group>
 

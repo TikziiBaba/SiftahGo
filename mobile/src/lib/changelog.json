@@ -81,5 +81,17 @@
     "items": [
       "Müşteri hesabınızla, yeni hesap açmadan işletme başvurusu yapabilirsiniz (Hesap > İşletmeni ekle)."
     ]
+  },
+  {
+    "id": 12,
+    "date": "2026-11-04",
+    "items": [
+      "Müşteri ekranları artık web sitesi gibi açık renkte; işletme hesapları koyu temada kalır.",
+      "Destek talebi açıp yanıtları artık uygulamanın içinde okuyabilirsiniz (Hesap > Destek).",
+      "Fatura bilgilerinizi Abonelik ekranından girebilirsiniz.",
+      "Müşteri hesabınızı Profil ekranından silebilirsiniz.",
+      "Raporlarda en yoğun gün ve saatler, en değerli müşteriler ve randevu durumları var.",
+      "Klavye açılınca yazdığınız alan artık klavyenin altında kalmıyor; bağlantı koparsa ekranlarda Tekrar dene düğmesi çıkıyor."
+    ]
   }
 ]

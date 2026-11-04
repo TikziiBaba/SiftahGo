@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 
+import { KeyboardScreen } from '@/components/keyboard-screen';
 import { CalendarSheet, SelectField } from '@/components/pickers';
 import { useToast } from '@/components/toast';
 import { Banner, Button, Card, Field, SectionTitle, Skeleton, styles, Text } from '@/components/ui';
@@ -56,7 +57,7 @@ function FreezeForm({ business }: { business: Business }) {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
+    <KeyboardScreen>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text tone="muted">
           Bir süre hizmet veremeyecekseniz talep açın. Ekibimiz uygulayınca sayfanız görünmez{isShowcase(business) ? '' : ', randevu alınmaz'} ve dondurulan süre aboneliğinize eklenir.
@@ -101,6 +102,6 @@ function FreezeForm({ business }: { business: Business }) {
         }}
       />
       <CalendarSheet key={`e${endsOn}`} visible={picker === 'end'} onClose={() => setPicker(null)} title="Bitiş günü" value={endsOn} min={startsOn} onSelect={setEndsOn} />
-    </KeyboardAvoidingView>
+    </KeyboardScreen>
   );
 }

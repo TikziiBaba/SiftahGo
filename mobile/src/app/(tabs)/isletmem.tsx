@@ -6,14 +6,17 @@ import { Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
 import { Glow } from '@/components/brand';
 import { Logo } from '@/components/business-logo';
 import { TopBar, useScrollY } from '@/components/top-bar';
-import { Badge, Banner, Button, Card, Group, ListRow, ScreenHeader, SectionTitle, styles, Text } from '@/components/ui';
+import { Badge, Banner, Button, Card, Group, ListRow, ScreenHeader, SectionTitle, Stat, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { isShowcase, isSubscribed, isTrial, menuLabel, SITE_DOMAIN, SUSPENSION_REASONS, WEB_URL } from '@/lib/constants';
-import { formatDate } from '@/lib/format';
+import { formatDate, formatDateTime, todayStr } from '@/lib/format';
 import { daysLeft, usePlan } from '@/lib/plan';
 import { supabase } from '@/lib/supabase';
 import { colors, radius } from '@/lib/theme';
-import type { Business, BusinessSuspension } from '@/lib/types';
+import type { Business, BusinessSuspension, Coupon } from '@/lib/types';
+
+// Vitrin özeti (web: components/showcase-home.tsx)
+type CouponStats = { total: number; active: number; claimed: number; used: number; uses: { id: string; title: string; at: string }[] };
 
 export default function BusinessTab() {
   const { business } = useAuth();
@@ -25,6 +28,7 @@ function Hub({ business }: { business: Business }) {
   const { y, scroll } = useScrollY();
   const [counts, setCounts] = useState<{ services: number; staff: number; menu: number } | null>(null);
   const [suspension, setSuspension] = useState<BusinessSuspension | null>(null);
+  const [couponStats, setCouponStats] = useState<CouponStats | null>(null);
   const showcase = isShowcase(business);
   const menuName = menuLabel(business.category);
   const subscribed = isSubscribed(business);
@@ -43,6 +47,28 @@ function Hub({ business }: { business: Business }) {
           .select('id', { count: 'exact', head: true })
           .eq('business_id', business.id)
           .then(({ count }) => setCounts({ services: 0, staff: 0, menu: count ?? 0 }));
+        Promise.all([
+          supabase.rpc('business_coupons', { p_business_id: business.id }),
+          supabase
+            .from('coupon_claims')
+            .select('id, redeemed_at, coupons(title)')
+            .eq('business_id', business.id)
+            .not('redeemed_at', 'is', null)
+            .order('redeemed_at', { ascending: false })
+            .limit(5),
+        ]).then(([c, u]) => {
+          if (c.error) return;
+          const list = (c.data ?? []) as Coupon[];
+          const today = todayStr();
+          const uses = (u.data ?? []) as unknown as { id: string; redeemed_at: string; coupons: { title: string } | null }[];
+          setCouponStats({
+            total: list.length,
+            active: list.filter((x) => x.is_active && x.ends_on >= today).length,
+            claimed: list.reduce((n, x) => n + x.claimed, 0),
+            used: list.reduce((n, x) => n + x.used, 0),
+            uses: uses.map((x) => ({ id: x.id, title: x.coupons?.title ?? 'Kupon', at: x.redeemed_at })),
+          });
+        });
       } else {
         Promise.all([
           supabase.from('services').select('id', { count: 'exact', head: true }).eq('business_id', business.id),
@@ -75,6 +101,7 @@ function Hub({ business }: { business: Business }) {
       : { title: 'Hizmetlerinizi ekleyin', done: (counts?.services ?? 0) > 0, href: '/yonetim/hizmetler' as const },
     { title: 'Adresinizi yazın', done: !!(business.address || business.district), href: '/yonetim/bilgiler' as const },
     { title: 'Logo yükleyin', done: !!business.logo_url, href: '/yonetim/gorseller' as const },
+    ...(showcase ? [{ title: 'İlk kuponunuzu açın', done: (couponStats?.total ?? 0) > 0, href: '/yonetim/kuponlar' as const }] : []),
     { title: 'Paket seçin', done: subscribed && !trial, href: '/yonetim/abonelik' as const },
   ];
   const done = steps.filter((st) => st.done).length;
@@ -121,6 +148,38 @@ function Hub({ business }: { business: Business }) {
             <Button title="QR" icon="qr-code-outline" variant="secondary" size="sm" style={{ flex: 1 }} disabled={locked} onPress={() => router.push('/yonetim/qr')} />
           </View>
         </Card>
+
+        {showcase && couponStats && (
+          <>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <Stat label="Açık kupon" value={String(couponStats.active)} icon="ticket-outline" />
+              <Stat label="Alınan" value={String(couponStats.claimed)} icon="download-outline" />
+              <Stat label="Kullanılan" value={String(couponStats.used)} icon="checkmark-done-outline" />
+            </View>
+            <Card style={{ gap: 10 }}>
+              <View style={[styles.rowCenter, { justifyContent: 'space-between' }]}>
+                <Text variant="heading">Son kullanımlar</Text>
+                <Text variant="label" tone="brand" onPress={() => router.push('/yonetim/kuponlar')} suppressHighlighting>
+                  Kuponlar
+                </Text>
+              </View>
+              {couponStats.uses.length === 0 ? (
+                <Text tone="muted">Henüz kullanılan kupon yok. Müşteri kodu gösterince Kuponlar ekranından onaylayın.</Text>
+              ) : (
+                couponStats.uses.map((x) => (
+                  <View key={x.id} style={[styles.rowCenter, { gap: 12 }]}>
+                    <Text style={{ flex: 1 }} numberOfLines={1}>
+                      {x.title}
+                    </Text>
+                    <Text variant="caption" tone="muted">
+                      {formatDateTime(x.at)}
+                    </Text>
+                  </View>
+                ))
+              )}
+            </Card>
+          </>
+        )}
 
         {counts && done < steps.length && (
           <Card style={{ gap: 12 }}>
@@ -273,6 +332,7 @@ function Hub({ business }: { business: Business }) {
             onPress={() => router.push('/yonetim/abonelik')}
           />
           <ListRow icon="snow-outline" title="Dondurma talebi" subtitle="Bir süre hizmet veremeyecekseniz" onPress={() => router.push('/yonetim/dondurma')} />
+          <ListRow icon="help-buoy-outline" title="Destek" subtitle="SiftahGo ekibine yazın" onPress={() => router.push('/destek')} />
         </Group>
       </ScrollView>
       <TopBar y={y} title="İşletmem" />

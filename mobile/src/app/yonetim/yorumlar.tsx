@@ -5,7 +5,7 @@ import { FlatList, StyleSheet, View } from 'react-native';
 
 import { Sheet } from '@/components/sheet';
 import { useToast } from '@/components/toast';
-import { Avatar, Button, Card, Empty, Field, Segmented, Skeleton, styles, Text } from '@/components/ui';
+import { Avatar, Button, Card, Empty, Field, LoadError, Segmented, Skeleton, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { isShowcase } from '@/lib/constants';
 import { errorMessage, formatDate } from '@/lib/format';
@@ -29,14 +29,17 @@ function Reviews({ business }: { business: Business }) {
   const [reply, setReply] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [failed, setFailed] = useState(false);
 
   const load = useCallback(async () => {
-    const { data } = await supabase
+    setFailed(false);
+    const { data, error: loadError } = await supabase
       .from('reviews')
       .select('*, appointments(service_name)')
       .eq('business_id', business.id)
       .order('created_at', { ascending: false })
       .limit(200);
+    if (loadError) return setFailed(true);
     setRows((data ?? []) as Row[]);
   }, [business.id]);
 
@@ -105,7 +108,9 @@ function Reviews({ business }: { business: Business }) {
           </View>
         }
         ListEmptyComponent={
-          rows === null ? (
+          failed ? (
+            <LoadError onRetry={load} />
+          ) : rows === null ? (
             <View style={{ gap: 10 }}>
               <Skeleton height={110} />
               <Skeleton height={110} />
