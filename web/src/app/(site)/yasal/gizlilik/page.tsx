@@ -63,6 +63,12 @@ export default function PrivacyPage() {
           tarayıcı/cihaz türü, uygulama sürümü ve giriş yaptıysanız kullanıcı numaranız. Bu kayıtlar kendi veritabanımızda tutulur, üçüncü bir hata
           izleme hizmetine gönderilmez.
         </li>
+        <li>
+          <strong>Ziyaret istatistiği:</strong> web sitesinde hangi sayfaların açıldığı, randevu ve kayıt gibi adımların tamamlanıp tamamlanmadığı,
+          tarayıcı/cihaz türü ve yaklaşık konum (şehir düzeyinde). Çerez kullanılmaz, ad, telefon veya e-posta gönderilmez; ziyaretçiler her gün
+          değişen bir özetle sayılır ve kişiyle eşleştirilmez. Bu bilgiler siteyi iyileştirmek için PostHog’un Avrupa Birliği’ndeki sunucularında
+          tutulur.
+        </li>
       </ul>
 
       <h3>Sadakat kartı ve gecikme haberleri</h3>
@@ -117,7 +123,7 @@ export default function PrivacyPage() {
         <li><strong>Ödeme kuruluşu:</strong> PayTR Ödeme ve Elektronik Para Kuruluşu A.Ş. (ödeme işlemleri).</li>
         <li>
           <strong>Altyapı hizmet sağlayıcıları:</strong> Supabase (veritabanı ve kimlik doğrulama), Vercel (web barındırma), Cloudflare (görsel
-          depolama), Resend (e-posta gönderimi), Expo ve Google Firebase (uygulama bildirimleri), Google (Google ile giriş).
+          depolama), Resend (e-posta gönderimi), Expo ve Google Firebase (uygulama bildirimleri), Google (Google ile giriş), PostHog (ziyaret istatistiği).
         </li>
         <li><strong>Yetkili kamu kurum ve kuruluşları:</strong> kanunen zorunlu olduğunda.</li>
       </ul>

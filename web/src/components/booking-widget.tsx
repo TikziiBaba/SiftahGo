@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import posthog from "posthog-js";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { BellRing, CalendarPlus, ChevronLeft, Loader2 } from "lucide-react";
@@ -182,6 +183,7 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
       }
       return;
     }
+    posthog.capture("randevu_alindi", { isletme: business.slug, hizmet: service.name });
     setBookedPrice(Number((data as { price?: number } | null)?.price ?? service.price));
     if (chosen) refreshCoupons();
     setBooked((data as { status: "pending" | "confirmed" } | null)?.status ?? (business.auto_confirm ? "confirmed" : "pending"));

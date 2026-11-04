@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import posthog from "posthog-js";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AlertCircle, Eye, EyeOff, Loader2, Lock, Mail, MailCheck, Phone, Store, User, type LucideIcon } from "lucide-react";
@@ -295,6 +296,7 @@ export function SignupForm() {
       captcha.retry();
       return setExists(true);
     }
+    posthog.capture("kayit_olundu", { tur: role === "business" ? "isletme" : "musteri" });
     if (!data.session) {
       if (data.user) setWaiting({ userId: data.user.id, ticket });
       return setCheckEmail(true);

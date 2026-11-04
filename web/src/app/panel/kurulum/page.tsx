@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useContext, useState } from "react";
 import { useRouter } from "next/navigation";
+import posthog from "posthog-js";
 import { AlertCircle, Hourglass, Loader2, LogOut, RefreshCw } from "lucide-react";
 import { Logo } from "@/components/site-header";
 import { SetupContext } from "@/components/panel-context";
@@ -91,6 +92,7 @@ function ApplicationForm({ business, done }: { business: Business | null; done: 
         setBusy(false);
         return setError(errorMessage(error));
       }
+      posthog.capture("isletme_kuruldu", { kategori: fields.category, sehir: fields.city });
       // Kod geçersizse kurulum yine biter; kod sonra Abonelik sayfasından girilebilir.
       if (referral.trim()) await supabase.rpc("apply_referral", { p_code: referral });
       try {

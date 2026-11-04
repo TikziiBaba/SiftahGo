@@ -50,6 +50,15 @@ const nextConfig: NextConfig = {
     remotePatterns: imageHosts.map((hostname) => ({ protocol: "https" as const, hostname })),
     maximumRedirects: 0,
   },
+  // PostHog istekleri kendi alan adımızdan geçer: CSP'ye yeni adres gerekmez, reklam engelleyiciler sayımı bozmaz.
+  // PostHog'un /ingest/ sonundaki eğik çizgili istekleri yönlendirilmemeli.
+  skipTrailingSlashRedirect: true,
+  async rewrites() {
+    return [
+      { source: "/ingest/static/:path*", destination: "https://eu-assets.i.posthog.com/static/:path*" },
+      { source: "/ingest/:path*", destination: "https://eu.i.posthog.com/:path*" },
+    ];
+  },
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },

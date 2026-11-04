@@ -70,7 +70,8 @@ export default function CookiePolicyPage() {
 
       <h2>2. Kullandığımız çerezler</h2>
       <p>
-        <strong>Reklam, izleme, analitik veya sosyal medya çerezi kullanmıyoruz.</strong> Kullandıklarımız iki türdür:
+        <strong>Reklam, izleme, analitik veya sosyal medya çerezi kullanmıyoruz.</strong> Ziyaret istatistiği çerezsiz tutulur (bkz.
+        Gizlilik Politikası). Kullandıklarımız iki türdür:
       </p>
       <ul>
         <li>
