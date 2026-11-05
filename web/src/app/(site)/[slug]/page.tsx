@@ -221,10 +221,21 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
         ? { "@type": "AggregateRating", ratingValue: Number(business.rating_avg).toFixed(1), reviewCount: business.rating_count }
         : undefined,
   };
+  // Sayfadaki "Ana sayfa › Keşfet › Kategori › İşletme" yolunun arama motoru karşılığı.
+  const breadcrumb = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { name: "Ana sayfa", url: SITE_URL },
+      { name: "Keşfet", url: `${SITE_URL}/kesfet` },
+      { name: categoryLabel(business.category), url: `${SITE_URL}${categoryHref(business.city, business.category)}` },
+      { name: business.name, url: `${SITE_URL}/${business.slug}` },
+    ].map((c, i) => ({ "@type": "ListItem", position: i + 1, name: c.name, item: c.url })),
+  };
 
   // Randevusuz işletme: menü ve kuponlu ayrı sayfa, randevu kutusu yok.
   if (isShowcase(business)) {
-    return <ShowcasePage business={business} reviews={reviewList} hours={hourList} features={features} jsonLd={jsonLd} />;
+    return <ShowcasePage business={business} reviews={reviewList} hours={hourList} features={features} jsonLd={[jsonLd, breadcrumb]} />;
   }
 
   return (
@@ -250,7 +261,7 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
       </nav>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify([jsonLd, breadcrumb]).replace(/</g, "\\u003c") }}
       />
       {/* Keşfet kartındaki kapak ve logo buraya uçar (business-card.tsx Morph). */}
       <Morph id={business.id} part="kapak">

@@ -26,14 +26,16 @@ import {
   PLAN_FEATURES,
   SHOWCASE_BASE_FEATURES,
   SITE_DOMAIN,
+  SITE_NAME,
+  SITE_URL,
 } from "@/lib/constants";
 import { formatPrice } from "@/lib/format";
 import type { Plan } from "@/lib/types";
 
 export const metadata: Metadata = {
-  title: "Esnaf için online randevu ve takvim",
+  title: "Esnaf için online randevu sistemi ve uygulaması",
   description:
-    "Berber, kuaför, güzellik salonu, oto yıkama, halı saha ve tüm esnaf için online randevu, takvim ve müşteri yönetimi. İlk 2 ay ücretsiz.",
+    "Berber, kuaför, güzellik salonu, oto yıkama, halı saha ve tüm esnaf için online randevu sistemi: 7/24 randevu, çakışmasız takvim, hatırlatma ve müşteri yönetimi. İlk 2 ay ücretsiz.",
   alternates: { canonical: "/esnaf" },
 };
 
@@ -44,6 +46,10 @@ export default function BusinessHome() {
       <Backdrop />
       <SiteHeader section="esnaf" />
       <main className="relative">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\u003c") }}
+        />
         <Hero />
         <CategoryMarquee />
         <Features />
@@ -847,42 +853,65 @@ function Facts() {
 /* ------------------------------------------------------------------ */
 /* SSS                                                                  */
 /* ------------------------------------------------------------------ */
+// Sayfadaki SSS ve arama motorları için FAQPage verisi aynı listeden gelir.
+const FAQ_ITEMS = [
+  [
+    "Müşterilerimin uygulama indirmesi gerekiyor mu?",
+    "Hayır. Müşteriniz bağlantınıza veya QR kodunuza tıklayıp tarayıcıdan randevu alır. İsteyen mobil uygulamayı da kullanabilir.",
+  ],
+  [
+    "Telefonla gelen randevuları da girebilir miyim?",
+    "Evet. Panelden “Randevu Ekle” ile saniyeler içinde girersiniz; sistem çakışmayı yine engeller.",
+  ],
+  [
+    "Birden fazla ustam var, ayrı takvim olur mu?",
+    "Her personelin kendi takvimi olur. Hangi ustanın hangi hizmeti verdiğini de seçebilirsiniz.",
+  ],
+  [
+    "Randevu hatırlatması nasıl gidiyor?",
+    "Müşterinize randevudan 1 gün ve 2 saat önce otomatik e-posta ve uygulama bildirimi gider. Ayrıca randevunun yanındaki “WhatsApp ile hatırlat” düğmesi, tarih ve saatin yazılı olduğu hazır mesajı açar; tek dokunuşla gönderirsiniz.",
+  ],
+  [
+    "Öğle arası, tatil ya da izin günü?",
+    "Çalışma saatlerini gün gün ayarlar, izin ve tatilleri ekleyebilirsiniz. O saatlerde randevu alınamaz.",
+  ],
+  [
+    "Ücret ne kadar, taahhüt var mı?",
+    "İlk 2 ay ücretsizdir; deneme boyunca randevulu işletmeler Pro paketin tüm özelliklerini, vitrin işletmeleri Vitrin paketini kullanır. Paketler aylık (30 gün) veya yıllık (365 gün, 10 ay fiyatına) alınır; taahhüt ve otomatik yenileme yoktur. İstediğiniz zaman paket değiştirebilir veya bırakabilirsiniz. Ödeme PayTR güvencesiyle kartla alınır.",
+  ],
+  [
+    "Müşterilerim ücret ödüyor mu?",
+    "Hayır. Randevu almak müşteriler için tamamen ücretsizdir.",
+  ],
+];
+
+// Arama motorları ve yapay zekâ asistanları için: ürün tanımı ve SSS.
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: SITE_NAME,
+    url: `${SITE_URL}/esnaf`,
+    applicationCategory: "BusinessApplication",
+    operatingSystem: "Web, Android",
+    inLanguage: "tr",
+    description:
+      "Berber, kuaför, güzellik salonu ve tüm esnaf için online randevu sistemi: 7/24 randevu, çakışmasız takvim, otomatik hatırlatma, müşteri defteri ve ciro raporları.",
+    offers: { "@type": "Offer", price: "0", priceCurrency: "TRY", description: "İlk 2 ay ücretsiz deneme" },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: FAQ_ITEMS.map(([q, a]) => ({ "@type": "Question", name: q, acceptedAnswer: { "@type": "Answer", text: a } })),
+  },
+];
+
 function Faq() {
-  const items = [
-    [
-      "Müşterilerimin uygulama indirmesi gerekiyor mu?",
-      "Hayır. Müşteriniz bağlantınıza veya QR kodunuza tıklayıp tarayıcıdan randevu alır. İsteyen mobil uygulamayı da kullanabilir.",
-    ],
-    [
-      "Telefonla gelen randevuları da girebilir miyim?",
-      "Evet. Panelden “Randevu Ekle” ile saniyeler içinde girersiniz; sistem çakışmayı yine engeller.",
-    ],
-    [
-      "Birden fazla ustam var, ayrı takvim olur mu?",
-      "Her personelin kendi takvimi olur. Hangi ustanın hangi hizmeti verdiğini de seçebilirsiniz.",
-    ],
-    [
-      "Randevu hatırlatması nasıl gidiyor?",
-      "Müşterinize randevudan 1 gün ve 2 saat önce otomatik e-posta ve uygulama bildirimi gider. Ayrıca randevunun yanındaki “WhatsApp ile hatırlat” düğmesi, tarih ve saatin yazılı olduğu hazır mesajı açar; tek dokunuşla gönderirsiniz.",
-    ],
-    [
-      "Öğle arası, tatil ya da izin günü?",
-      "Çalışma saatlerini gün gün ayarlar, izin ve tatilleri ekleyebilirsiniz. O saatlerde randevu alınamaz.",
-    ],
-    [
-      "Ücret ne kadar, taahhüt var mı?",
-      "İlk 2 ay ücretsizdir; deneme boyunca randevulu işletmeler Pro paketin tüm özelliklerini, vitrin işletmeleri Vitrin paketini kullanır. Paketler aylık (30 gün) veya yıllık (365 gün, 10 ay fiyatına) alınır; taahhüt ve otomatik yenileme yoktur. İstediğiniz zaman paket değiştirebilir veya bırakabilirsiniz. Ödeme PayTR güvencesiyle kartla alınır.",
-    ],
-    [
-      "Müşterilerim ücret ödüyor mu?",
-      "Hayır. Randevu almak müşteriler için tamamen ücretsizdir.",
-    ],
-  ];
   return (
     <section className="mx-auto max-w-3xl px-4 py-28 md:py-36">
       <SectionHead id="sss" eyebrow="Sık sorulanlar" title="Aklınızdakiler" />
       <div className="mt-14 space-y-3">
-        {items.map(([q, a], i) => (
+        {FAQ_ITEMS.map(([q, a], i) => (
           <Reveal key={q} delay={i * 50}>
             <details className="group rounded-2xl bg-white/[0.02] ring-1 ring-line transition-colors duration-300 open:bg-white/[0.04]">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-6 py-5 font-medium [&::-webkit-details-marker]:hidden">

@@ -4,7 +4,7 @@ import { BusinessCard } from "@/components/business-card";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
 import { CategoryIcon } from "@/lib/category-icons";
 import { categoryHref, cityBusinesses, cityHref } from "@/lib/city-pages";
-import { CATEGORIES, categoryLabel } from "@/lib/constants";
+import { CATEGORIES, categoryLabel, SITE_URL } from "@/lib/constants";
 
 /** /sehir/[sehir] ve /sehir/[sehir]/[kategori]: aramadan gelen ziyaretçi için işletme listesi. */
 export async function CityListing({ city, category }: { city: string; category?: string }) {
@@ -13,10 +13,35 @@ export async function CityListing({ city, category }: { city: string; category?:
   const present = CATEGORIES.filter((c) => c.id !== "diger" && all.some((b) => b.category === c.id));
   const label = category ? categoryLabel(category) : "";
 
+  // Arama motorları ve yapay zekâ asistanları için: gezinti yolu ve sayfadaki işletme listesi.
+  const crumbs = [
+    { name: "Keşfet", url: `${SITE_URL}/kesfet` },
+    { name: city, url: `${SITE_URL}${cityHref(city)}` },
+    ...(category ? [{ name: label, url: `${SITE_URL}${categoryHref(city, category)}` }] : []),
+  ];
+  const jsonLd = [
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: crumbs.map((c, i) => ({ "@type": "ListItem", position: i + 1, name: c.name, item: c.url })),
+    },
+    ...(businesses.length
+      ? [
+          {
+            "@context": "https://schema.org",
+            "@type": "ItemList",
+            name: category ? `${city} ${label}` : `${city} işletmeleri`,
+            itemListElement: businesses.map((b, i) => ({ "@type": "ListItem", position: i + 1, name: b.name, url: `${SITE_URL}/${b.slug}` })),
+          },
+        ]
+      : []),
+  ];
+
   return (
     <>
       <SiteHeader />
       <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-8 md:pt-12">
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\u003c") }} />
         <nav aria-label="Konum" className="text-sm text-ink-3">
           <ol className="flex flex-wrap items-center gap-1.5">
             <li><Link href="/kesfet" className="hover:text-ink">Keşfet</Link></li>

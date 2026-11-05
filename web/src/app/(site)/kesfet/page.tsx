@@ -15,6 +15,7 @@ import { CATEGORIES, categoryLabel, CITIES } from "@/lib/constants";
 export const metadata: Metadata = {
   title: "İşletme Bul",
   description: "Size yakın berber, kuaför, güzellik salonu, oto yıkama ve daha fazlasından online randevu alın.",
+  alternates: { canonical: "/kesfet" },
 };
 
 export default function DiscoverPage({ searchParams }: PageProps<"/kesfet">) {
