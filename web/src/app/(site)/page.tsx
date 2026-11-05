@@ -28,6 +28,7 @@ import { Reveal } from "@/components/reveal";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
 import { Shop } from "@/components/three/shop";
 import { CATEGORY_ICONS, CategoryIcon } from "@/lib/category-icons";
+import { COMPANY } from "@/lib/company";
 import { CATEGORIES, CITIES, SITE_NAME, SITE_URL } from "@/lib/constants";
 
 export const metadata: Metadata = {
@@ -41,13 +42,35 @@ export default function Home() {
       <Backdrop />
       <SiteHeader />
       <main className="relative">
-        {/* Google arama sonucunda site adının doğru görünmesi için. */}
+        {/* Google arama sonucunda site adının doğru görünmesi ve "siftahgo" aramasının "siftah" kelimesinden
+            ayrılması için marka tanımı. */}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
             __html: JSON.stringify([
-              { "@context": "https://schema.org", "@type": "WebSite", name: SITE_NAME, url: SITE_URL },
-              { "@context": "https://schema.org", "@type": "Organization", name: SITE_NAME, url: SITE_URL, logo: `${SITE_URL}/apple-icon.png` },
+              {
+                "@context": "https://schema.org",
+                "@type": "WebSite",
+                "@id": `${SITE_URL}/#website`,
+                name: SITE_NAME,
+                alternateName: ["Siftah Go", "siftahgo.app"],
+                url: SITE_URL,
+                inLanguage: "tr",
+                publisher: { "@id": `${SITE_URL}/#organization` },
+              },
+              {
+                "@context": "https://schema.org",
+                "@type": "Organization",
+                "@id": `${SITE_URL}/#organization`,
+                name: SITE_NAME,
+                alternateName: ["Siftah Go", "siftahgo.app"],
+                url: SITE_URL,
+                logo: `${SITE_URL}/apple-icon.png`,
+                email: COMPANY.email,
+                areaServed: "TR",
+                description:
+                  "SiftahGo, Türkiye'de berber, kuaför, güzellik salonu ve diğer esnaf için online randevu platformudur. Müşteriler ücretsiz randevu alır, esnaf takvimini ve müşterilerini yönetir.",
+              },
             ]),
           }}
         />
