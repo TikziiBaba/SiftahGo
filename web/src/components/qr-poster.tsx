@@ -82,7 +82,8 @@ export function QrPoster({ business: b, link, showcase = false }: { business: Po
         </div>
 
         <div>
-          <div className="rounded-[4cqw] border-[length:0.7cqw] border-[#134e4a] p-[2.2cqw]">
+          {/* QR'ın kendi beyaz kenarı (2 modül) okutma için yeterli; çerçeve ayrıca boşluk eklemez. */}
+          <div className="mx-auto w-fit rounded-[3cqw] border-[length:0.7cqw] border-[#134e4a] p-[0.4cqw]">
             <QrSvg value={link} logo={b.logo_url} className="block size-[44cqw]" />
           </div>
           <p className="mt-[2.5cqw] text-[3.4cqw] font-semibold">Telefonunuzun kamerasını koda tutun</p>
