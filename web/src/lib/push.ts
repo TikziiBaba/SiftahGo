@@ -5,7 +5,7 @@ import { formatDate, formatTime } from "@/lib/format";
 /** claim_push satırı */
 type QueuedPush = {
   id: string;
-  kind: "booked" | "confirmed" | "cancelled" | "rescheduled" | "reminder" | "review" | "reviewed";
+  kind: "booked" | "confirmed" | "cancelled" | "rescheduled" | "reminder" | "review" | "reviewed" | "rebook";
   recipient: "customer" | "business";
   appointment_id: string;
   title: string;
@@ -45,6 +45,19 @@ export type CouponReviewRequest = {
   customer_name: string;
   business_name: string;
   business_slug: string;
+  tokens: string[];
+};
+
+/** claim_birthday_gifts satırı: müşteriye üretilen doğum günü kuponu (id kupon) */
+export type BirthdayGift = {
+  id: string;
+  email: string | null;
+  customer_name: string;
+  business_name: string;
+  business_slug: string;
+  discount_type: "percent" | "fixed";
+  discount_value: number;
+  ends_on: string;
   tokens: string[];
 };
 
@@ -240,6 +253,26 @@ export function sendCouponReviewRequestPushes(supabase: SupabaseClient, notices:
       })),
     ),
     "Kupon değerlendirme isteği",
+  );
+}
+
+/**
+ * Doğum günü kuponu haberi. Tekrar denenmez; kupon "Kuponlarım"da kalır. Dokununca kupon listesi açılır
+ * (kind "birthday"); türü tanımayan eski uygulamalar müşteri randevuları ekranını açar.
+ */
+export function sendBirthdayGiftPushes(supabase: SupabaseClient, gifts: BirthdayGift[]) {
+  return sendMessages(
+    supabase,
+    gifts.flatMap((g) => {
+      const discount = g.discount_type === "percent" ? `%${Number(g.discount_value)}` : `${Number(g.discount_value)} ₺`;
+      return (g.tokens ?? []).map((to) => ({
+        to,
+        title: "Doğum gününüz kutlu olsun!",
+        body: `${g.business_name} size ${discount} indirim hediye etti`,
+        data: { kind: "birthday", recipient: "customer", slug: g.business_slug },
+      }));
+    }),
+    "Doğum günü kuponu bildirimi",
   );
 }
 

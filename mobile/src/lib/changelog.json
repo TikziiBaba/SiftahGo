@@ -93,5 +93,15 @@
       "Raporlarda en yoğun gün ve saatler, en değerli müşteriler ve randevu durumları var.",
       "Klavye açılınca yazdığınız alan artık klavyenin altında kalmıyor; bağlantı koparsa ekranlarda Tekrar dene düğmesi çıkıyor."
     ]
+  },
+  {
+    "id": 13,
+    "date": "2026-11-05",
+    "items": [
+      "İşletmem > Kasa: gelen müşterinin ödemesini nakit, kart ya da havale olarak işaretleyin; gün sonu, ay toplamı ve personel primi kendiliğinden çıkar.",
+      "Randevu kurallarında “Zamanı geldi”: son randevusunun üzerinden belirlediğiniz süre geçen müşterinize “Yine randevu alalım mı?” gider.",
+      "Kuponlarda doğum günü kuponu: doğum gününü ekleyen müşterilerinize kendine özel indirim hediye edin.",
+      "Profilinize doğum gününüzü ekleyebilir, yaklaşan randevunuzu tek dokunuşla takviminize ekleyebilirsiniz."
+    ]
   }
 ]

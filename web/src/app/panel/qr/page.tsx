@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Copy, Download, ImagePlus, Loader2, Printer } from "lucide-react";
+import { Check, Copy, Download, ImagePlus, Loader2, Printer } from "lucide-react";
 import { useBusiness } from "@/components/panel-context";
 import { QrPoster, QrSvg } from "@/components/qr-poster";
 import { isShowcase, SITE_URL } from "@/lib/constants";
@@ -55,9 +55,9 @@ export default function QrPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <h1 className="text-2xl font-semibold tracking-tight">QR kod ve cam afişi</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">QR, bağlantılar ve afiş</h1>
       <p className="text-sm text-ink-3">
-        Afişi yazdırıp camınıza asın; bağlantıyı Instagram, WhatsApp ve Google profilinize ekleyin.
+        Afişi yazdırıp camınıza asın; bağlantınızı Instagram, Google ve web sitenize ekleyin.
       </p>
 
       <div className="mt-6 grid gap-4 md:grid-cols-[1fr_minmax(0,360px)]">
@@ -102,6 +102,78 @@ export default function QrPage() {
           <p className="mt-2 text-xs text-ink-3">Yazıcınız yoksa açılan sayfada PDF olarak kaydedip bir kırtasiyede bastırabilirsiniz.</p>
         </section>
       </div>
+
+      <ShareLinks url={url} showcase={isShowcase(business)} />
+    </div>
+  );
+}
+
+// Her kanalın bağlantısı ?kaynak= ile etiketlidir: ziyaretlerin nereden geldiği istatistikte görünür.
+function ShareLinks({ url, showcase }: { url: string; showcase: boolean }) {
+  const action = showcase ? "Menüyü gör" : "Randevu al";
+  const siteLink = `${url}?kaynak=site`;
+  const button = `<a href="${siteLink}" target="_blank" rel="noopener" style="display:inline-block;padding:12px 22px;border-radius:999px;background:#14b8a6;color:#fff;font:600 16px/1.2 system-ui,sans-serif;text-decoration:none">${action}</a>`;
+  return (
+    <div className="mt-4 grid gap-4 md:grid-cols-2">
+      <section className="card p-5">
+        <h2 className="font-semibold">Instagram</h2>
+        <CopyField value={`${url}?kaynak=instagram`} />
+        <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-ink-2">
+          <li>Profilinizde <b>Profili düzenle → Bağlantılar → Harici bağlantı ekle</b> deyin ve bağlantıyı yapıştırın.</li>
+          <li>Başlığa “{action}” yazın; bağlantı profilinizin üstünde görünür.</li>
+          <li>Hikâyelerde <b>Bağlantı</b> çıkartmasıyla da paylaşabilirsiniz.</li>
+        </ol>
+      </section>
+
+      <section className="card p-5">
+        <h2 className="font-semibold">Google İşletme Profili</h2>
+        <CopyField value={`${url}?kaynak=google`} />
+        <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-ink-2">
+          <li>Google’da işletmenizin adını aratın (hesabınızla girişli olun) ve <b>Profili düzenle</b> deyin.</li>
+          <li><b>İletişim</b> bölümünde <b>{showcase ? "Menü bağlantısı" : "Randevu bağlantıları"}</b> alanına bağlantıyı yapıştırıp kaydedin.</li>
+          <li>Onaydan sonra Google Haritalar’da profilinizde “{action}” düğmesi çıkar.</li>
+        </ol>
+      </section>
+
+      <section className="card p-5 md:col-span-2">
+        <h2 className="font-semibold">Web sitesi düğmesi</h2>
+        <p className="mt-1 text-sm text-ink-3">
+          Kodu sitenizin HTML alanına (WordPress, Wix, Ticimax “HTML ekle” bölümü) yapıştırın; ziyaretçi düğmeye basınca SiftahGo sayfanız açılır.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-4">
+          {/* Önizleme: kodun aynısı */}
+          <span dangerouslySetInnerHTML={{ __html: button }} />
+          <span className="text-xs text-ink-3">Önizleme</span>
+        </div>
+        <CopyField value={button} multiline />
+        <p className="mt-3 text-sm text-ink-3">
+          WhatsApp için: <span className="font-mono">{`${url}?kaynak=whatsapp`}</span> bağlantısını durumunuza ve işletme profilinize ekleyin.
+        </p>
+      </section>
+    </div>
+  );
+}
+
+function CopyField({ value, multiline = false }: { value: string; multiline?: boolean }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="mt-3 flex items-start gap-2">
+      {multiline ? (
+        <textarea readOnly rows={3} className="input min-w-0 flex-1 font-mono text-xs" value={value} onFocus={(e) => e.target.select()} />
+      ) : (
+        <input readOnly className="input min-w-0 flex-1 font-mono text-xs" value={value} onFocus={(e) => e.target.select()} />
+      )}
+      <button
+        type="button"
+        className="btn btn-secondary shrink-0"
+        onClick={async () => {
+          await navigator.clipboard.writeText(value);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        }}
+      >
+        {copied ? <Check className="size-4" /> : <Copy className="size-4" />} {copied ? "Kopyalandı" : "Kopyala"}
+      </button>
     </div>
   );
 }

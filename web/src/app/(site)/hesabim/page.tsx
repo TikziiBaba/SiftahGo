@@ -23,6 +23,7 @@ import {
   UserRound,
   type LucideIcon,
 } from "lucide-react";
+import { AddToCalendar } from "@/components/add-to-calendar";
 import { CookieSettingsButton } from "@/components/cookie-consent";
 import { CustomerLateButton, delayLabel } from "@/components/delay-actions";
 import { formatMoney } from "@/lib/coupons";
@@ -56,6 +57,12 @@ function rebookHref(slug: string, row: Row) {
   if (row.service_id) q.set("hizmet", row.service_id);
   if (row.staff_id) q.set("personel", row.staff_id);
   return `/${slug}${q.size ? `?${q}` : ""}#randevu`;
+}
+
+const MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+
+function mapsLocation(b: NonNullable<Row["businesses"]>) {
+  return [b.name, b.address, b.district, b.city].filter(Boolean).join(", ");
 }
 
 function mapsHref(b: NonNullable<Row["businesses"]>) {
@@ -411,6 +418,14 @@ function AppointmentCard({
               <CalendarClock className="size-4" /> Saati değiştir
             </button>
           )}
+          {onCancel && row.businesses && (row.status === "confirmed" || row.status === "pending") && (
+            <AddToCalendar
+              title={`${row.businesses.name}: ${row.service_name}`}
+              startsAt={row.starts_at}
+              endsAt={row.ends_at}
+              location={mapsLocation(row.businesses)}
+            />
+          )}
           {onCancel && (
             <HoldButton pending="İptal ediliyor" onConfirm={onCancel} className="btn btn-ghost py-2 text-bad">
               İptal et
@@ -449,7 +464,13 @@ function AppointmentCard({
 
 function ProfilePanel({ profile, email, onSaved, onLogout }: { profile: Profile; email: string; onSaved: () => void; onLogout: () => void }) {
   const router = useRouter();
-  const [form, setForm] = useState({ full_name: profile.full_name, phone: profile.phone ?? "" });
+  const [form, setForm] = useState({
+    full_name: profile.full_name,
+    phone: profile.phone ?? "",
+    birth_month: profile.birth_month ? String(profile.birth_month) : "",
+    birth_day: profile.birth_day ? String(profile.birth_day) : "",
+    rebook_reminders: profile.rebook_reminders,
+  });
   const [state, setState] = useState<"idle" | "saving" | "saved">("idle");
   const [error, setError] = useState("");
   const [confirmText, setConfirmText] = useState("");
@@ -460,10 +481,17 @@ function ProfilePanel({ profile, email, onSaved, onLogout }: { profile: Profile;
     e.preventDefault();
     setError("");
     if (form.full_name.trim().length < 2) return setError("Lütfen adınızı girin.");
+    if (!form.birth_month !== !form.birth_day) return setError("Doğum gününüz için ay ve günü birlikte seçin.");
     setState("saving");
     const { error } = await createClient()
       .from("profiles")
-      .update({ full_name: form.full_name.trim(), phone: form.phone.trim() || null })
+      .update({
+        full_name: form.full_name.trim(),
+        phone: form.phone.trim() || null,
+        birth_month: form.birth_month ? Number(form.birth_month) : null,
+        birth_day: form.birth_day ? Number(form.birth_day) : null,
+        rebook_reminders: form.rebook_reminders,
+      })
       .eq("id", profile.id);
     if (error) {
       setState("idle");
@@ -509,6 +537,42 @@ function ProfilePanel({ profile, email, onSaved, onLogout }: { profile: Profile;
           <p className="rounded-xl bg-surface-2 px-3.5 py-2.5 text-sm text-ink-2 ring-1 ring-line">{email}</p>
           <p className="mt-1.5 text-xs text-ink-3">Randevu bildirimleri bu adrese gider.</p>
         </div>
+        <div>
+          <p className="label">Doğum günü (isteğe bağlı)</p>
+          <div className="flex gap-2">
+            <select aria-label="Gün" className="input w-24" value={form.birth_day} onChange={(e) => setForm({ ...form, birth_day: e.target.value })}>
+              <option value="">Gün</option>
+              {Array.from({ length: 31 }, (_, i) => (
+                <option key={i} value={i + 1}>
+                  {i + 1}
+                </option>
+              ))}
+            </select>
+            <select aria-label="Ay" className="input flex-1" value={form.birth_month} onChange={(e) => setForm({ ...form, birth_month: e.target.value })}>
+              <option value="">Ay</option>
+              {MONTHS.map((m, i) => (
+                <option key={m} value={i + 1}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="mt-1.5 text-xs text-ink-3">
+            Gittiğiniz işletmeler doğum gününüzde size indirim kuponu hediye edebilir. Yılı sormuyoruz; işletmeler tarihi görmez.
+          </p>
+        </div>
+        <label className="flex items-start gap-3 text-sm">
+          <input
+            type="checkbox"
+            className="mt-0.5 size-4 accent-brand-500"
+            checked={form.rebook_reminders}
+            onChange={(e) => setForm({ ...form, rebook_reminders: e.target.checked })}
+          />
+          <span>
+            <span className="font-medium">“Zamanı geldi” hatırlatmaları</span>
+            <span className="block text-xs text-ink-3">Son randevunuzun üzerinden bir süre geçince işletme size “Yine randevu alalım mı?” der.</span>
+          </span>
+        </label>
         {error && <p className="text-sm text-bad">{error}</p>}
         <div className="flex items-center gap-3">
           <button disabled={state === "saving"} className="btn btn-primary">

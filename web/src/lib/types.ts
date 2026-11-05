@@ -5,6 +5,10 @@ export type Profile = {
   full_name: string;
   phone: string | null;
   role: Role;
+  // "Zamanı geldi" hatırlatmaları açık mı; doğum günü (yalnızca ay ve gün, kupon için).
+  rebook_reminders: boolean;
+  birth_month: number | null;
+  birth_day: number | null;
 };
 
 // Başvuru onayı: yönetici onaylayana kadar işletme görünmez; reddedilirse approval_note sebebi yazar.
@@ -64,7 +68,16 @@ export type Business = {
   // İsteğe bağlı sadakat kartı: boşsa kapalı.
   loyalty_target: number | null;
   loyalty_reward: string;
+  // "Zamanı geldi": son randevudan kaç gün sonra müşteriye hatırlatma (boşsa kapalı).
+  rebook_days: number | null;
+  // Doğum günü kuponu indirimi (boşsa kapalı).
+  birthday_discount_type: "percent" | "fixed" | null;
+  birthday_discount_value: number | null;
 };
+
+// Kasa: randevuya işlenen ödeme şekli.
+export type PaymentMethod = "cash" | "card" | "transfer";
+export type StaffCommission = { staff_id: string; business_id: string; percent: number };
 
 export type MyLoyalty = { target: number; reward: string; stamps: number; available: number };
 export type LoyaltyCustomer = { customer_id: string; customer_name: string; visits: number; available: number };
@@ -296,6 +309,10 @@ export type Appointment = {
   business_delay_minutes: number | null;
   business_delay_at: string | null;
   business_delay_count: number;
+  // Kasa: ödeme şekli girilmişse tutar ve an.
+  payment_method: PaymentMethod | null;
+  paid_amount: number | null;
+  paid_at: string | null;
   created_at: string;
 };
 

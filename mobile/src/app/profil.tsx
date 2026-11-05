@@ -1,20 +1,26 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView } from 'react-native';
+import { ScrollView, View } from 'react-native';
 
 import { KeyboardScreen } from '@/components/keyboard-screen';
 import { useToast } from '@/components/toast';
-import { Button, Card, Field, SectionTitle, styles, Text } from '@/components/ui';
+import { Button, Card, Chip, Field, SectionTitle, styles, SwitchRow, Text } from '@/components/ui';
 import { signOut, useAuth } from '@/lib/auth';
 import { WEB_URL } from '@/lib/constants';
-import { errorMessage } from '@/lib/format';
+import { errorMessage, MONTHS } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
 
 export default function ProfileScreen() {
   const { session, profile, refresh } = useAuth();
   const toast = useToast();
-  const [form, setForm] = useState({ full_name: profile?.full_name ?? '', phone: profile?.phone ?? '' });
+  const [form, setForm] = useState({
+    full_name: profile?.full_name ?? '',
+    phone: profile?.phone ?? '',
+    birth_day: profile?.birth_day ? String(profile.birth_day) : '',
+    birth_month: profile?.birth_month ?? null,
+    rebook_reminders: profile?.rebook_reminders ?? true,
+  });
   const [password, setPassword] = useState({ next: '', again: '' });
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState<'profile' | 'password' | null>(null);
@@ -25,11 +31,20 @@ export default function ProfileScreen() {
   async function saveProfile() {
     if (!session) return;
     if (form.full_name.trim().length < 2) return setErrors({ profile: 'Adınızı ve soyadınızı yazın.' });
+    const day = form.birth_day ? Number(form.birth_day) : null;
+    if (!day !== !form.birth_month) return setErrors({ profile: 'Doğum gününüz için gün ve ayı birlikte girin.' });
+    if (day !== null && (!Number.isInteger(day) || day < 1 || day > 31)) return setErrors({ profile: 'Gün 1 ile 31 arasında olmalı.' });
     setBusy('profile');
     setErrors({});
     const { error } = await supabase
       .from('profiles')
-      .update({ full_name: form.full_name.trim(), phone: form.phone.trim() || null })
+      .update({
+        full_name: form.full_name.trim(),
+        phone: form.phone.trim() || null,
+        birth_day: day,
+        birth_month: form.birth_month,
+        rebook_reminders: form.rebook_reminders,
+      })
       .eq('id', session.user.id);
     setBusy(null);
     if (error) return setErrors({ profile: errorMessage(error) });
@@ -84,6 +99,31 @@ export default function ProfileScreen() {
             hint="Randevu formunda otomatik doldurulur."
           />
           <Field label="E-posta" icon="mail-outline" value={session?.user.email ?? ''} editable={false} hint="E-posta adresi değiştirilemez." />
+          <Field
+            label="Doğum günü (isteğe bağlı)"
+            icon="gift-outline"
+            value={form.birth_day}
+            onChangeText={(birth_day) => setForm({ ...form, birth_day: birth_day.replace(/\D/g, '') })}
+            keyboardType="number-pad"
+            maxLength={2}
+            placeholder="Gün"
+          />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+            {MONTHS.map((m, i) => (
+              <Chip key={m} label={m} selected={form.birth_month === i + 1} onPress={() => setForm({ ...form, birth_month: form.birth_month === i + 1 ? null : i + 1 })} />
+            ))}
+          </ScrollView>
+          <Text variant="caption" tone="muted">
+            Gittiğiniz işletmeler doğum gününüzde size indirim kuponu hediye edebilir. Yılı sormuyoruz; işletmeler tarihi görmez.
+          </Text>
+          <View style={{ marginHorizontal: -14 }}>
+            <SwitchRow
+              title="“Zamanı geldi” hatırlatmaları"
+              description="Son randevunuzun üzerinden bir süre geçince işletme size “Yine randevu alalım mı?” der."
+              value={form.rebook_reminders}
+              onValueChange={(rebook_reminders) => setForm({ ...form, rebook_reminders })}
+            />
+          </View>
           {errors.profile ? (
             <Text variant="label" tone="danger">
               {errors.profile}

@@ -16,6 +16,8 @@ import { errorMessage, slugInput, slugify } from "@/lib/format";
 import { uploadImage } from "@/lib/upload";
 
 const SLOT_OPTIONS = [5, 10, 15, 20, 30, 45, 60];
+// "Zamanı geldi" süreleri (gün). Veritabanı 7-180 arası kabul eder.
+const REBOOK_OPTIONS = [14, 21, 28, 35, 42, 56, 60, 90];
 const NOTICE_OPTIONS = [
   [0, "Hemen"], [30, "30 dakika önce"], [60, "1 saat önce"], [120, "2 saat önce"],
   [240, "4 saat önce"], [720, "12 saat önce"], [1440, "1 gün önce"],
@@ -40,6 +42,7 @@ export default function SettingsPage() {
     auto_confirm: business.auto_confirm,
     auto_confirm_known_only: business.auto_confirm_known_only,
     is_published: business.is_published,
+    rebook_days: business.rebook_days,
   });
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -249,6 +252,28 @@ export default function SettingsPage() {
                 müşteriye iletilir.
               </p>
             </fieldset>
+            <div className="sm:col-span-3">
+              <label className="label" htmlFor="rebook">“Zamanı geldi” hatırlatması</label>
+              <select
+                id="rebook"
+                className="input sm:w-80"
+                value={form.rebook_days ?? ""}
+                onChange={(e) => setForm({ ...form, rebook_days: e.target.value ? Number(e.target.value) : null })}
+              >
+                <option value="">Kapalı</option>
+                {REBOOK_OPTIONS.includes(form.rebook_days ?? 0) || form.rebook_days === null ? null : (
+                  <option value={form.rebook_days}>{form.rebook_days} gün sonra</option>
+                )}
+                {REBOOK_OPTIONS.map((d) => (
+                  <option key={d} value={d}>
+                    {d % 7 === 0 ? `${d / 7} hafta` : `${d} gün`} sonra
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1.5 text-xs text-ink-3">
+                Müşterinin son randevusunun üzerinden bu süre geçince, yeni randevusu yoksa ona “Yine randevu alalım mı?” bildirimi ve e-postası gider.
+              </p>
+            </div>
             </>)}
             <label className="flex items-start gap-2 text-sm sm:col-span-3">
               <input type="checkbox" className="mt-0.5 size-4 accent-brand-400" checked={form.is_published}

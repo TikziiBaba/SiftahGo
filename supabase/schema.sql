@@ -11,6 +11,8 @@
 drop trigger if exists on_auth_user_created on auth.users;
 
 drop table if exists
+  public.birthday_gifts,
+  public.staff_commissions,
   public.expenses,
   public.billing_profiles,
   public.loyalty_rewards,
@@ -87,7 +89,9 @@ begin
         'coupon_redeem_problem', 'coupon_lookup', 'save_coupon', 'set_coupon_active', 'delete_coupon',
         'claim_coupon', 'find_coupon_code', 'redeem_coupon_code', 'undo_coupon_redeem', 'my_coupons', 'business_coupons',
         'enforce_menu_limit', 'enforce_working_hours', 'add_coupon_review', 'claim_coupon_review_requests', 'claim_coupon_review_notices',
-        'loyalty_stamps', 'my_loyalty', 'business_loyalty', 'give_loyalty_reward', 'payments_fill_billing', 'admin_set_invoice'
+        'loyalty_stamps', 'my_loyalty', 'business_loyalty', 'give_loyalty_reward', 'payments_fill_billing', 'admin_set_invoice',
+        'appointments_payment', 'default_rebook_days', 'businesses_rebook_default', 'queue_rebook_reminders',
+        'next_birthday', 'claim_birthday_gifts', 'business_birthday_summary'
       )
   loop
     execute 'drop function if exists ' || r.sig || ' cascade';
@@ -131,7 +135,17 @@ create table public.profiles (
   phone       text check (length(phone) <= 30),
   -- Sadece arayüz yönlendirmesi için; yetki vermez.
   role        text not null default 'customer' check (role in ('customer', 'business')),
-  created_at  timestamptz not null default now()
+  -- "Zamanı geldi" hatırlatmalarını alır mı (queue_rebook_reminders); müşteri hesabından kapatır.
+  rebook_reminders boolean not null default true,
+  -- Doğum günü kuponu için yalnızca ay ve gün (yıl tutulmaz). Yalnızca kendisi ve yönetici okur.
+  birth_month smallint,
+  birth_day   smallint,
+  created_at  timestamptz not null default now(),
+  constraint profiles_birthday_check check (
+    (birth_month is null) = (birth_day is null)
+    and (birth_month is null or (birth_month between 1 and 12 and birth_day between 1 and
+         case when birth_month = 2 then 29 when birth_month in (4, 6, 9, 11) then 30 else 31 end))
+  )
 );
 
 -- Site yöneticileri (e-posta ile). Hesabın e-postası doğrulanmış olmalı.
@@ -236,9 +250,20 @@ create table public.businesses (
   -- İsteğe bağlı sadakat kartı: boşsa kapalı ("10. randevuda saç yıkama bedava"). Paket düşerse silinmez, gizlenir.
   loyalty_target     int check (loyalty_target between 2 and 50),
   loyalty_reward     text not null default '' check (length(loyalty_reward) <= 100),
+  -- "Zamanı geldi": son randevudan bu kadar gün sonra müşteriye hatırlatma; boşsa kapalı. Yeni işletmede
+  -- kategoriden gelir (businesses_rebook_default).
+  rebook_days        smallint check (rebook_days between 7 and 180),
+  -- Doğum günü kuponu (paketinde kupon olan işletme); boşsa kapalı (claim_birthday_gifts).
+  birthday_discount_type  text check (birthday_discount_type in ('percent', 'fixed')),
+  birthday_discount_value numeric(10, 2),
   created_at         timestamptz not null default now(),
   constraint businesses_location_check check ((latitude is null) = (longitude is null)),
   constraint businesses_loyalty_check check (loyalty_target is null or length(trim(loyalty_reward)) > 0),
+  constraint businesses_birthday_check check (
+    (birthday_discount_type is null) = (birthday_discount_value is null)
+    and (birthday_discount_type is null or birthday_discount_value > 0)
+    and (birthday_discount_type is distinct from 'percent' or birthday_discount_value between 1 and 90)
+  ),
   constraint businesses_images_upload_check check (
     (logo_url is null or public.is_upload_url(logo_url))
     and (cover_url is null or public.is_upload_url(cover_url))
@@ -362,6 +387,10 @@ create table public.appointments (
   business_delay_minutes int check (business_delay_minutes in (10, 15, 30, 45)),
   business_delay_at      timestamptz,
   business_delay_count   smallint not null default 0,
+  -- Kasa: esnafın işaretlediği ödeme (appointments_payment tamamlar). Boşsa ödeme girilmemiş.
+  payment_method text check (payment_method in ('cash', 'card', 'transfer')),
+  paid_amount    numeric(10, 2) check (paid_amount >= 0),
+  paid_at        timestamptz,
   check (ends_at > starts_at),
   -- Aynı personele aynı anda iki aktif randevu verilemez.
   constraint appointments_no_overlap exclude using gist (
@@ -405,6 +434,8 @@ create table public.coupons (
   total_limit    int check (total_limit >= 1),
   service_ids    uuid[] not null default '{}',
   is_active      boolean not null default true,
+  -- Tek müşteriye üretilen doğum günü kuponu (claim_birthday_gifts); listede görünmez, düzenlenemez.
+  is_birthday    boolean not null default false,
   claimed_count  int not null default 0 check (claimed_count >= 0),
   created_at     timestamptz not null default now(),
   check (discount_type <> 'percent' or discount_value between 1 and 90),
@@ -526,7 +557,7 @@ create index payments_business_idx on public.payments (business_id, created_at d
 create table public.notifications (
   id             uuid primary key default gen_random_uuid(),
   appointment_id uuid not null references public.appointments (id) on delete cascade,
-  kind           text not null check (kind in ('booked', 'confirmed', 'cancelled', 'rescheduled', 'reminder', 'reminder_soon', 'review')),
+  kind           text not null check (kind in ('booked', 'confirmed', 'cancelled', 'rescheduled', 'reminder', 'reminder_soon', 'review', 'rebook')),
   recipient      text not null check (recipient in ('customer', 'business')),
   email          text not null,
   status         text not null default 'pending' check (status in ('pending', 'sent', 'failed', 'skipped')),
@@ -565,8 +596,8 @@ create table public.inbox (
   id                uuid primary key default gen_random_uuid(),
   user_id           uuid not null references public.profiles (id) on delete cascade,
   appointment_id    uuid not null references public.appointments (id) on delete cascade,
-  -- review: müşteriye "hizmet nasıldı?", reviewed: işletmeye yeni değerlendirme
-  kind              text not null check (kind in ('booked', 'confirmed', 'cancelled', 'rescheduled', 'reminder', 'review', 'reviewed')),
+  -- review: müşteriye "hizmet nasıldı?", reviewed: işletmeye yeni değerlendirme, rebook: müşteriye "zamanı geldi"
+  kind              text not null check (kind in ('booked', 'confirmed', 'cancelled', 'rescheduled', 'reminder', 'review', 'reviewed', 'rebook')),
   recipient         text not null check (recipient in ('customer', 'business')),
   title             text not null,
   body              text not null,
@@ -1860,6 +1891,7 @@ begin
   v_title := case
     when p_kind = 'reviewed' then 'Yeni değerlendirme: ' || repeat('★', r.rating) || repeat('☆', 5 - r.rating)
     when p_kind = 'review' then 'Hizmet nasıldı?'
+    when p_kind = 'rebook' then 'Yine randevu alalım mı?'
     when v_flagged then 'Dikkat: sık iptal eden müşteri'
     when p_recipient = 'business' and p_kind = 'rescheduled' and a.status = 'pending' then 'Saat değişikliği onay bekliyor'
     when p_recipient = 'business' and p_kind = 'rescheduled' then 'Randevu saati değişti'
@@ -1877,6 +1909,9 @@ begin
   v_body := case
     when p_kind = 'reviewed' then concat_ws(' · ', r.customer_name, a.service_name, nullif(left(r.comment, 120), ''))
     when p_kind = 'review' then concat_ws(' · ', v_business, a.service_name, 'Puan vermek için dokunun')
+    when p_kind = 'rebook' then concat_ws(' · ', v_business,
+      format('Son %s ziyaretinizin üzerinden %s gün geçti', nullif(a.service_name, ''), (now()::date - a.starts_at::date)),
+      'Randevu almak için dokunun')
     else concat_ws(' · ', case when p_recipient = 'business' then a.customer_name else v_business end,
                    a.service_name, v_when,
                    case when v_flagged then format('Son 6 ayda %s iptal, %s gelmedi', a.prior_cancels, a.prior_no_shows) end,
@@ -3890,7 +3925,7 @@ begin
     return v_id;
   end if;
 
-  select * into c from public.coupons where id = p_id and business_id = b.id for update;
+  select * into c from public.coupons where id = p_id and business_id = b.id and not is_birthday for update;
   if not found then raise exception 'Kupon bulunamadı.'; end if;
   -- Silinen hizmet service_ids'te kalır; alınmış kuponda yalnızca kilit karşılaştırması geçerlidir.
   if c.claimed_count = 0 and (select count(*) from public.services where id = any (v_services) and business_id = b.id) <> cardinality(v_services) then
@@ -3926,7 +3961,7 @@ as $$
 declare
   v_business uuid;
 begin
-  select business_id into v_business from public.coupons where id = p_id;
+  select business_id into v_business from public.coupons where id = p_id and not is_birthday;
   if v_business is null or not public.is_business_owner(v_business) then
     raise exception 'Bu işlem için yetkiniz yok.';
   end if;
@@ -4141,7 +4176,7 @@ begin
          (select count(*)::int from public.coupon_claims cl where cl.coupon_id = c.id),
          (select count(*)::int from public.coupon_claims cl where cl.coupon_id = c.id and public.coupon_claim_used(cl))
   from public.coupons c
-  where c.business_id = p_business_id
+  where c.business_id = p_business_id and not c.is_birthday
   order by c.created_at desc;
 end;
 $$;
@@ -4870,6 +4905,270 @@ begin
       invoice_url = case when v_number is null then null else nullif(trim(coalesce(p_url, '')), '') end
   where id = p_id and status = 'paid';
   if not found then raise exception 'Ödenmiş kayıt bulunamadı.'; end if;
+end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- Kasa, personel primi, "zamanı geldi" hatırlatması ve doğum günü kuponu
+-- ---------------------------------------------------------------------
+-- Personelin prim oranı ayrı tabloda: personel satırı herkese açık, prim değil.
+create table public.staff_commissions (
+  staff_id    uuid primary key references public.staff (id) on delete cascade,
+  business_id uuid not null references public.businesses (id) on delete cascade,
+  percent     numeric(5, 2) not null check (percent between 0 and 100)
+);
+alter table public.staff_commissions enable row level security;
+create policy "prim: sahibi okur" on public.staff_commissions
+  for select using ((select public.is_business_owner(business_id)));
+create policy "prim: sahibi ekler" on public.staff_commissions
+  for insert with check (
+    (select public.is_business_owner(business_id))
+    and exists (select 1 from public.staff s where s.id = staff_commissions.staff_id and s.business_id = staff_commissions.business_id)
+  );
+create policy "prim: sahibi günceller" on public.staff_commissions
+  for update using ((select public.is_business_owner(business_id)))
+  with check (
+    (select public.is_business_owner(business_id))
+    and exists (select 1 from public.staff s where s.id = staff_commissions.staff_id and s.business_id = staff_commissions.business_id)
+  );
+create policy "prim: sahibi siler" on public.staff_commissions
+  for delete using ((select public.is_business_owner(business_id)));
+
+-- Kasa: ödeme şekli girilince tutar (boşsa randevu fiyatı) ve an yazılır; şekil silinince ikisi de silinir.
+-- İptal edilen ya da gelinmeyen randevunun ödemesi silinir.
+create function public.appointments_payment()
+returns trigger
+language plpgsql set search_path = ''
+as $$
+begin
+  if new.status in ('cancelled', 'no_show') or new.payment_method is null then
+    new.payment_method := null;
+    new.paid_amount := null;
+    new.paid_at := null;
+    return new;
+  end if;
+  new.paid_amount := coalesce(new.paid_amount, new.price);
+  if tg_op = 'INSERT' or old.payment_method is null then
+    new.paid_at := now();
+  else
+    new.paid_at := old.paid_at;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger appointments_payment
+  before insert or update of payment_method, paid_amount, status on public.appointments
+  for each row execute function public.appointments_payment();
+
+-- Yeni işletmenin "zamanı geldi" süresi kategorisinden gelir; diğer kategorilerde kapalı başlar, esnaf açabilir.
+create function public.default_rebook_days(p_category text)
+returns smallint
+language sql immutable set search_path = ''
+as $$
+  select (case p_category
+    when 'berber' then 28 when 'kuafor' then 42 when 'guzellik' then 30 when 'tirnak' then 21
+    when 'spa' then 30 when 'oto-yikama' then 30 when 'veteriner' then 45
+  end)::smallint;
+$$;
+
+create function public.businesses_rebook_default()
+returns trigger
+language plpgsql set search_path = ''
+as $$
+begin
+  if new.rebook_days is null and new.business_type = 'appointment' then
+    new.rebook_days := public.default_rebook_days(new.category);
+  end if;
+  return new;
+end;
+$$;
+
+create trigger businesses_rebook_default
+  before insert on public.businesses
+  for each row execute function public.businesses_rebook_default();
+
+-- "Zamanı geldi": müşterinin bir işletmedeki son randevusunun üzerinden işletmenin süresi (rebook_days) geçince
+-- "Yine randevu alalım mı?" (uygulama içi + e-posta). Son randevu başına bir kez; 3 günden eski süreye gitmez.
+-- Gitmez: işletmede yaklaşan randevusu ya da sonraki bir randevusu varsa, müşteri kapattıysa (rebook_reminders),
+-- işletme engellediyse veya randevu alamıyorsa. İşletme saatiyle 10:00-20:00 arasında gönderilir. Eklenen sayı döner.
+create function public.queue_rebook_reminders()
+returns int
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  a   public.appointments;
+  v_n int := 0;
+  v_i int;
+begin
+  for a in
+    select ap.* from public.appointments ap
+    join public.businesses b on b.id = ap.business_id
+    join public.profiles p on p.id = ap.customer_id
+    where ap.status in ('confirmed', 'completed')
+      and b.rebook_days is not null
+      and ap.ends_at > now() - interval '1 year'
+      and ap.ends_at + make_interval(days => b.rebook_days) <= now()
+      and ap.ends_at + make_interval(days => b.rebook_days) > now() - interval '3 days'
+      and extract(hour from now() at time zone b.timezone) between 10 and 19
+      and p.rebook_reminders
+      and public.is_bookable(b.id)
+      and not exists (
+        select 1 from public.appointments x
+        where x.business_id = ap.business_id and x.customer_id = ap.customer_id and x.id <> ap.id
+          and (x.starts_at > ap.starts_at and x.status <> 'cancelled'
+               or x.status in ('pending', 'confirmed') and x.ends_at > now())
+      )
+      and not exists (
+        select 1 from public.blocked_customers k
+        where k.business_id = ap.business_id
+          and (k.customer_id = ap.customer_id
+               or k.phone_key = right(regexp_replace(ap.customer_phone, '\D', '', 'g'), 10))
+      )
+      and not exists (select 1 from public.inbox i where i.appointment_id = ap.id and i.kind = 'rebook')
+  loop
+    if a.customer_email is not null then
+      insert into public.notifications (appointment_id, kind, recipient, email)
+      values (a.id, 'rebook', 'customer', a.customer_email)
+      on conflict do nothing;
+    end if;
+    v_i := public.inbox_insert(a.customer_id, 'rebook', 'customer', a);
+    v_n := v_n + v_i;
+  end loop;
+  return v_n;
+end;
+$$;
+
+revoke execute on function public.queue_rebook_reminders() from public, anon, authenticated;
+
+-- Doğum günü kuponu: esnafın açtığı indirimle (businesses.birthday_discount_*) müşteriye kendine özel, tek kişilik
+-- bir kupon üretilir. Kupon durdurulmuş (is_active = false) açılır: herkese görünmez, başkası alamaz; kod müşterinin
+-- "Kuponlarım"ında ve randevu kutusunda çalışır. Yıl başına işletme-müşteri çiftine bir kez (birthday_gifts).
+create table public.birthday_gifts (
+  business_id uuid not null references public.businesses (id) on delete cascade,
+  customer_id uuid not null references public.profiles (id) on delete cascade,
+  year        int not null,
+  coupon_id   uuid references public.coupons (id) on delete set null,
+  created_at  timestamptz not null default now(),
+  primary key (business_id, customer_id, year)
+);
+alter table public.birthday_gifts enable row level security;
+create policy "doğum günü: sahibi okur" on public.birthday_gifts
+  for select using ((select public.is_business_owner(business_id)));
+
+-- p_today'den sonraki (ya da bugünkü) doğum günü. 29 Şubat artık olmayan yılda 28 Şubat sayılır.
+create function public.next_birthday(p_month int, p_day int, p_today date)
+returns date
+language sql immutable set search_path = ''
+as $$
+  select case when d >= p_today then d
+              else make_date(y + 1, p_month, least(p_day, extract(day from make_date(y + 1, p_month, 1) + interval '1 month - 1 day')::int))
+         end
+  from (select extract(year from p_today)::int y) yy,
+       lateral (select make_date(y, p_month, least(p_day, extract(day from make_date(y, p_month, 1) + interval '1 month - 1 day')::int)) d) dd;
+$$;
+
+-- Sunucu dakikada bir çağırır: doğum gününe 3 gün kalan (ya da bugün doğum günü olan) müşterilere kuponu üretir ve
+-- haber için döndürür. Müşteri bu işletmede son 2 yılda randevusu gerçekleşmiş ya da işletmeyi favorilemiş olmalı.
+-- Kupon bugünden doğum gününden 7 gün sonrasına kadar geçerlidir. Bildirim tekrar denenmez; kupon "Kuponlarım"da kalır.
+create function public.claim_birthday_gifts(p_limit int default 50)
+returns table (
+  id             uuid,
+  email          text,
+  customer_name  text,
+  business_name  text,
+  business_slug  text,
+  discount_type  text,
+  discount_value numeric,
+  ends_on        date,
+  tokens         text[]
+)
+language plpgsql volatile security definer set search_path = ''
+as $$
+#variable_conflict use_column
+declare
+  r       record;
+  v_cid   uuid;
+  v_code  text;
+  v_try   int;
+  v_n     int := 0;
+  v_title text;
+begin
+  for r in
+    select b.id business_id, b.name, b.slug, b.birthday_discount_type, b.birthday_discount_value, p.id customer_id,
+           p.full_name, t.today, public.next_birthday(p.birth_month, p.birth_day, t.today) bday
+    from public.businesses b
+    cross join lateral (select (now() at time zone b.timezone)::date today) t
+    join public.profiles p on p.birth_month is not null
+    where b.birthday_discount_type is not null
+      and public.is_bookable(b.id)
+      and public.plan_has_feature(b.id, 'coupons')
+      and public.next_birthday(p.birth_month, p.birth_day, t.today) - t.today <= 3
+      and (exists (select 1 from public.appointments a
+                   where a.business_id = b.id and a.customer_id = p.id and a.starts_at > now() - interval '2 years'
+                     and (a.status = 'completed' or (a.status = 'confirmed' and a.ends_at <= now())))
+           or exists (select 1 from public.favorites f where f.business_id = b.id and f.customer_id = p.id))
+      and not exists (select 1 from public.blocked_customers k where k.business_id = b.id and k.customer_id = p.id)
+      and not exists (
+        select 1 from public.birthday_gifts g
+        where g.business_id = b.id and g.customer_id = p.id
+          and g.year = extract(year from public.next_birthday(p.birth_month, p.birth_day, t.today))::int
+      )
+    limit p_limit
+  loop
+    v_title := 'Doğum gününüz kutlu olsun';
+    insert into public.coupons (business_id, title, discount_type, discount_value, starts_on, ends_on, total_limit,
+                                is_active, is_birthday, claimed_count)
+    values (r.business_id, v_title, r.birthday_discount_type, r.birthday_discount_value, r.today, r.bday + 7, 1,
+            false, true, 1)
+    returning coupons.id into v_cid;
+    v_try := 0;
+    loop
+      v_code := lpad(floor(random() * 1000000)::int::text, 6, '0');
+      exit when not exists (select 1 from public.coupon_claims cl where cl.business_id = r.business_id and cl.code = v_code);
+      v_try := v_try + 1;
+      if v_try > 50 then raise exception 'Kod oluşturulamadı.'; end if;
+    end loop;
+    insert into public.coupon_claims (coupon_id, business_id, customer_id, code)
+    values (v_cid, r.business_id, r.customer_id, v_code);
+    insert into public.birthday_gifts (business_id, customer_id, year, coupon_id)
+    values (r.business_id, r.customer_id, extract(year from r.bday)::int, v_cid);
+
+    id := v_cid;
+    select u.email::text into email from auth.users u where u.id = r.customer_id;
+    customer_name := r.full_name;
+    business_name := r.name;
+    business_slug := r.slug;
+    discount_type := r.birthday_discount_type;
+    discount_value := r.birthday_discount_value;
+    ends_on := r.bday + 7;
+    tokens := coalesce((select array_agg(pt.token) from public.push_tokens pt where pt.user_id = r.customer_id), '{}');
+    return next;
+  end loop;
+end;
+$$;
+
+revoke execute on function public.claim_birthday_gifts(int) from public, anon, authenticated;
+
+-- Esnafın doğum günü kuponu özeti (yalnızca sahibi): bu yıl gönderilen ve kullanılan.
+create function public.business_birthday_summary(p_business_id uuid)
+returns jsonb
+language plpgsql stable security definer set search_path = ''
+as $$
+declare
+  v_tz text;
+begin
+  if not public.is_business_owner(p_business_id) then raise exception 'Bu işlem için yetkiniz yok.'; end if;
+  select timezone into v_tz from public.businesses where id = p_business_id;
+  return (
+    select jsonb_build_object(
+      'sent', count(*),
+      'used', count(*) filter (where cl.id is not null and public.coupon_claim_used(cl))
+    )
+    from public.birthday_gifts g
+    left join public.coupon_claims cl on cl.coupon_id = g.coupon_id
+    where g.business_id = p_business_id and g.year = extract(year from now() at time zone v_tz)::int
+  );
 end;
 $$;
 

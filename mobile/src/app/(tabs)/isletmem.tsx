@@ -315,6 +315,9 @@ function Hub({ business }: { business: Business }) {
         <SectionTitle title="Performans ve hesap" />
         <Group>
           {!showcase && (
+            <ListRow icon="wallet-outline" title="Kasa" subtitle="Ödemeleri işaretleyin; gün sonu ve personel primi" disabled={locked} onPress={() => router.push('/yonetim/kasa')} />
+          )}
+          {!showcase && (
             <ListRow
               icon="bar-chart-outline"
               title="Raporlar"

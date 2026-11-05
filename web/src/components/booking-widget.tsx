@@ -4,7 +4,8 @@ import Link from "next/link";
 import posthog from "posthog-js";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { BellRing, CalendarPlus, ChevronLeft, Loader2 } from "lucide-react";
+import { BellRing, ChevronLeft, Loader2 } from "lucide-react";
+import { AddToCalendar } from "@/components/add-to-calendar";
 import { AppointmentTicket } from "@/components/appointment-ticket";
 import { bookableDays, DayStrip, SlotGrid } from "@/components/slot-picker";
 import { couponFits, couponPrice, formatDiscount, formatMoney } from "@/lib/coupons";
@@ -16,7 +17,6 @@ import {
   formatDuration,
   formatPrice,
   formatTime,
-  googleCalendarLink,
   todayStr,
 } from "@/lib/format";
 import type { Business, Service, Staff, StaffService, WorkingHour } from "@/lib/types";
@@ -214,19 +214,13 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
           {booked === "confirmed" ? "Randevunuz onaylandı." : "İşletme randevunuzu onayladığında kesinleşecek."}
         </p>
         <div className="mt-5 flex flex-wrap justify-center gap-3">
-          <a
-            href={googleCalendarLink(
-              `${business.name} — ${service.name}`,
-              time,
-              new Date(new Date(time).getTime() + service.duration_minutes * 60000).toISOString(),
-              [business.address, business.district, business.city].filter(Boolean).join(", "),
-            )}
-            target="_blank"
-            rel="noreferrer"
+          <AddToCalendar
+            title={`${business.name} — ${service.name}`}
+            startsAt={time}
+            endsAt={new Date(new Date(time).getTime() + service.duration_minutes * 60000).toISOString()}
+            location={[business.name, business.address, business.district, business.city].filter(Boolean).join(", ")}
             className="btn btn-secondary"
-          >
-            <CalendarPlus className="size-4" /> Takvime ekle
-          </a>
+          />
           <Link href="/hesabim" className="btn btn-primary">Randevularım</Link>
           <button
             className="btn btn-secondary"

@@ -6,7 +6,7 @@ import { supabase } from './supabase';
 
 export type InboxItem = {
   id: string;
-  kind: 'booked' | 'confirmed' | 'cancelled' | 'rescheduled' | 'reminder' | 'review' | 'reviewed';
+  kind: 'booked' | 'confirmed' | 'cancelled' | 'rescheduled' | 'reminder' | 'review' | 'reviewed' | 'rebook';
   recipient: 'customer' | 'business';
   appointment_id: string;
   title: string;

@@ -16,7 +16,7 @@ import { TopBar, useScrollY } from '@/components/top-bar';
 import { Badge, Button, Card, Empty, ScreenHeader, Segmented, Skeleton, StatusBadge, styles, Text } from '@/components/ui';
 import { STATUS } from '@/lib/constants';
 import { formatMoney } from '@/lib/coupons';
-import { errorMessage, formatDate, formatTime, mapsLink, relativeDay, dayOf, shortDay } from '@/lib/format';
+import { errorMessage, formatDate, formatTime, googleCalendarLink, mapsLink, relativeDay, dayOf, shortDay } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import { colors, radius } from '@/lib/theme';
 import type { Appointment, MyCoupon } from '@/lib/types';
@@ -275,6 +275,17 @@ function AppointmentCard({
                 <Button title="Ara" icon="call-outline" variant="secondary" size="sm" style={{ flex: 1 }} onPress={() => Linking.openURL(`tel:${b.phone}`)} />
               ) : null}
             </View>
+          ) : null}
+          {b && (item.status === 'confirmed' || item.status === 'pending') ? (
+            <Button
+              title="Takvime ekle"
+              icon="calendar-outline"
+              variant="secondary"
+              size="sm"
+              onPress={() =>
+                Linking.openURL(googleCalendarLink(`${b.name}: ${item.service_name}`, item.starts_at, item.ends_at, [b.name, place].filter(Boolean).join(', ')))
+              }
+            />
           ) : null}
           <CustomerLateButton appointment={item} onDone={onLate} />
           <View style={{ flexDirection: 'row', gap: 8 }}>

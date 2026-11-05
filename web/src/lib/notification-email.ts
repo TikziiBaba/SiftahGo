@@ -1,13 +1,13 @@
 import { SUPPORT_CATEGORIES } from "@/lib/constants";
 import { formatMoney } from "@/lib/coupons";
 import { formatDate, formatTime } from "@/lib/format";
-import type { CouponReviewNotice, CouponReviewRequest, DelayNotice, WaitlistNotice } from "@/lib/push";
+import type { BirthdayGift, CouponReviewNotice, CouponReviewRequest, DelayNotice, WaitlistNotice } from "@/lib/push";
 import type { AppointmentStatus, SupportCategory, SupportStatus } from "@/lib/types";
 
 /** claim_notifications satırı */
 export type QueuedNotification = {
   id: string;
-  kind: "booked" | "confirmed" | "cancelled" | "rescheduled" | "reminder" | "reminder_soon" | "review";
+  kind: "booked" | "confirmed" | "cancelled" | "rescheduled" | "reminder" | "reminder_soon" | "review" | "rebook";
   recipient: "customer" | "business";
   email: string;
   customer_name: string;
@@ -156,6 +156,19 @@ function content(n: QueuedNotification, appUrl: string): Content {
         ],
         action: { label: "Değerlendir", href: `${appUrl}/hesabim` },
       };
+    case "rebook":
+      return {
+        subject: `Yine randevu alalım mı? ${n.business_name}`,
+        title: "Yine randevu alalım mı?",
+        intro: `Merhaba ${n.customer_name.split(" ")[0]}, ${n.business_name} işletmesindeki son randevunuzun üzerinden bir süre geçti. Uygun bir saat bulmak birkaç saniye sürer.`,
+        rows: [
+          ["İşletme", n.business_name],
+          ["Son hizmet", n.service_name],
+          ["Son randevu", when],
+        ],
+        action: { label: "Randevu al", href: `${appUrl}/${n.business_slug}#randevu` },
+        footer: "Bu hatırlatmaları SiftahGo hesabınızdan (Hesabım) kapatabilirsiniz.",
+      };
     case "reminder":
       return {
         subject: `Hatırlatma: ${n.business_name}, ${when}`,
@@ -207,6 +220,24 @@ export function buildCouponReviewRequestEmail(n: CouponReviewRequest & { email: 
     rows: [["İşletme", n.business_name]],
     action: { label: "Puan ver", href: `${appUrl}/hesabim?sekme=kuponlar` },
     footer: "Bu e-posta SiftahGo kuponunuzu kullandığınız için gönderildi.",
+  });
+}
+
+/** Müşteriye: doğum günü kuponu hediye edildi. */
+export function buildBirthdayEmail(n: BirthdayGift & { email: string }, appUrl: string) {
+  const discount = n.discount_type === "percent" ? `%${Number(n.discount_value)}` : formatMoney(Number(n.discount_value));
+  const first = n.customer_name.trim().split(" ")[0];
+  return render(n.email, {
+    subject: `Doğum gününüz kutlu olsun! ${n.business_name} size ${discount} indirim hediye etti`,
+    title: "Doğum gününüz kutlu olsun!",
+    intro: `Merhaba${first ? ` ${first}` : ""}, ${n.business_name} doğum gününüz için size özel bir indirim hazırladı. Kupon hesabınıza eklendi; randevu alırken seçmeniz yeterli.`,
+    rows: [
+      ["İşletme", n.business_name],
+      ["İndirim", discount],
+      ["Son gün", formatDate(n.ends_on)],
+    ],
+    action: { label: "Randevu al", href: `${appUrl}/${n.business_slug}#randevu` },
+    footer: "Bu e-posta, SiftahGo hesabınıza doğum gününüzü eklediğiniz için gönderildi.",
   });
 }
 

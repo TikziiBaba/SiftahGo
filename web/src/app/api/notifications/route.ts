@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { COMPANY } from "@/lib/company";
 import { emailConfigured, sendEmail } from "@/lib/email";
 import {
+  buildBirthdayEmail,
   buildCouponReviewNoticeEmail,
   buildCouponReviewRequestEmail,
   buildDelayEmail,
@@ -12,11 +13,13 @@ import {
   type QueuedSupportEmail,
 } from "@/lib/notification-email";
 import {
+  sendBirthdayGiftPushes,
   sendCouponReviewNoticePushes,
   sendCouponReviewRequestPushes,
   sendDelayPushes,
   sendQueuedPushes,
   sendWaitlistPushes,
+  type BirthdayGift,
   type CouponReviewNotice,
   type CouponReviewRequest,
   type DelayNotice,
@@ -45,6 +48,8 @@ export async function GET(request: Request) {
   if (queueError) console.error("Hatırlatmalar kuyruğa eklenemedi", queueError.message);
   const { data: reviewRequests, error: reviewError } = await supabase.rpc("queue_review_requests");
   if (reviewError) console.error("Değerlendirme istekleri kuyruğa eklenemedi", reviewError.message);
+  const { data: rebooks, error: rebookError } = await supabase.rpc("queue_rebook_reminders");
+  if (rebookError) console.error("Zamanı geldi hatırlatmaları kuyruğa eklenemedi", rebookError.message);
 
   // E-postalar yavaş gönderildiği için anlık bildirimler önce gider.
   const push = await sendQueuedPushes(supabase).catch((e: unknown) => {
@@ -77,8 +82,14 @@ export async function GET(request: Request) {
     notices: await sendCouponReviewNoticePushes(supabase, reviewNotices),
   };
 
+  // Doğum günü kuponu: kupon üretilip müşteriye haber verilir. Alınan haber tekrar denenmez.
+  const { data: birthdayData, error: birthdayError } = await supabase.rpc("claim_birthday_gifts", { p_limit: 50 });
+  if (birthdayError) console.error("Doğum günü kuponları üretilemedi", birthdayError.message);
+  const birthdays = (birthdayData ?? []) as BirthdayGift[];
+  const birthdayPush = await sendBirthdayGiftPushes(supabase, birthdays);
+
   if (!emailConfigured()) {
-    return Response.json({ push, waitlistPush, delayPush, couponReviewPush, error: "RESEND_API_KEY ve EMAIL_FROM tanımlı değil." }, { status: 503 });
+    return Response.json({ push, waitlistPush, delayPush, couponReviewPush, birthdayPush, error: "RESEND_API_KEY ve EMAIL_FROM tanımlı değil." }, { status: 503 });
   }
 
   const { data, error } = await supabase.rpc("claim_notifications", { p_limit: 20 });
@@ -152,6 +163,18 @@ export async function GET(request: Request) {
     }
   }
 
+  for (const g of birthdays) {
+    if (!g.email) continue;
+    if (sent + failed > 0) await new Promise((res) => setTimeout(res, 600));
+    try {
+      await sendEmail(`birthday-${g.id}`, buildBirthdayEmail({ ...g, email: g.email }, appUrl));
+      sent++;
+    } catch (e) {
+      console.error("Doğum günü e-postası gönderilemedi", g.id, e instanceof Error ? e.message : String(e));
+      failed++;
+    }
+  }
+
   // Destek talepleri: kullanıcının mesajı destek adresine, ekibin yanıtı kullanıcıya.
   const { data: supportData, error: supportError } = await supabase.rpc("claim_support_emails", { p_limit: 10 });
   if (supportError) console.error("Destek e-postaları alınamadı", supportError.message);
@@ -173,6 +196,8 @@ export async function GET(request: Request) {
   return Response.json({
     reminders: reminders ?? 0,
     reviewRequests: reviewRequests ?? 0,
+    rebooks: rebooks ?? 0,
+    birthdays: birthdays.length,
     waitlist: waitlist.length,
     delays: delays.length,
     couponReviewRequests: couponRequests.length,
@@ -184,5 +209,6 @@ export async function GET(request: Request) {
     waitlistPush,
     delayPush,
     couponReviewPush,
+    birthdayPush,
   });
 }

@@ -24,6 +24,8 @@ const NOTICE_OPTIONS = [
   [1440, '1 gün önce'],
 ] as const;
 const BOOKING_DAYS = [7, 14, 30, 60, 90, 180, 365];
+// "Zamanı geldi" süreleri (gün); web ile aynı. Veritabanı 7-180 arası kabul eder.
+const REBOOK_OPTIONS = [14, 21, 28, 35, 42, 56, 60, 90];
 
 export default function RulesScreen() {
   const { business } = useAuth();
@@ -40,6 +42,7 @@ function Rules({ business }: { business: Business }) {
     auto_confirm: business.auto_confirm,
     auto_confirm_known_only: business.auto_confirm_known_only,
     is_published: business.is_published,
+    rebook_days: business.rebook_days,
   });
   const [error, setError] = useState('');
   const dirty = (Object.keys(form) as (keyof typeof form)[]).some((k) => form[k] !== business[k]);
@@ -118,6 +121,20 @@ function Rules({ business }: { business: Business }) {
         <Text variant="caption" tone="muted">
           Sık iptal eden veya randevusuna gelmeyen müşterilerin randevusu her durumda onayınıza düşer. Reddederken yazdığınız sebep müşteriye
           iletilir.
+        </Text>
+
+        <SectionTitle title="“Zamanı geldi” hatırlatması" />
+        <View style={styles.wrap}>
+          <Chip label="Kapalı" selected={form.rebook_days === null} onPress={() => set({ rebook_days: null })} />
+          {(REBOOK_OPTIONS.includes(form.rebook_days ?? 0) || form.rebook_days === null
+            ? REBOOK_OPTIONS
+            : [...REBOOK_OPTIONS, form.rebook_days].sort((a, b) => a - b)
+          ).map((d) => (
+            <Chip key={d} label={d % 7 === 0 ? `${d / 7} hafta` : `${d} gün`} selected={form.rebook_days === d} onPress={() => set({ rebook_days: d })} />
+          ))}
+        </View>
+        <Text variant="caption" tone="muted">
+          Müşterinin son randevusunun üzerinden bu süre geçince, yeni randevusu yoksa ona “Yine randevu alalım mı?” bildirimi ve e-postası gider.
         </Text>
 
         <Card style={{ padding: 0, marginTop: 8 }}>

@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { AlarmClock, Bell, CalendarClock, CalendarPlus, CheckCircle2, MessageSquareText, Star, XCircle, type LucideIcon } from "lucide-react";
+import { AlarmClock, Bell, CalendarClock, CalendarPlus, CheckCircle2, MessageSquareText, RotateCcw, Star, XCircle, type LucideIcon } from "lucide-react";
 import { loadClient } from "@/lib/supabase/lazy";
 import { useAccount } from "@/lib/use-account";
 import { formatTime, todayStr } from "@/lib/format";
 
 type Item = {
   id: string;
-  kind: "booked" | "confirmed" | "cancelled" | "rescheduled" | "reminder" | "review" | "reviewed";
+  kind: "booked" | "confirmed" | "cancelled" | "rescheduled" | "reminder" | "review" | "reviewed" | "rebook";
   recipient: "customer" | "business";
   title: string;
   body: string;
@@ -25,6 +25,7 @@ const KIND: Record<Item["kind"], { icon: LucideIcon; className: string }> = {
   reminder: { icon: AlarmClock, className: "bg-gold/10 text-gold" },
   review: { icon: Star, className: "bg-gold/10 text-gold" },
   reviewed: { icon: MessageSquareText, className: "bg-gold/10 text-gold" },
+  rebook: { icon: RotateCcw, className: "bg-brand-400/10 text-accent" },
 };
 
 /** Bugünkü bildirimde saat, daha eskide "12 Eki" */
@@ -137,7 +138,7 @@ export function InboxBell({ showcase = false }: { showcase?: boolean }) {
                 return (
                   <li key={item.id}>
                     <Link
-                      href={item.kind === "reviewed" ? "/panel/yorumlar" : item.recipient === "business" ? "/panel" : "/hesabim"}
+                      href={item.kind === "reviewed" ? "/panel/yorumlar" : item.recipient === "business" ? "/panel" : item.kind === "rebook" ? "/hesabim?sekme=gecmis" : "/hesabim"}
                       onClick={() => setOpen(false)}
                       className={`flex items-start gap-3 px-4 py-3 transition-colors hover:bg-tint/[0.04] ${isNew ? "bg-brand-400/[0.05]" : ""}`}
                     >

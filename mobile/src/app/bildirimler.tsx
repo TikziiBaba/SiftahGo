@@ -23,6 +23,7 @@ const KIND: Record<InboxItem['kind'], { icon: IconName; fg: string; bg: string }
   reminder: { icon: 'alarm', fg: colors.gold, bg: colors.goldTint },
   review: { icon: 'star', fg: colors.gold, bg: colors.goldTint },
   reviewed: { icon: 'chatbubble-ellipses', fg: colors.gold, bg: colors.goldTint },
+  rebook: { icon: 'repeat', fg: colors.brand300, bg: colors.brandTint },
 };
 
 /** Bugünkü bildirimde saat, dün "Dün", daha eskide "12 Eki" */

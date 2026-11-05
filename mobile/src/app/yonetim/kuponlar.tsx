@@ -5,7 +5,7 @@ import { CouponForm } from '@/components/coupon-form';
 import { CouponRedeem } from '@/components/coupon-redeem';
 import { KeyboardScreen } from '@/components/keyboard-screen';
 import { PlanGate } from '@/components/plan-gate';
-import { Badge, Banner, Button, Card, Empty, IconButton, LoadError, Skeleton, styles, Text } from '@/components/ui';
+import { Badge, Banner, Button, Card, Chip, Empty, Field, IconButton, LoadError, Skeleton, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { isShowcase } from '@/lib/constants';
 import { formatCouponWhen, formatDiscount } from '@/lib/coupons';
@@ -23,6 +23,67 @@ export default function CouponsScreen() {
         <Coupons business={business} />
       </PlanGate>
     </View>
+  );
+}
+
+// Doğum günü kuponu (web ile aynı): müşterinin doğum gününe 3 gün kala kendine özel kupon gider.
+function BirthdayCoupon({ business }: { business: Business }) {
+  const { refresh } = useAuth();
+  const on = business.birthday_discount_type !== null;
+  const [type, setType] = useState<'percent' | 'fixed'>(business.birthday_discount_type ?? 'percent');
+  const [value, setValue] = useState(String(business.birthday_discount_value ?? 20));
+  const [summary, setSummary] = useState<{ sent: number; used: number } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    supabase
+      .rpc('business_birthday_summary', { p_business_id: business.id })
+      .then(({ data }) => setSummary(data as { sent: number; used: number } | null));
+  }, [business.id]);
+
+  async function save(enable: boolean) {
+    setError('');
+    const n = Number(value.replace(',', '.'));
+    if (enable && (!Number.isFinite(n) || n <= 0 || (type === 'percent' && (n < 1 || n > 90)))) {
+      return setError(type === 'percent' ? 'Yüzde 1 ile 90 arasında olmalı.' : 'Tutarı girin.');
+    }
+    setBusy(true);
+    const { error } = await supabase
+      .from('businesses')
+      .update(enable ? { birthday_discount_type: type, birthday_discount_value: n } : { birthday_discount_type: null, birthday_discount_value: null })
+      .eq('id', business.id);
+    setBusy(false);
+    if (error) return setError(errorMessage(error));
+    refresh();
+  }
+
+  return (
+    <Card style={{ gap: 10 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Text variant="bodyStrong" style={{ flex: 1 }}>
+          Doğum günü kuponu
+        </Text>
+        {on && <Badge label="Açık" fg={colors.success} />}
+      </View>
+      <Text variant="caption" tone="muted">
+        Doğum gününü ekleyen müşterilerinize (randevusu gerçekleşmiş ya da sizi favorilemiş) doğum gününe 3 gün kala kendine özel kupon gider;
+        doğum gününden 7 gün sonrasına kadar geçerlidir.
+      </Text>
+      {summary && summary.sent > 0 && (
+        <Text variant="caption">
+          Bu yıl {summary.sent} müşteriye gönderildi, {summary.used} tanesi kullanıldı.
+        </Text>
+      )}
+      <View style={styles.wrap}>
+        <Chip label="Yüzde" selected={type === 'percent'} onPress={() => setType('percent')} />
+        <Chip label="Tutar (₺)" selected={type === 'fixed'} onPress={() => setType('fixed')} />
+      </View>
+      <Field label={type === 'percent' ? 'İndirim (%)' : 'İndirim (₺)'} keyboardType="decimal-pad" value={value} onChangeText={setValue} maxLength={6} />
+      {error ? <Banner tone="danger" icon="alert-circle-outline" text={error} /> : null}
+      <Button title={on ? 'Güncelle' : 'Aç'} icon="gift-outline" loading={busy} onPress={() => save(true)} />
+      {on && <Button title="Kapat" variant="secondary" disabled={busy} onPress={() => save(false)} />}
+    </Card>
   );
 }
 
@@ -92,6 +153,7 @@ function Coupons({ business }: { business: Business }) {
         {error ? <Banner tone="danger" icon="alert-circle-outline" text={error} /> : null}
 
         <CouponRedeem businessId={business.id} onChange={load} />
+        <BirthdayCoupon business={business} />
 
         {editing && (
           <CouponForm

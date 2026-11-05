@@ -78,7 +78,7 @@ type Target = { kind?: string; recipient: string; appointmentId?: string; starts
 export async function openNotificationTarget({ kind, recipient, appointmentId, startsAt, slug, day, businessAccount, showcase }: Target) {
   // Vitrin müşterisine "Nasıldı?": kupon listesi, oradan değerlendirilir. Eski uygulamalar bu türü tanımaz ve
   // müşteri randevuları ekranını açar (çökmez).
-  if (kind === 'coupon_review') return router.navigate('/kuponlarim');
+  if (kind === 'coupon_review' || kind === 'birthday') return router.navigate('/kuponlarim');
   if (kind === 'waitlist' && slug) return router.navigate({ pathname: '/isletme/[slug]', params: { slug, ...(day ? { day } : {}) } });
   if (recipient !== 'business') return businessAccount ? router.push('/randevularim') : openTab('/randevular');
   if (kind === 'reviewed') return router.navigate('/yonetim/yorumlar');

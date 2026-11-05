@@ -2109,5 +2109,104 @@ ok((await db.query(`select role from profiles where id = $1`, [UP2])).rows[0].ro
 await as(UP2, `insert into businesses (owner_id, slug, name, city, category) values ($1, 'musteriden-esnaf', 'Yeni Dükkân', 'Sivas', 'berber')`, [UP2]);
 ok((await db.query(`select role from profiles where id = $1`, [UP2])).rows[0].role === 'business', 'başvuruyla hesap işletmeye döner');
 
+// Kasa, prim, "zamanı geldi" ve doğum günü kuponu
+{
+  const RO = 'bbbbbbbb-0000-4000-8000-000000000001', RO2 = 'bbbbbbbb-0000-4000-8000-000000000002';
+  const R1 = 'bbbbbbbb-0000-4000-8000-000000000011', R2 = 'bbbbbbbb-0000-4000-8000-000000000012', R3 = 'bbbbbbbb-0000-4000-8000-000000000013';
+  await db.exec(`
+    insert into auth.users values ('${RO}', 'ro@x.com', '{"full_name":"Zaman Usta","role":"business"}');
+    insert into auth.users values ('${RO2}', 'ro2@x.com', '{"full_name":"Dövme Usta","role":"business"}');
+    insert into auth.users values ('${R1}', 'r1@x.com', '{"full_name":"Bir Müşteri","phone":"05551000001"}');
+    insert into auth.users values ('${R2}', 'r2@x.com', '{"full_name":"İki Müşteri","phone":"05551000002"}');
+    insert into auth.users values ('${R3}', 'r3@x.com', '{"full_name":"Üç Müşteri","phone":"05551000003"}');
+  `);
+  // Hatırlatma işletme saatiyle 10:00-20:00 arası gider: test her saatte çalışsın diye saati öğlene denk gelen bölge.
+  const off = 12 - new Date().getUTCHours();
+  const tz = off === 0 ? 'UTC' : off > 0 ? `Etc/GMT-${off}` : `Etc/GMT+${-off}`;
+  const zb = (await as(RO, `insert into businesses (owner_id, slug, name, city, category, timezone) values ($1, 'zaman-berber', 'Zaman Berber', 'Sivas', 'berber', $2) returning id, rebook_days`, [RO, tz])).rows[0];
+  const db2 = (await as(RO2, `insert into businesses (owner_id, slug, name, city, category) values ($1, 'zaman-dovme', 'Zaman Dövme', 'Sivas', 'dovme') returning id, rebook_days`, [RO2])).rows[0];
+  ok(zb.rebook_days === 28 && db2.rebook_days === null, 'yeni berberde "zamanı geldi" 28 gün, dövmecide kapalı');
+  await db.query(`update businesses set approval_status = 'approved', plan_id = 'esnaf', subscription_ends_at = now() + interval '1 year' where id in ($1, $2)`, [zb.id, db2.id]);
+  const zstaff = (await db.query(`select id from staff where business_id = $1`, [zb.id])).rows[0].id;
+  const past = (uid, daysAgo, status = 'completed', phone = '05551000001') => db.query(
+    `insert into appointments (business_id, customer_id, customer_email, service_name, customer_name, customer_phone, price, starts_at, ends_at, status)
+     values ($1, $2, 'm@x.com', 'Saç Kesimi', 'Müşteri', $3, 300, now() - make_interval(days => $4), now() - make_interval(days => $4) + interval '30 minutes', $5) returning id`,
+    [zb.id, uid, phone, daysAgo, status]);
+
+  // "Zamanı geldi"
+  const a1 = (await past(R1, 29)).rows[0].id;
+  await past(R1, 60);
+  await past(R2, 29, 'completed', '05551000002');
+  await db.query(`insert into appointments (business_id, customer_id, service_name, customer_name, customer_phone, starts_at, ends_at, status)
+                  values ($1, $2, 'Saç Kesimi', 'İki', '05551000002', now() + interval '3 days', now() + interval '3 days 30 minutes', 'confirmed')`, [zb.id, R2]);
+  await past(R3, 29, 'completed', '05551000003');
+  await as(R3, `update profiles set rebook_reminders = false where id = $1`, [R3]);
+  await expectError(() => as(RO, `select queue_rebook_reminders()`), /permission denied/, '"zamanı geldi" kuyruğu istemciden çalıştırılamaz');
+  ok((await asService(`select queue_rebook_reminders() c`)).rows[0].c === 1, 'yalnızca son randevusu 28 günü geçen, yaklaşan randevusu olmayan ve kapatmayan müşteriye gider');
+  const rb = (await db.query(`select user_id, title, body from inbox where kind = 'rebook'`)).rows;
+  ok(rb.length === 1 && rb[0].user_id === R1 && rb[0].title === 'Yine randevu alalım mı?' && /Zaman Berber/.test(rb[0].body), 'uygulama içi "Yine randevu alalım mı?"');
+  ok((await db.query(`select count(*)::int c from notifications where kind = 'rebook' and appointment_id = $1`, [a1])).rows[0].c === 1, 'e-posta kuyruğa girdi');
+  ok((await asService(`select queue_rebook_reminders() c`)).rows[0].c === 0, 'ikinci kez gitmez');
+  await db.query(`update businesses set rebook_days = null where id = $1`, [zb.id]);
+  await db.query(`delete from inbox where kind = 'rebook'`);
+  ok((await asService(`select queue_rebook_reminders() c`)).rows[0].c === 0, 'esnaf kapatınca gitmez');
+  await expectError(() => as(RO, `update businesses set rebook_days = 3 where id = $1`, [zb.id]), /check/, 'süre en az 7 gün');
+  await as(RO, `update businesses set rebook_days = 35 where id = $1`, [zb.id]);
+
+  // Kasa
+  await as(RO, `update appointments set payment_method = 'cash' where id = $1`, [a1]);
+  let k = (await db.query(`select payment_method, paid_amount::text, paid_at from appointments where id = $1`, [a1])).rows[0];
+  ok(k.payment_method === 'cash' && k.paid_amount === '300.00' && k.paid_at, 'ödeme işaretlenince tutar fiyattan, an yazılır');
+  await as(RO, `update appointments set payment_method = 'card', paid_amount = 250 where id = $1`, [a1]);
+  const k2 = (await db.query(`select payment_method, paid_amount::text, paid_at from appointments where id = $1`, [a1])).rows[0];
+  ok(k2.payment_method === 'card' && k2.paid_amount === '250.00' && +k2.paid_at === +k.paid_at, 'şekil ve tutar düzeltilir, ödeme anı değişmez');
+  await expectError(() => as(RO, `update appointments set payment_method = 'altin' where id = $1`, [a1]), /check/, 'geçersiz ödeme şekli');
+  await expectError(() => as(RO, `update appointments set paid_amount = -5 where id = $1`, [a1]), /check/, 'eksi tutar girilemez');
+  await as(RO2, `update appointments set payment_method = null where id = $1`, [a1]);
+  ok((await db.query(`select payment_method from appointments where id = $1`, [a1])).rows[0].payment_method === 'card', 'başka esnaf ödemeyi değiştiremez');
+  await as(RO, `update appointments set status = 'no_show' where id = $1`, [a1]);
+  k = (await db.query(`select payment_method, paid_amount, paid_at from appointments where id = $1`, [a1])).rows[0];
+  ok(k.payment_method === null && k.paid_amount === null && k.paid_at === null, 'gelmedi işaretlenince ödeme silinir');
+  await as(RO, `update appointments set status = 'completed' where id = $1`, [a1]);
+
+  // Prim
+  await as(RO, `insert into staff_commissions (staff_id, business_id, percent) values ($1, $2, 40)`, [zstaff, zb.id]);
+  ok((await as(RO, `select percent::text p from staff_commissions where staff_id = $1`, [zstaff])).rows[0]?.p === '40.00', 'esnaf prim oranını yazar');
+  ok((await as(null, `select * from staff_commissions`)).rows.length === 0 && (await as(R1, `select * from staff_commissions`)).rows.length === 0,
+    'prim oranı herkese kapalı');
+  await expectError(() => as(RO2, `insert into staff_commissions (staff_id, business_id, percent) values ($1, $2, 10)`, [zstaff, db2.id]), /row-level/, 'başka işletmenin personeline prim yazılamaz');
+  const ostaff = (await db.query(`select id from staff where business_id = $1`, [db2.id])).rows[0].id;
+  await expectError(() => as(RO, `update staff_commissions set staff_id = $1 where staff_id = $2`, [ostaff, zstaff]), /row-level/, "prim satırı başka işletmenin personeline taşınamaz");
+  await expectError(() => as(RO, `update staff_commissions set percent = 120 where staff_id = $1`, [zstaff]), /check/, 'prim en fazla yüzde 100');
+
+  // Doğum günü
+  await expectError(() => as(R1, `update profiles set birth_month = 2, birth_day = 30 where id = $1`, [R1]), /check/, '30 Şubat girilemez');
+  await expectError(() => as(R1, `update profiles set birth_month = 2 where id = $1`, [R1]), /check/, 'ay ve gün birlikte girilir');
+  const nb = async (m, dd, t) => (await db.query(`select next_birthday($1, $2, $3::date)::text d`, [m, dd, t])).rows[0].d;
+  ok(await nb(2, 29, '2027-01-10') === '2027-02-28' && await nb(2, 29, '2028-01-10') === '2028-02-29' && await nb(1, 5, '2026-12-30') === '2027-01-05',
+    '29 Şubat ve yıl dönümü doğru hesaplanır');
+  ok((await as(RO, `select birth_month from profiles where id = $1`, [R1])).rows.length === 0, 'esnaf müşterinin doğum gününü göremez');
+  const local = (await db.query(`select ((now() at time zone $1)::date + 2)::text d`, [tz])).rows[0].d;
+  const [, bm, bd] = local.split('-').map(Number);
+  for (const u of [R1, R3]) await as(u, `update profiles set birth_month = $2, birth_day = $3 where id = $1`, [u, bm, bd]);
+  await db.query(`delete from appointments where customer_id = $1`, [R3]);
+  ok((await db.query(`select * from claim_birthday_gifts(50)`)).rows.length === 0, 'esnaf açmadıysa kupon üretilmez');
+  await expectError(() => as(RO, `update businesses set birthday_discount_type = 'percent', birthday_discount_value = 95 where id = $1`, [zb.id]), /check/, 'doğum günü indirimi en fazla yüzde 90');
+  await as(RO, `update businesses set birthday_discount_type = 'percent', birthday_discount_value = 20 where id = $1`, [zb.id]);
+  await expectError(() => as(RO, `select * from claim_birthday_gifts(50)`), /permission denied/, 'doğum günü kuyruğu istemciden çalıştırılamaz');
+  const gifts = (await db.query(`select * from claim_birthday_gifts(50)`)).rows;
+  ok(gifts.length === 1 && gifts[0].email === 'r1@x.com' && gifts[0].business_slug === 'zaman-berber' && Number(gifts[0].discount_value) === 20,
+    'yalnızca işletmenin müşterisine (randevusu olan) kupon üretilir');
+  ok((await db.query(`select * from claim_birthday_gifts(50)`)).rows.length === 0, 'aynı yıl ikinci kupon üretilmez');
+  const mine = (await as(R1, `select * from my_coupons()`)).rows.filter((c) => c.business_id === zb.id);
+  ok(mine.length === 1 && mine[0].state === 'active' && mine[0].discount_type === 'percent', 'kupon müşterinin Kuponlarım listesinde, kullanılabilir');
+  ok((await as(R3, `select * from coupons where business_id = $1`, [zb.id])).rows.length === 0, 'doğum günü kuponu başkasına görünmez');
+  ok((await as(RO, `select * from business_coupons($1)`, [zb.id])).rows.length === 0, 'esnafın kupon listesinde görünmez');
+  await expectError(() => as(RO, `select set_coupon_active($1, true)`, [gifts[0].id]), /yetkiniz/, 'doğum günü kuponu herkese açılamaz');
+  ok((await as(RO, `select business_birthday_summary($1) s`, [zb.id])).rows[0].s.sent === 1, 'esnaf özetinde gönderilen sayısı');
+  await as(R3, `insert into favorites (customer_id, business_id) values ($1, $2)`, [R3, zb.id]);
+  ok((await db.query(`select * from claim_birthday_gifts(50)`)).rows.length === 1, 'işletmeyi favorileyen müşteriye de gider');
+}
+
 console.log(failures ? `\n${failures} TEST BAŞARISIZ` : '\nTÜM TESTLER GEÇTİ');
 process.exit(failures ? 1 : 0);
