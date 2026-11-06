@@ -82,7 +82,7 @@ html:has(.theme-light),
   --color-ink-2: #44514e;
   --color-ink-3: #63706c;
   --color-tint: #0f1a19;
-  --color-gold: #b06f0c;
+  --color-gold: #9c620a; /* açık zeminde okunur kontrast (en az 4.5:1) */
   --color-logo-g: #0f766e;
   --color-logo-coin: #cc8400;
   --color-accent: var(--color-brand-700);

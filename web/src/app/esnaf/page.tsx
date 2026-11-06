@@ -68,7 +68,7 @@ export default function BusinessHome() {
         <FinalCta />
       </main>
       <SiteFooter />
-      <MobileCta href="/kayit?rol=isletme" label="İşletmeni aç" />
+      <MobileCta href="/kayit?rol=isletme&kaynak=mobil" label="İşletmeni aç" />
     </>
   );
 }
@@ -104,7 +104,7 @@ function Hero() {
           </Reveal>
           <Reveal onLoad delay={240}>
             <div className="mt-9 flex flex-wrap items-center gap-3">
-              <PrimaryCta href="/kayit?rol=isletme">İşletmeni aç</PrimaryCta>
+              <PrimaryCta href="/kayit?rol=isletme&kaynak=hero">İşletmeni aç</PrimaryCta>
               <Link
                 href="/kesfet"
                 className="btn btn-secondary px-6 py-3.5 text-base"
@@ -596,7 +596,7 @@ function Audiences() {
         "Ustalarınızın takvimini ayrı yönetin",
         "Günlük ciroyu anında görün",
       ],
-      cta: { href: "/kayit?rol=isletme", label: "İşletmeni ekle" },
+      cta: { href: "/kayit?rol=isletme&kaynak=ozellik", label: "İşletmeni ekle" },
       accent: true,
     },
     {
@@ -755,7 +755,7 @@ async function Pricing() {
                     })}
                   </ul>
                   <Link
-                    href="/kayit?rol=isletme"
+                    href="/kayit?rol=isletme&kaynak=fiyat"
                     className={`group btn relative mt-8 w-full py-2 pl-5 pr-1.5 ${popular ? "btn-primary" : "btn-secondary"}`}
                   >
                     <span className="flex-1 text-center">
@@ -812,7 +812,7 @@ async function ShowcasePlan() {
                   </li>
                 ))}
               </ul>
-              <Link href="/kayit?rol=isletme" className="group btn btn-primary relative mt-8 w-full py-2 pl-5 pr-1.5">
+              <Link href="/kayit?rol=isletme&kaynak=fiyat" className="group btn btn-primary relative mt-8 w-full py-2 pl-5 pr-1.5">
                 <span className="flex-1 text-center">Vitrin ile başla</span>
                 <span className="btn-icon">
                   <ArrowUpRight className="size-4" />
@@ -950,7 +950,7 @@ function FinalCta() {
             İlk 2 ay ücretsiz, taahhüt yok. Dakikalar içinde işletme sayfanız yayında.
           </p>
           <div className="relative mt-10 flex justify-center">
-            <PrimaryCta href="/kayit?rol=isletme">Hemen başla</PrimaryCta>
+            <PrimaryCta href="/kayit?rol=isletme&kaynak=alt">Hemen başla</PrimaryCta>
           </div>
         </div>
       </Reveal>

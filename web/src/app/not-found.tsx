@@ -1,5 +1,11 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
+
+export const metadata: Metadata = {
+  title: "Sayfa bulunamadı",
+  robots: { index: false },
+};
 
 export default function NotFound() {
   // Müşteri sayfalarıyla aynı açık tema (bulunamayan adresler çoğunlukla işletme sayfası).

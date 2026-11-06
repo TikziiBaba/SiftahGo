@@ -36,6 +36,8 @@ export function ShopCoupons({
     refresh();
   }
 
+  // Kuponlar okunurken yer tutucu: liste gelince altındaki randevu kutusu aşağı itilmesin.
+  if (loggedIn === null) return <div aria-hidden className="card mt-5 h-[14.5rem] animate-pulse" />;
   if (coupons.length === 0) return null;
   return (
     <section id="kuponlar" className="mt-5 scroll-mt-28">

@@ -7,7 +7,8 @@ import type { MyLoyalty } from "@/lib/types";
 
 /** İşletme sayfasındaki sadakat kartı. Önbellekteki sayfaya gömülmez: damga kişiye özel, tarayıcıda okunur. */
 export function LoyaltyCard({ businessId }: { businessId: string }) {
-  const [card, setCard] = useState<MyLoyalty | null>(null);
+  // undefined: okunuyor (yer tutucu görünür, kart gelince sayfa kaymaz); null: kart yok.
+  const [card, setCard] = useState<MyLoyalty | null | undefined>(undefined);
 
   useEffect(() => {
     let active = true;
@@ -21,6 +22,7 @@ export function LoyaltyCard({ businessId }: { businessId: string }) {
     };
   }, [businessId]);
 
+  if (card === undefined) return <div aria-hidden className="card mt-5 h-[8.125rem] animate-pulse" />;
   if (!card) return null;
   const left = card.target - card.stamps;
 

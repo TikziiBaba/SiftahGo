@@ -585,7 +585,7 @@ function ForBusinesses() {
           </div>
           <div className="relative flex flex-wrap gap-3 md:flex-col">
             <PrimaryCta href="/esnaf">İşletmeler için</PrimaryCta>
-            <Link href="/kayit?rol=isletme" className="btn btn-secondary px-6 py-3.5 text-base">
+            <Link href="/kayit?rol=isletme&kaynak=ana-sayfa" className="btn btn-secondary px-6 py-3.5 text-base">
               İşletmeni aç
             </Link>
           </div>

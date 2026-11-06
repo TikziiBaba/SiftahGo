@@ -41,7 +41,7 @@ const SECTIONS = {
       { href: "/esnaf#sss", label: "SSS" },
     ],
     other: { href: "/", label: "Randevu al", icon: CalendarSearch },
-    cta: { href: "/kayit?rol=isletme", label: "Hemen Başla" },
+    cta: { href: "/kayit?rol=isletme&kaynak=baslik", label: "Hemen Başla" },
   },
 };
 
@@ -244,7 +244,7 @@ export function SiteFooter() {
           title="İşletme"
           links={[
             ["İşletmeler için", "/esnaf"],
-            ["İşletmeni ekle", "/kayit?rol=isletme"],
+            ["İşletmeni ekle", "/kayit?rol=isletme&kaynak=menu"],
             ["Panele giriş", "/giris?next=/panel"],
             ["Özellikler", "/esnaf#ozellikler"],
             ["Fiyatlar", "/esnaf#fiyatlar"],
@@ -268,7 +268,7 @@ export function SiteFooter() {
         <p className="select-none bg-gradient-to-b from-tint/[0.07] to-transparent bg-clip-text text-[18vw] font-bold leading-none tracking-tighter text-transparent md:text-watermark">
           {SITE_NAME}
         </p>
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-4 text-xs text-ink-3">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-4 text-xs text-ink-2">
           <p>
             © 2026 {SITE_NAME} · {COMPANY.name}. Tüm hakları saklıdır.
           </p>

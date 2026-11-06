@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import posthog from "posthog-js";
 import { Check, Loader2, X } from "lucide-react";
 import { BlockedCustomers } from "@/components/blocked-customers";
 import { BusinessLocation } from "@/components/business-location";
@@ -63,6 +64,7 @@ export default function SettingsPage() {
     const { error } = await createClient().from("businesses").update({ ...form, slug, name: form.name.trim() }).eq("id", business.id);
     setBusy(false);
     if (error) return setMessage({ ok: false, text: errorMessage(error) });
+    if (form.is_published && !business.is_published) posthog.capture("isletme_yayinda", { kategori: business.category, sehir: business.city });
     // Başarı düğmede görünür ("Kaydedildi"), biraz sonra düğme eski haline döner.
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);

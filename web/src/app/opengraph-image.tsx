@@ -1,5 +1,6 @@
 import { ImageResponse } from "next/og";
 import { SITE_DOMAIN } from "@/lib/constants";
+import { OgMark, OgWordmark } from "@/lib/og-brand";
 
 // Paylaşılan bağlantılarda (WhatsApp, Instagram, X) görünen genel görsel. Kendi görselini veren sayfa (işletme kapağı) bunun yerine geçer.
 export const alt = "SiftahGo — Esnaftan online randevu";
@@ -22,22 +23,8 @@ export default function OpengraphImage() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
-          <div
-            style={{
-              width: 96,
-              height: 96,
-              borderRadius: 24,
-              background: "#0f766e",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 64,
-              fontWeight: 700,
-            }}
-          >
-            S
-          </div>
-          <div style={{ fontSize: 56, fontWeight: 700, letterSpacing: -2 }}>SiftahGo</div>
+          <OgMark size={96} />
+          <OgWordmark height={60} />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           <div style={{ fontSize: 76, fontWeight: 700, lineHeight: 1.05, letterSpacing: -3 }}>Esnaftan online randevu</div>

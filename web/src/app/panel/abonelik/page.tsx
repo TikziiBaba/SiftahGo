@@ -2,6 +2,7 @@
 
 import { BillingForm } from "@/components/billing-form";
 import Link from "next/link";
+import posthog from "posthog-js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Loader2, ShieldCheck, X } from "lucide-react";
 import { useBusiness } from "@/components/panel-context";
@@ -60,6 +61,14 @@ export default function SubscriptionPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- paketleri ve ödemeleri yükle
     load();
   }, [load, business.subscription_ends_at]);
+
+  // Dönüşüm hunisinin son adımı: PayTR dönüşünde ödeme onaylandı. Adres sonra temizlendiği için yenilemede tekrar sayılmaz.
+  const paidSent = useRef(false);
+  useEffect(() => {
+    if (result !== "basarili" || lastPayment?.status !== "paid" || paidSent.current) return;
+    paidSent.current = true;
+    posthog.capture("odeme_yapildi", { paket: lastPayment.plan_id, tutar: lastPayment.amount });
+  }, [result, lastPayment]);
 
   // Ödeme onayı (PayTR bildirimi) birkaç saniye sürebilir; son ödeme sonuçlanana kadar yokla.
   useEffect(() => {

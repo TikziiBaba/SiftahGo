@@ -16,6 +16,7 @@ import { Morph } from "@/components/business-card";
 import { ShopCoupons } from "@/components/shop-coupons";
 import { ShowcasePage } from "@/components/showcase-page";
 import { ShopShortcuts } from "@/components/shop-shortcuts";
+import { StickyBooking } from "@/components/sticky-booking";
 import { TrackRecent } from "@/components/track-recent";
 import { createClient } from "@/lib/supabase/server";
 import { accentVars, categoryLabel, isShowcase, isSubscribed, menuLabel, SITE_NAME, SITE_URL, WEEKDAYS } from "@/lib/constants";
@@ -110,11 +111,11 @@ export async function generateStaticParams() {
   return data?.length ? data.map((b) => ({ slug: b.slug as string })) : [{ slug: "isletme-yok" }];
 }
 
-// Yalnızca herkese açık (önbellekteki) veriden: çerez okunursa sayfa önceden hazırlanamaz. Yayında olmayan sayfayı
-// sahibi açtığında genel başlık görünür.
+// Yalnızca herkese açık (önbellekteki) veriden: çerez okunursa sayfa önceden hazırlanamaz. Herkese açık kayıt yoksa
+// adres çoğunlukla yanlıştır (404); yayında olmayan sayfasını açan sahibi de bu başlığı görür.
 export async function generateMetadata({ params }: PageProps<"/[slug]">): Promise<Metadata> {
   const business = await getBusinessMeta((await params).slug);
-  if (!business) return { title: "İşletme sayfası", robots: { index: false } };
+  if (!business) return { title: "Sayfa bulunamadı", robots: { index: false } };
   const place = [business.district, business.city].filter(Boolean).join(", ");
   const showcase = isShowcase(business);
   const title = showcase ? `${business.name} — ${menuLabel(business.category)} ve Kuponlar` : `${business.name} — Online Randevu`;
@@ -125,7 +126,8 @@ export async function generateMetadata({ params }: PageProps<"/[slug]">): Promis
     (showcase
       ? `${business.name}${place ? ` (${place})` : ""} ${kind}: ${menuLabel(business.category).toLocaleLowerCase("tr")}, çalışma saatleri, yol tarifi ve kuponlar.`
       : `${business.name}${place ? ` (${place})` : ""} ${kind} için online randevu alın.`);
-  const image = business.cover_url ?? business.logo_url;
+  // Kapak yoksa adı ve türü yazan görsel üretilir (paylas-gorseli/route.tsx); kare logo önizlemede küçük kalıyordu.
+  const image = business.cover_url ?? `/${business.slug}/paylas-gorseli`;
   return {
     title,
     description,
@@ -138,7 +140,7 @@ export async function generateMetadata({ params }: PageProps<"/[slug]">): Promis
       title,
       description,
       url: `/${business.slug}`,
-      images: image ? [image] : undefined,
+      images: [image],
     },
   };
 }
@@ -242,6 +244,7 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
   return (
     <main className="w-full" style={accentVars(accent, { light: true })}>
       <TrackRecent slug={business.slug} name={business.name} category={business.category} logo_url={business.logo_url} city={business.city} />
+      <StickyBooking />
       {/* Nerede olduğunu gösteren yol: müşteri tek dokunuşla kategoriye veya Keşfet'e döner. */}
       <nav aria-label="Konum" className="mx-auto max-w-6xl px-4 pb-3">
         <ol className="flex flex-wrap items-center gap-1 text-sm text-ink-3">

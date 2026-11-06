@@ -296,7 +296,8 @@ export function SignupForm() {
       captcha.retry();
       return setExists(true);
     }
-    posthog.capture("kayit_olundu", { tur: role === "business" ? "isletme" : "musteri" });
+    // kaynak: kayda hangi butondan gelindiği (/esnaf hero, mobil, fiyat...); dönüşüm hunisinde karşılaştırılır.
+    posthog.capture("kayit_olundu", { tur: role === "business" ? "isletme" : "musteri", kaynak: params.get("kaynak") ?? undefined });
     if (!data.session) {
       if (data.user) setWaiting({ userId: data.user.id, ticket });
       return setCheckEmail(true);
