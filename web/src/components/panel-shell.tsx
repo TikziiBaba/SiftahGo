@@ -29,6 +29,7 @@ import {
 import { InboxBell } from "@/components/inbox-bell";
 import { Logo } from "@/components/site-header";
 import { BusinessContext, SetupContext } from "@/components/panel-context";
+import { ShellSkeleton } from "@/components/skeletons";
 import { createClient } from "@/lib/supabase/client";
 import { isShowcase, isSubscribed, isTrial, menuLabel, SUSPENSION_REASONS } from "@/lib/constants";
 import { formatDate } from "@/lib/format";
@@ -205,30 +206,7 @@ export function PanelShell({ children }: { children: React.ReactNode }) {
     (showcase ? APPOINTMENT_ONLY : SHOWCASE_ONLY).includes(pathname)
   ) {
     // İşletme okunurken (veya yönlendirilirken) panelin şekli: kenar çubuğu, üst şerit ve kartlar.
-    return (
-      <div className="flex min-h-full flex-1" aria-busy="true" aria-label="Panel yükleniyor">
-        <aside className="hidden h-screen w-64 shrink-0 flex-col gap-3 border-r border-line bg-surface/60 p-4 md:flex">
-          <div className="h-8 w-28 animate-pulse rounded-lg bg-tint/10" />
-          <div className="mt-3 h-14 animate-pulse rounded-2xl bg-tint/[0.06]" />
-          {Array.from({ length: 8 }, (_, i) => (
-            <div key={i} className="h-8 animate-pulse rounded-xl bg-tint/[0.05]" />
-          ))}
-        </aside>
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex h-16 items-center border-b border-line px-4 md:px-8">
-            <div className="h-5 w-32 animate-pulse rounded-md bg-tint/10" />
-          </div>
-          <div className="space-y-4 p-4 md:p-8">
-            <div className="grid gap-4 sm:grid-cols-3">
-              {Array.from({ length: 3 }, (_, i) => (
-                <div key={i} className="card h-24 animate-pulse" />
-              ))}
-            </div>
-            <div className="card h-64 animate-pulse" />
-          </div>
-        </div>
-      </div>
-    );
+    return <ShellSkeleton />;
   }
 
   async function logout() {

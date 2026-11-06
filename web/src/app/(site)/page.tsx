@@ -26,6 +26,7 @@ import { GuestOnly, MemberHome } from "@/components/member-home";
 import { NearbyResults } from "@/components/nearby-results";
 import { Reveal } from "@/components/reveal";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
+import { Bone, CardGridSkeleton } from "@/components/skeletons";
 import { Shop } from "@/components/three/shop";
 import { CATEGORY_ICONS, CategoryIcon } from "@/lib/category-icons";
 import { COMPANY } from "@/lib/company";
@@ -79,17 +80,17 @@ export default function Home() {
         <GuestOnly>
           <Hero />
         </GuestOnly>
-        <Suspense fallback={<div className="h-[22rem]" />}>
+        <Suspense fallback={<ShelfSkeleton />}>
           <Shelves />
         </Suspense>
         <Categories />
-        <Suspense fallback={<div className="h-[40rem]" />}>
+        <Suspense fallback={<FeaturedSkeleton />}>
           <Businesses />
         </Suspense>
         <GuestOnly>
           <HowToBook />
         </GuestOnly>
-        <Suspense fallback={<div className="h-[36rem]" />}>
+        <Suspense fallback={<div className="mx-auto max-w-6xl px-4 py-12"><Bone className="h-[30rem] rounded-3xl" /></div>}>
           <AppDownload />
         </Suspense>
         <GuestOnly>
@@ -287,6 +288,38 @@ async function getShelves(): Promise<{ today: BusinessCardData[]; newest: Busine
   } catch {
     return { today: [], newest: [] };
   }
+}
+
+// Raflar ve öne çıkanlar gelene kadar aynı yerde, aynı boyda iskelet: içerik gelince sayfa kaymaz.
+function ShelfSkeleton() {
+  return (
+    <div aria-hidden className="mx-auto h-[22rem] max-w-6xl overflow-hidden px-4 pt-6">
+      <Bone className="h-6 w-56" />
+      <Bone className="mt-2 h-4 w-72 max-w-full" />
+      <div className="mt-4 flex gap-4">
+        {Array.from({ length: 4 }, (_, i) => (
+          <div key={i} className="card w-72 shrink-0 overflow-hidden">
+            <Bone className="h-32 rounded-none" />
+            <div className="space-y-2 p-4">
+              <Bone className="h-4 w-2/3" />
+              <Bone className="h-3 w-1/2" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FeaturedSkeleton() {
+  return (
+    <div aria-hidden className="mx-auto min-h-[40rem] max-w-6xl px-4 py-12">
+      <Bone className="mx-auto h-6 w-28 rounded-full" />
+      <Bone className="mx-auto mt-4 h-10 w-80 max-w-full" />
+      <Bone className="mx-auto mt-3 h-4 w-96 max-w-full" />
+      <CardGridSkeleton className="mt-12" />
+    </div>
+  );
 }
 
 async function Shelves() {

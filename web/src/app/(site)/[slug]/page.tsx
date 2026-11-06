@@ -9,6 +9,7 @@ import { createClient as createSupabase, type SupabaseClient } from "@supabase/s
 import { ChevronRight, Clock, Globe, MapPin, Megaphone, Phone, Sparkles, Star } from "lucide-react";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
 import { BookingWidget } from "@/components/booking-widget";
+import { BusinessSkeleton } from "@/components/skeletons";
 import { LoyaltyCard } from "@/components/loyalty-card";
 import { categoryHref } from "@/lib/city-pages";
 import { Morph } from "@/components/business-card";
@@ -146,12 +147,12 @@ export default function BusinessPage({ params }: PageProps<"/[slug]">) {
   return (
     <>
       <SiteHeader minimal />
-      {/* Yer tutucu ekran boyunda: içerik gelince alt bilgi görünür alanda kaymasın. Gelince yer tutucu aşağı
+      {/* Yer tutucu sayfanın iskeleti, ekran boyunda: içerik gelince alt bilgi görünür alanda kaymasın. Gelince yer tutucu aşağı
           kayıp çekilir, sayfa yukarı kayarak gelir (globals.css). */}
       <Suspense
         fallback={
           <ViewTransition exit="slide-down" default="none">
-            <div className="mx-auto min-h-[100dvh] w-full max-w-6xl animate-pulse px-4 py-8" />
+            <BusinessSkeleton />
           </ViewTransition>
         }
       >

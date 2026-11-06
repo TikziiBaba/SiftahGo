@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { Loader2 } from "lucide-react";
 import { AdminShell } from "@/components/admin/shell";
+import { ShellSkeleton } from "@/components/skeletons";
 
 export const metadata: Metadata = {
   title: "Yönetim",
@@ -10,14 +10,8 @@ export const metadata: Metadata = {
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
-    // Adres (usePathname, useParams) istek anında bilinir; ön çizimde bekleme göstergesi çıkar.
-    <Suspense
-      fallback={
-        <div className="grid flex-1 place-items-center py-24">
-          <Loader2 className="size-6 animate-spin text-ink-3" />
-        </div>
-      }
-    >
+    // Adres (usePathname, useParams) istek anında bilinir; ön çizimde yönetim ekranının iskeleti çıkar.
+    <Suspense fallback={<ShellSkeleton />}>
       <AdminShell>{children}</AdminShell>
     </Suspense>
   );
