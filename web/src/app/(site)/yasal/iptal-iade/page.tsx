@@ -4,7 +4,11 @@ import { LegalPage } from "@/components/legal-page";
 import { COMPANY } from "@/lib/company";
 import { SITE_NAME } from "@/lib/constants";
 
-export const metadata: Metadata = { title: "İptal ve İade Koşulları" };
+export const metadata: Metadata = {
+  title: "İptal ve İade Koşulları",
+  description:
+    "SiftahGo'da randevu iptali, işletme paketlerinde iptal ve iade, hatalı veya mükerrer çekimde geri ödeme koşulları.",
+};
 
 export default function RefundPage() {
   return (

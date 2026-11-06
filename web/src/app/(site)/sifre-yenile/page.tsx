@@ -2,7 +2,11 @@ import type { Metadata } from "next";
 import { AuthShell } from "@/components/auth-shell";
 import { ResetPasswordForm } from "@/components/auth-forms";
 
-export const metadata: Metadata = { title: "Yeni Şifre" };
+export const metadata: Metadata = {
+  title: "Yeni Şifre",
+  description:
+    "SiftahGo hesabınız için yeni şifre belirleyin.",
+};
 
 export default function ResetPasswordPage() {
   return (

@@ -4,7 +4,11 @@ import { LegalPage } from "@/components/legal-page";
 import { COMPANY } from "@/lib/company";
 import { SITE_NAME } from "@/lib/constants";
 
-export const metadata: Metadata = { title: "Güvenlik Açıklamaları" };
+export const metadata: Metadata = {
+  title: "Güvenlik Açıklamaları",
+  description:
+    "SiftahGo'da hesabınızı ve verilerinizi korumak için aldığımız teknik ve idari güvenlik önlemleri.",
+};
 
 // Yalnızca sistemde gerçekten olan önlemler yazılır; yeni önlem eklenince burası da güncellenir.
 export default function SecurityPage() {

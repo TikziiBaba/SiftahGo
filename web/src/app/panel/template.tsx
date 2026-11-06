@@ -1,6 +1,6 @@
 import { ViewTransition } from "react";
 
-/** Panel bölümleri arası geçiş; alt menü yön verir (panel/layout.tsx). Ayrıntı: app/(site)/template.tsx. */
+/** Panel bölümleri arası geçiş; alt menü yön verir (components/panel-shell.tsx). Ayrıntı: app/(site)/template.tsx. */
 export default function PanelTemplate({ children }: { children: React.ReactNode }) {
   return (
     <ViewTransition

@@ -4,7 +4,11 @@ import { LegalPage } from "@/components/legal-page";
 import { COMPANY } from "@/lib/company";
 import { SITE_DOMAIN, SITE_NAME } from "@/lib/constants";
 
-export const metadata: Metadata = { title: "Gizlilik ve KVKK Aydınlatma Metni" };
+export const metadata: Metadata = {
+  title: "Gizlilik ve KVKK Aydınlatma Metni",
+  description:
+    "SiftahGo'da kişisel verilerinizin hangi amaçla işlendiği, kimlerle paylaşıldığı ve KVKK kapsamındaki haklarınız.",
+};
 
 export default function PrivacyPage() {
   return (

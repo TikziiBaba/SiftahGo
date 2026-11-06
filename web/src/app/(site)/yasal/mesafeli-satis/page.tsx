@@ -5,7 +5,11 @@ import { PrintButton } from "@/components/print-button";
 import { COMPANY } from "@/lib/company";
 import { SITE_DOMAIN, SITE_NAME } from "@/lib/constants";
 
-export const metadata: Metadata = { title: "Mesafeli Satış Sözleşmesi" };
+export const metadata: Metadata = {
+  title: "Mesafeli Satış Sözleşmesi",
+  description:
+    "SiftahGo işletme paketleri için ön bilgilendirme formu ve mesafeli satış sözleşmesi.",
+};
 
 export default function DistanceSalesPage() {
   return (

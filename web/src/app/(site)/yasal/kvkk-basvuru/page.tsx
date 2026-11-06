@@ -4,7 +4,11 @@ import { LegalPage } from "@/components/legal-page";
 import { COMPANY } from "@/lib/company";
 import { SITE_NAME } from "@/lib/constants";
 
-export const metadata: Metadata = { title: "KVKK Başvuru Formu" };
+export const metadata: Metadata = {
+  title: "KVKK Başvuru Formu",
+  description:
+    "KVKK kapsamındaki haklarınızı kullanmak için SiftahGo'ya nasıl başvurabileceğiniz.",
+};
 
 // Veri Sorumlusuna Başvuru Usul ve Esasları Hakkında Tebliğ m. 5'te sayılan bilgiler.
 const TEMPLATE = `Konu: KVKK kapsamında başvuru

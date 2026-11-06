@@ -403,7 +403,7 @@ svg.lucide {
 }
 
 /* Alt sekme çubuğu: seçili zemin hafif aşarak yeni sekmeye kayar, ikon kısa bir zıplama yapar
-   (bkz. components/customer-tabbar.tsx, app/panel/layout.tsx). */
+   (bkz. components/customer-tabbar.tsx, components/panel-shell.tsx). */
 .tab-indicator {
   transition:
     translate 0.5s cubic-bezier(0.34, 1.32, 0.64, 1),

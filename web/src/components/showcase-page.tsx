@@ -180,11 +180,11 @@ export function ShowcasePage({
           <section className="mt-8">
             <h2 className="mb-3 font-semibold">Fotoğraflar</h2>
             <div className="grid grid-cols-3 gap-2">
-              {business.gallery.map((url) => (
+              {business.gallery.map((url, i) => (
                 <a key={url} href={url} target="_blank" rel="noreferrer">
                   <Image
                     src={url}
-                    alt=""
+                    alt={`${business.name} fotoğraf ${i + 1}`}
                     width={240}
                     height={240}
                     sizes="(min-width: 768px) 220px, 33vw"

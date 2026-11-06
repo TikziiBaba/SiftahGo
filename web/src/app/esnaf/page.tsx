@@ -20,6 +20,7 @@ import { Shop } from "@/components/three/shop";
 import { GlowCard } from "@/components/glow-card";
 import { AppDownload, Backdrop, BookingMock, GridFloor, PrimaryCta, SectionHead } from "@/components/landing";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
+import { MobileCta } from "@/components/mobile-cta";
 import {
   BASE_FEATURES,
   CATEGORIES,
@@ -67,6 +68,7 @@ export default function BusinessHome() {
         <FinalCta />
       </main>
       <SiteFooter />
+      <MobileCta href="/kayit?rol=isletme" label="İşletmeni aç" />
     </>
   );
 }

@@ -4,7 +4,11 @@ import { LegalPage } from "@/components/legal-page";
 import { COMPANY } from "@/lib/company";
 import { SITE_DOMAIN, SITE_NAME } from "@/lib/constants";
 
-export const metadata: Metadata = { title: "Hizmet Şartları" };
+export const metadata: Metadata = {
+  title: "Hizmet Şartları",
+  description:
+    "SiftahGo'yu müşteri ve işletme olarak kullanırken geçerli olan hizmet şartları.",
+};
 
 export default function TermsPage() {
   return (

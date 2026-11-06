@@ -5,7 +5,11 @@ import { LegalPage } from "@/components/legal-page";
 import { COMPANY } from "@/lib/company";
 import { SITE_DOMAIN, SITE_NAME } from "@/lib/constants";
 
-export const metadata: Metadata = { title: "Çerez Politikası" };
+export const metadata: Metadata = {
+  title: "Çerez Politikası",
+  description:
+    "SiftahGo'nun hangi çerezleri neden kullandığı ve tercihlerinizi nasıl değiştirebileceğiniz.",
+};
 
 // Sitede gerçekten kullanılan çerez ve tarayıcı depolaması kayıtları. Yeni bir çerez eklenince bu tablo güncellenmeli.
 const COOKIES = [

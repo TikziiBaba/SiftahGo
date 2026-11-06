@@ -438,11 +438,11 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
               <section className="card p-5">
                 <h2 className="font-semibold">Galeri</h2>
                 <div className="mt-3 grid grid-cols-3 gap-2">
-                  {business.gallery.map((url) => (
+                  {business.gallery.map((url, i) => (
                     <a key={url} href={url} target="_blank" rel="noreferrer">
                       <Image
                         src={url}
-                        alt=""
+                        alt={`${business.name} fotoğraf ${i + 1}`}
                         width={240}
                         height={240}
                         sizes="(min-width: 1024px) 110px, 33vw"

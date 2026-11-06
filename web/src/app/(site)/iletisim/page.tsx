@@ -4,7 +4,11 @@ import { LegalPage } from "@/components/legal-page";
 import { COMPANY } from "@/lib/company";
 import { SITE_DOMAIN, SITE_NAME } from "@/lib/constants";
 
-export const metadata: Metadata = { title: "Hakkımızda ve İletişim" };
+export const metadata: Metadata = {
+  title: "Hakkımızda ve İletişim",
+  description:
+    "SiftahGo nedir, kim işletir ve bize nasıl ulaşırsınız: adres, e-posta ve destek kanalları.",
+};
 
 export default function ContactPage() {
   return (
