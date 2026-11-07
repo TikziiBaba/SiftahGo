@@ -430,6 +430,11 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
                         <Stars value={r.rating} />
                       </div>
                       {r.comment && <p className="mt-1 text-ink-2">{r.comment}</p>}
+                      {r.photo_url && (
+                        <a href={r.photo_url} target="_blank" rel="noreferrer" className="mt-2 block w-fit">
+                          <Image src={r.photo_url} alt={`${r.customer_name} sonuç fotoğrafı`} width={160} height={160} className="size-32 rounded-lg object-cover ring-1 ring-line" />
+                        </a>
+                      )}
                       <p className="mt-0.5 text-xs text-ink-3">
                         {formatDate(r.created_at, { weekday: undefined, year: "numeric" })} · Randevulu müşteri
                       </p>

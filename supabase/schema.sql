@@ -43,6 +43,7 @@ drop table if exists
   public.push_tokens,
   public.notifications,
   public.payments,
+  public.review_photos,
   public.reviews,
   public.staff_services,
   public.payment_history,
@@ -96,7 +97,7 @@ begin
         'appointments_payment', 'default_rebook_days', 'businesses_rebook_default', 'queue_rebook_reminders',
         'next_birthday', 'claim_birthday_gifts', 'business_birthday_summary',
         'email_hash', 'handle_user_confirmed', 'reattach_deleted_account', 'session_packages_bind', 'appointments_drop_review',
-        'award_monthly_badges'
+        'award_monthly_badges', 'attach_review_photo', 'admin_moderate_review_photo'
       )
   loop
     execute 'drop function if exists ' || r.sig || ' cascade';
@@ -518,9 +519,24 @@ create table public.reviews (
   replied_at     timestamptz,
   -- Kupon yorumunda esnafa "yeni değerlendirme" haberi gittiği an (claim_coupon_review_notices).
   owner_notified_at timestamptz,
+  -- Yöneticinin onayladığı sonuç fotoğrafı (admin_moderate_review_photo yazar); onay bekleyen fotoğraf review_photos'ta.
+  photo_url      text check (length(photo_url) <= 300),
   created_at     timestamptz not null default now(),
   check (num_nonnulls(appointment_id, coupon_claim_id) = 1)
 );
+
+-- Müşterinin yoruma eklediği sonuç fotoğrafı. Yönetici onaylayana kadar yalnızca müşteri ve yönetici görür; onaylanınca
+-- adresi reviews.photo_url'e yazılır (yorumlar herkese açık olduğu için onaysız adres orada tutulmaz).
+create table public.review_photos (
+  review_id   uuid primary key references public.reviews (id) on delete cascade,
+  customer_id uuid not null references public.profiles (id) on delete cascade,
+  url         text not null check (length(url) <= 300),
+  status      text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
+  created_at  timestamptz not null default now(),
+  reviewed_at timestamptz,
+  reviewed_by uuid references public.profiles (id) on delete set null
+);
+create index review_photos_pending_idx on public.review_photos (created_at) where status = 'pending';
 create index reviews_business_idx on public.reviews (business_id, created_at desc);
 -- Müşteri kartı (customer_card) ve hesap silme müşterinin yorumlarını arar.
 create index reviews_customer_idx on public.reviews (customer_id, created_at desc);
@@ -1592,7 +1608,7 @@ begin
   end if;
   update public.appointments set status = 'cancelled'
   where customer_id = v_uid and status in ('pending', 'confirmed') and starts_at > now();
-  update public.reviews set customer_name = 'Eski üye' where customer_id = v_uid;
+  update public.reviews set customer_name = 'Eski üye', photo_url = null where customer_id = v_uid;
   -- Hesabın e-posta adresi işletmelerin defterinde ve gönderim kayıtlarında kalmaz.
   delete from public.notifications n using public.appointments a
   where a.id = n.appointment_id and a.customer_id = v_uid and n.recipient = 'customer';
@@ -4442,6 +4458,55 @@ exception
 end;
 $$;
 
+-- Müşteri kendi yorumuna (randevu ya da kupon yorumu) sonuç fotoğrafı ekler; yorumdan sonraki 7 gün içinde, tek
+-- fotoğraf. Adres yalnızca bu müşterinin /api/upload ile yüklediği dosya olabilir. Fotoğraf yönetici onayına düşer;
+-- yeni fotoğraf eskisinin yerine geçer ve yeniden onay bekler.
+create function public.attach_review_photo(p_url text, p_appointment_id uuid default null, p_claim_id uuid default null)
+returns void
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  v_uid uuid := auth.uid();
+  r     public.reviews;
+begin
+  if v_uid is null then raise exception 'Giriş yapmalısınız.'; end if;
+  select * into r from public.reviews
+  where customer_id = v_uid
+    and ((p_appointment_id is not null and appointment_id = p_appointment_id)
+         or (p_claim_id is not null and coupon_claim_id = p_claim_id));
+  if not found then raise exception 'Değerlendirme bulunamadı.'; end if;
+  if r.created_at < now() - interval '7 days' then
+    raise exception 'Fotoğraf değerlendirmeden sonraki 7 gün içinde eklenebilir.';
+  end if;
+  if p_url is null or p_url !~ ('^https://cdn\.siftahgo\.app/reviews/' || v_uid::text || '/[A-Za-z0-9._-]+$') then
+    raise exception 'Geçersiz fotoğraf.';
+  end if;
+  insert into public.review_photos (review_id, customer_id, url)
+  values (r.id, v_uid, p_url)
+  on conflict (review_id) do update
+  set url = excluded.url, status = 'pending', created_at = now(), reviewed_at = null, reviewed_by = null;
+  update public.reviews set photo_url = null where id = r.id;
+end;
+$$;
+
+-- Yönetici fotoğrafı onaylar (yorumda herkese görünür) ya da reddeder (görünmez).
+create function public.admin_moderate_review_photo(p_review_id uuid, p_approve boolean)
+returns void
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  ph public.review_photos;
+begin
+  if not public.is_admin() then raise exception 'Yetkiniz yok.'; end if;
+  update public.review_photos
+  set status = case when p_approve then 'approved' else 'rejected' end, reviewed_at = now(), reviewed_by = auth.uid()
+  where review_id = p_review_id
+  returning * into ph;
+  if not found then raise exception 'Fotoğraf bulunamadı.'; end if;
+  update public.reviews set photo_url = case when p_approve then ph.url end where id = p_review_id;
+end;
+$$;
+
 -- Sunucu (/api/notifications) vitrin müşterisine "Nasıldı?" haberi için alır: kasada kullanımdan 2 saat geçmiş,
 -- değerlendirilmemiş kuponlar. Bir kupon bir kez döner (review_requested_at). Geri alınan kullanım redeemed_at'i boşaltır.
 -- Dönen id kupon kodu satırıdır; tokens müşterinin telefonları.
@@ -4829,6 +4894,12 @@ create policy "personel hizmeti: sahibi yönetir" on public.staff_services
 -- reviews (müşteri add_review ile ekler)
 create policy "değerlendirme: herkes okur" on public.reviews
   for select using (true);
+
+alter table public.review_photos enable row level security;
+create policy "yorum fotoğrafı: müşteri kendininkini okur" on public.review_photos
+  for select using (customer_id = (select auth.uid()));
+create policy "admin: yorum fotoğraflarını okur" on public.review_photos
+  for select using ((select public.is_admin()));
 
 -- plans / payments
 create policy "paket: herkes okur" on public.plans

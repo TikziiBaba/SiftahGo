@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { Image } from 'expo-image';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
@@ -149,6 +150,7 @@ function Reviews({ business }: { business: Business }) {
                 Yorum yazılmadan puan verildi.
               </Text>
             )}
+            {r.photo_url ? <Image source={{ uri: r.photo_url }} style={{ width: 112, height: 112, borderRadius: 10 }} contentFit="cover" /> : null}
             {r.reply ? (
               <View style={s.reply}>
                 <Text variant="caption" tone="brand">

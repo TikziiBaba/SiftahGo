@@ -4,7 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { uploadToR2 } from "@/lib/r2";
 import { isSameOrigin } from "@/lib/same-origin";
 
-const KINDS = ["logo", "cover", "gallery", "menu"] as const;
+// "review": müşterinin yorum fotoğrafı (işletme gerekmez; attach_review_photo yalnızca kendi klasöründeki dosyayı kabul eder).
+const KINDS = ["logo", "cover", "gallery", "menu", "review"] as const;
 const TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
 // Dosyanın ilk baytları (konum, baytlar). Tür bilgisini istemci yazar; içerik gerçekten o görsel olmalı,
 // yoksa R2'de herkese açık adresle görsel kılığında başka dosya yayınlanabilir.
@@ -32,12 +33,6 @@ export async function POST(request: Request) {
   const userId = claims?.claims.sub;
   if (!userId) return NextResponse.json({ error: "Giriş yapmalısınız." }, { status: 401 });
 
-  // Yönetici başka bir işletmenin görselini yükleyebilir (?business=<id>); diğerleri yalnızca kendi işletmesine.
-  const target = new URL(request.url).searchParams.get("business");
-  if (target && !(await supabase.rpc("is_admin")).data) return NextResponse.json({ error: "Yetkiniz yok." }, { status: 403 });
-  const { data: business } = await supabase.from("businesses").select("id").eq(target ? "id" : "owner_id", target ?? userId).maybeSingle();
-  if (!business) return NextResponse.json({ error: "İşletme bulunamadı." }, { status: 403 });
-
   const length = Number(request.headers.get("content-length") ?? 0);
   if (length > MAX_BYTES + 64 * 1024) return NextResponse.json({ error: "Görsel en fazla 4 MB olabilir." }, { status: 413 });
   let form: FormData;
@@ -52,6 +47,16 @@ export async function POST(request: Request) {
   if (!(file instanceof File) || !KINDS.includes(kind)) {
     return NextResponse.json({ error: "Geçersiz istek." }, { status: 400 });
   }
+
+  // Yönetici başka bir işletmenin görselini yükleyebilir (?business=<id>); diğerleri yalnızca kendi işletmesine.
+  let folder = `reviews/${userId}`;
+  if (kind !== "review") {
+    const target = new URL(request.url).searchParams.get("business");
+    if (target && !(await supabase.rpc("is_admin")).data) return NextResponse.json({ error: "Yetkiniz yok." }, { status: 403 });
+    const { data: business } = await supabase.from("businesses").select("id").eq(target ? "id" : "owner_id", target ?? userId).maybeSingle();
+    if (!business) return NextResponse.json({ error: "İşletme bulunamadı." }, { status: 403 });
+    folder = `businesses/${business.id}/${kind}`;
+  }
   const ext = TYPES[file.type];
   if (!ext) return NextResponse.json({ error: "Sadece JPG, PNG veya WEBP yükleyebilirsiniz." }, { status: 400 });
   if (file.size > MAX_BYTES) return NextResponse.json({ error: "Görsel en fazla 4 MB olabilir." }, { status: 400 });
@@ -60,7 +65,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Dosya geçerli bir görsel değil." }, { status: 400 });
   }
 
-  const key = `businesses/${business.id}/${kind}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+  const key = `${folder}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
   try {
     const url = await uploadToR2(key, data, file.type);
     return NextResponse.json({ url });

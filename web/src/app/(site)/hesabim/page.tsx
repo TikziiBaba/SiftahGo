@@ -454,6 +454,7 @@ function AppointmentCard({
       {reviewing && (
         <ReviewForm
           submit={(rating, comment) => createClient().rpc("add_review", { p_appointment_id: row.id, p_rating: rating, p_comment: comment })}
+          photoFor={{ appointmentId: row.id }}
           onDone={() => {
             setReviewing(false);
             onReviewed?.();

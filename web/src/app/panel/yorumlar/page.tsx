@@ -160,6 +160,11 @@ function ReviewItem({ row, onSaved }: { row: Row; onSaved: () => void }) {
         <Stars value={row.rating} />
       </div>
       {row.comment ? <p className="mt-2 text-sm text-ink-2">{row.comment}</p> : <p className="mt-2 text-sm italic text-ink-3">Yorum yazılmadan puan verildi.</p>}
+      {row.photo_url && (
+        <a href={row.photo_url} target="_blank" rel="noreferrer" className="mt-2 block w-fit">
+          <img src={row.photo_url} alt={`${row.customer_name} sonuç fotoğrafı`} className="size-28 rounded-lg object-cover ring-1 ring-line" />
+        </a>
+      )}
 
       {editing ? (
         <form

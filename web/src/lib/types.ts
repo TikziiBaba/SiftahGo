@@ -226,6 +226,8 @@ export type Review = {
   // İşletmenin herkese açık cevabı (boş = cevap yok)
   reply: string;
   replied_at: string | null;
+  // Yöneticinin onayladığı sonuç fotoğrafı (onay bekleyen görünmez)
+  photo_url?: string | null;
   created_at: string;
 };
 

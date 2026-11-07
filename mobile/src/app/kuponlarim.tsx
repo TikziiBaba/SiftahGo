@@ -105,6 +105,7 @@ export default function MyCouponsScreen() {
       <ReviewSheet
         appointment={reviewing && { id: reviewing.claim_id, businesses: { name: reviewing.business_name } }}
         submit={(rating, comment) => supabase.rpc('add_coupon_review', { p_claim_id: reviewing!.claim_id, p_rating: rating, p_comment: comment })}
+        claimId={reviewing?.claim_id}
         onClose={() => setReviewing(null)}
         onDone={() => {
           setReviewing(null);

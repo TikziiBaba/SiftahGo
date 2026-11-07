@@ -2,7 +2,7 @@
  * Görseli tarayıcıda küçültüp /api/upload üzerinden R2'ye yükler, adresini döndürür.
  * businessId yalnızca yönetici başka bir işletmenin görselini yüklerken verilir.
  */
-export async function uploadImage(file: File, kind: "logo" | "cover" | "gallery" | "menu", businessId?: string) {
+export async function uploadImage(file: File, kind: "logo" | "cover" | "gallery" | "menu" | "review", businessId?: string) {
   const blob = await shrink(file, kind === "logo" ? 512 : 1600);
   const body = new FormData();
   body.append("file", new File([blob], "image.jpg", { type: "image/jpeg" }));

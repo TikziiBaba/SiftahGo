@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { MessageSquareReply, MessageSquareText, Search, Star, ThumbsDown } from "lucide-react";
 import { CsvButton, Empty, PageTitle, Section, Skeleton, Tabs, dateTime } from "@/components/admin/ui";
 import { Donut, KpiCard } from "@/components/charts";
+import { ReviewPhotoQueue } from "@/components/admin/review-photo-queue";
 import { createClient } from "@/lib/supabase/client";
 import type { Review } from "@/lib/types";
 
@@ -69,6 +70,10 @@ export default function AdminReviewsPage() {
         <KpiCard label="Son 30 gün ortalama" icon={Star} value={recent.length ? avg(recent).toFixed(2) : "—"} cur={avg(recent)} prev={avg(before)} />
         <KpiCard label="Cevapsız" icon={MessageSquareReply} value={n(open)} hint={`%${all.length ? Math.round((open / all.length) * 100) : 0} cevaplanmamış`} tone={open ? "warn" : undefined} />
         <KpiCard label="Düşük puan (1–2)" icon={ThumbsDown} value={n(low)} tone={low ? "bad" : undefined} hint="İncelenmesi önerilir" />
+      </div>
+
+      <div className="mt-4">
+        <ReviewPhotoQueue />
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[22rem_1fr]">

@@ -539,6 +539,9 @@ export default function BusinessScreen() {
                       </View>
                     </View>
                     {r.comment ? <Text tone="secondary">{r.comment}</Text> : null}
+                    {r.photo_url ? (
+                      <Image source={{ uri: r.photo_url }} style={{ width: 128, height: 128, borderRadius: 10, marginTop: 4 }} contentFit="cover" accessibilityLabel={`${r.customer_name} sonuç fotoğrafı`} />
+                    ) : null}
                     {r.reply ? (
                       <View style={s.reply}>
                         <Text variant="caption" style={{ color: accentText(accent) }}>

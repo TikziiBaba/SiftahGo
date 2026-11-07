@@ -2356,5 +2356,40 @@ ok((await db.query(`select role from profiles where id = $1`, [UP2])).rows[0].ro
   ok(await bm(rival) === null, 'işletme sahibi kendine rozet yazamaz');
 }
 
+// Fotoğraflı yorum: onaydan önce yalnızca müşteri ve yönetici görür
+{
+  const PC = '11111111-0000-0000-0000-0000000000f1';
+  const PX = '11111111-0000-0000-0000-0000000000f2';
+  await db.query(`insert into auth.users (id, email) values ($1, 'foto@x.com'), ($2, 'foto2@x.com')`, [PC, PX]);
+  const pb = (await db.query(`select id from businesses where slug = 'rozet-bir'`)).rows[0].id;
+  const pa = (await db.query(`insert into appointments (business_id, customer_id, service_name, customer_name, customer_phone, starts_at, ends_at, status)
+    values ($1, $2, 'Kesim', 'Foto Müşteri', '05550000000', now() - interval '5 hours', now() - interval '4 hours', 'completed') returning id`, [pb, PC])).rows[0].id;
+  await as(PC, `select add_review($1, 5, 'Harika')`, [pa]);
+  const url = `https://cdn.siftahgo.app/reviews/${PC}/1700000000-abcd1234.jpg`;
+  await expectError(() => as(PC, `select attach_review_photo($1, $2)`, [`https://cdn.siftahgo.app/reviews/${PX}/x.jpg`, pa]), /Geçersiz fotoğraf/, 'başkasının klasöründeki dosya eklenemez');
+  await expectError(() => as(PC, `select attach_review_photo($1, $2)`, ['https://evil.example/x.jpg', pa]), /Geçersiz fotoğraf/, 'dış adres eklenemez');
+  await expectError(() => as(PX, `select attach_review_photo($1, $2)`, [url, pa]), /bulunamadı/, 'başkasının yorumuna fotoğraf eklenemez');
+  await as(PC, `select attach_review_photo($1, $2)`, [url, pa]);
+  const pub = async () => (await as(null, `select photo_url from reviews where appointment_id = $1`, [pa])).rows[0].photo_url;
+  ok(await pub() === null, 'onay bekleyen fotoğraf yorumda görünmez');
+  ok((await as(null, `select * from review_photos`)).rows.length === 0 && (await as(PX, `select * from review_photos`)).rows.length === 0,
+    'onay bekleyen fotoğraf adresi başkasına görünmez');
+  ok((await as(PC, `select url from review_photos`)).rows[0]?.url === url, 'müşteri kendi fotoğrafını görür');
+  const rid = (await db.query(`select id from reviews where appointment_id = $1`, [pa])).rows[0].id;
+  await expectError(() => as(PC, `select admin_moderate_review_photo($1, true)`, [rid]), /yetkiniz/i, 'müşteri fotoğrafı onaylayamaz');
+  await db.query(`insert into admins (email) values ('foto-admin@x.com') on conflict do nothing`);
+  const AD = '11111111-0000-0000-0000-0000000000f3';
+  await db.query(`insert into auth.users (id, email) values ($1, 'foto-admin@x.com')`, [AD]);
+  ok((await as(AD, `select * from review_photos where status = 'pending'`)).rows.length >= 1, 'yönetici onay kuyruğunu görür');
+  await as(AD, `select admin_moderate_review_photo($1, true)`, [rid]);
+  ok(await pub() === url, 'onaylanan fotoğraf yorumda herkese görünür');
+  await as(PC, `select attach_review_photo($1, $2)`, [url.replace('abcd1234', 'ffff0000'), pa]);
+  ok(await pub() === null, 'yeni fotoğraf yeniden onay bekler');
+  await as(AD, `select admin_moderate_review_photo($1, false)`, [rid]);
+  ok(await pub() === null, 'reddedilen fotoğraf görünmez');
+  await db.query(`update reviews set created_at = now() - interval '8 days' where id = $1`, [rid]);
+  await expectError(() => as(PC, `select attach_review_photo($1, $2)`, [url, pa]), /7 gün/, '7 günden eski yoruma fotoğraf eklenemez');
+}
+
 console.log(failures ? `\n${failures} TEST BAŞARISIZ` : '\nTÜM TESTLER GEÇTİ');
 process.exit(failures ? 1 : 0);

@@ -92,6 +92,7 @@ export function MyCoupons() {
           {reviewing === c.claim_id && (
             <ReviewForm
               submit={(rating, comment) => createClient().rpc("add_coupon_review", { p_claim_id: c.claim_id, p_rating: rating, p_comment: comment })}
+              photoFor={{ claimId: c.claim_id }}
               onDone={() => {
                 setReviewing(null);
                 setThanks(true);
