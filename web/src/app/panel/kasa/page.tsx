@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Banknote, ChevronLeft, ChevronRight, CreditCard, Landmark, Loader2, Undo2, type LucideIcon } from "lucide-react";
+import { Banknote, ChevronLeft, ChevronRight, CreditCard, Download, Landmark, Loader2, Undo2, type LucideIcon } from "lucide-react";
 import { useBusiness } from "@/components/panel-context";
 import { createClient } from "@/lib/supabase/client";
 import { addDays, dayBounds, dayOf, errorMessage, formatDate, formatPrice, formatTime, todayStr } from "@/lib/format";
@@ -32,6 +32,58 @@ const nextMonth = (day: string) => {
   return m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
 };
 
+// Excel (Türkçe) ayırıcı olarak noktalı virgül bekler; BOM olmadan Türkçe harfler bozuk görünür.
+function csvCell(v: string | number) {
+  const s = typeof v === "number" ? String(v).replace(".", ",") : v;
+  return /[;"\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/** Ayın ödemesi girilen randevuları ve personel primi; muhasebeciye gönderilecek dosya. */
+function downloadMonth(rows: Row[], rates: StaffCommission[], month: string, slug: string) {
+  const label = METHODS.reduce<Record<string, string>>((a, m) => ({ ...a, [m.id]: m.label }), {});
+  const paid = rows.filter((r) => r.payment_method);
+  const lines: (string | number)[][] = [
+    ["Tarih", "Saat", "Müşteri", "Hizmet", "Personel", "Liste fiyatı", "Ödenen", "Ödeme şekli"],
+    ...paid.map((r) => [
+      dayOf(r.starts_at).split("-").reverse().join("."),
+      formatTime(r.starts_at),
+      r.customer_name,
+      r.service_name,
+      r.staff?.name ?? "",
+      Number(r.price),
+      Number(r.paid_amount ?? 0),
+      label[r.payment_method!],
+    ]),
+    [],
+    ["Toplam", "", "", "", "", "", paid.reduce((s, r) => s + Number(r.paid_amount ?? 0), 0), ""],
+    ...METHODS.map((m) => [m.label, "", "", "", "", "", sum(rows)[m.id], ""]),
+    [],
+    ["Personel", "İş sayısı", "Ciro", "Prim oranı (%)", "Prim"],
+    ...staffTotals(rows).map(([id, s]) => {
+      const rate = Number(rates.find((r) => r.staff_id === id)?.percent ?? 0);
+      return [s.name, s.count, s.revenue, rate, Math.round(s.revenue * rate) / 100];
+    }),
+  ];
+  const csv = "\uFEFF" + lines.map((l) => l.map(csvCell).join(";")).join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  a.download = `kasa-${month.slice(0, 7)}-${slug}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function staffTotals(rows: Row[]) {
+  const staff = new Map<string, { name: string; revenue: number; count: number }>();
+  for (const r of rows) {
+    if (!r.staff_id || !r.payment_method) continue;
+    const s = staff.get(r.staff_id) ?? { name: r.staff?.name ?? "Personel", revenue: 0, count: 0 };
+    s.revenue += Number(r.paid_amount ?? 0);
+    s.count++;
+    staff.set(r.staff_id, s);
+  }
+  return [...staff.entries()];
+}
+
 function sum(rows: Row[]) {
   const by: Record<PaymentMethod, number> = { cash: 0, card: 0, transfer: 0 };
   for (const r of rows) if (r.payment_method) by[r.payment_method] += Number(r.paid_amount ?? 0);
@@ -42,7 +94,11 @@ function sum(rows: Row[]) {
 export default function CashPage() {
   const { business } = useBusiness();
   const supabase = useMemo(() => createClient(), []);
-  const [day, setDay] = useState(todayStr);
+  // Mobil uygulamadaki "Excel dökümü" düğmesi ?ay=YYYY-MM ile o ayı açar.
+  const [day, setDay] = useState(() => {
+    const ay = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("ay");
+    return ay && /^\d{4}-(0[1-9]|1[0-2])$/.test(ay) ? `${ay}-01` : todayStr();
+  });
   const [rows, setRows] = useState<Row[] | null>(null);
   const [rates, setRates] = useState<StaffCommission[]>([]);
   const [error, setError] = useState("");
@@ -139,7 +195,16 @@ export default function CashPage() {
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         <section className="card p-5">
-          <h2 className="font-semibold">{formatDate(month, { weekday: undefined, day: undefined, year: "numeric" })} toplamı</h2>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="font-semibold">{formatDate(month, { weekday: undefined, day: undefined, year: "numeric" })} toplamı</h2>
+            <button
+              className="btn btn-secondary py-1.5 text-sm"
+              disabled={!rows?.some((r) => r.payment_method)}
+              onClick={() => rows && downloadMonth(rows, rates, month, business.slug)}
+            >
+              <Download className="size-4" /> Excel dökümü
+            </button>
+          </div>
           <p className="mt-2 text-3xl font-bold tabular-nums">{formatPrice(monthSum.total)}</p>
           <dl className="mt-3 space-y-1.5 text-sm">
             {METHODS.map((m) => (
@@ -233,14 +298,7 @@ function Commissions({
   onSaved: () => void;
   onError: (e: string) => void;
 }) {
-  const staff = new Map<string, { name: string; revenue: number; count: number }>();
-  for (const r of rows) {
-    if (!r.staff_id || !r.payment_method) continue;
-    const s = staff.get(r.staff_id) ?? { name: r.staff?.name ?? "Personel", revenue: 0, count: 0 };
-    s.revenue += Number(r.paid_amount ?? 0);
-    s.count++;
-    staff.set(r.staff_id, s);
-  }
+  const staff = new Map(staffTotals(rows));
 
   async function save(staffId: string, value: string) {
     const n = Number(value.replace(",", "."));

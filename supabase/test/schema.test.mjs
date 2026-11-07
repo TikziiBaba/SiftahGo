@@ -2312,5 +2312,49 @@ ok((await db.query(`select role from profiles where id = $1`, [UP2])).rows[0].ro
   ok((await db.query(`select count(*)::int c from deleted_accounts where email_hash = email_hash('kz@x.com')`)).rows[0].c === 0, 'devralınınca silinmiş hesap kaydı kalkar');
 }
 
+// "Mahallenin gözdesi" aylık rozeti
+{
+  const owners = ['11111111-0000-0000-0000-0000000000b1', '11111111-0000-0000-0000-0000000000b2', '11111111-0000-0000-0000-0000000000b3'];
+  for (const [i, o] of owners.entries()) {
+    await db.query(`insert into auth.users (id, email, raw_user_meta_data) values ($1, $2, '{"role":"business"}')`, [o, `rozet${i}@x.com`]);
+  }
+  const mk = async (o, slug, district) => {
+    const id = (await as(o, `insert into businesses (owner_id, slug, name, city, district, category) values ($1, $2, $2, 'Rozetkent', $3, 'berber') returning id`, [o, slug, district])).rows[0].id;
+    await db.query(`update businesses set approval_status = 'approved', is_published = true, plan_id = 'pro', subscription_ends_at = now() + interval '1 year',
+      rating_avg = 4.8, rating_count = 6 where id = $1`, [id]);
+    return id;
+  };
+  const win = await mk(owners[0], 'rozet-bir', 'Merkez');
+  const rival = await mk(owners[1], 'rozet-iki', 'Merkez');
+  const alone = await mk(owners[2], 'rozet-uc', 'Kenar'); // ilçesinde rakibi yok
+  // Geçen ayın ortası (İstanbul): her işletmeye farklı müşteriler.
+  const mid = (await db.query(`select ((date_trunc('month', now() at time zone 'Europe/Istanbul') - interval '1 month' + interval '14 days 10 hours') at time zone 'Europe/Istanbul') t`)).rows[0].t;
+  const visit = async (biz, n, prefix) => {
+    for (let i = 0; i < n; i++) {
+      const c = `11111111-0000-0000-0000-00000000${prefix}${String(i).padStart(2, '0')}`;
+      await db.query(`insert into auth.users (id, email) values ($1, $2) on conflict do nothing`, [c, `m${prefix}${i}@x.com`]);
+      await db.query(`insert into appointments (business_id, customer_id, service_name, customer_name, customer_phone, starts_at, ends_at, status)
+        values ($1, $2, 'Kesim', 'Müşteri', '05550000000', $3::timestamptz + make_interval(hours => $4), $3::timestamptz + make_interval(hours => $4, mins => 30), 'completed')`, [biz, c, mid, i]);
+    }
+  };
+  await visit(win, 12, 'c1');
+  await visit(rival, 10, 'c2');
+  await visit(alone, 15, 'c3');
+  await db.query(`update businesses set rating_avg = 4.8, rating_count = 6 where id = any($1)`, [[win, rival, alone]]);
+  await expectError(() => as(owners[0], `select award_monthly_badges()`), /permission denied/, 'rozet hesabı istemciden çalıştırılamaz');
+  await db.query(`select award_monthly_badges()`);
+  const bm = async (id) => (await db.query(`select badge_month::text m from businesses where id = $1`, [id])).rows[0].m;
+  const month = (await db.query(`select (date_trunc('month', now() at time zone 'Europe/Istanbul') - interval '1 month')::date::text m`)).rows[0].m;
+  ok(await bm(win) === month, 'ilçe ve kategorisinde en çok farklı müşteriye hizmet veren rozeti alır');
+  ok(await bm(rival) === null, 'ikinci olan rozet almaz');
+  ok(await bm(alone) === null, 'ilçesinde rakibi olmayan işletme rozet almaz');
+  await db.query(`update businesses set badge_month = null where id = $1`, [win]);
+  await db.query(`select award_monthly_badges()`);
+  ok(await bm(win) === null, 'rozet ayda bir kez hesaplanır');
+  await db.query(`update businesses set badge_month = $2 where id = $1`, [win, month]);
+  await as(owners[1], `update businesses set badge_month = $2 where id = $1`, [rival, month]);
+  ok(await bm(rival) === null, 'işletme sahibi kendine rozet yazamaz');
+}
+
 console.log(failures ? `\n${failures} TEST BAŞARISIZ` : '\nTÜM TESTLER GEÇTİ');
 process.exit(failures ? 1 : 0);

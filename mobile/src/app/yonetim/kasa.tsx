@@ -8,7 +8,8 @@ import { addDays, dayBounds, dayOf, errorMessage, formatPrice, formatTime, MONTH
 import { supabase } from '@/lib/supabase';
 import { colors, radius } from '@/lib/theme';
 import type { AppointmentStatus, Business, PaymentMethod, StaffCommission } from '@/lib/types';
-import type { IconName } from '@/lib/constants';
+import { WEB_URL, type IconName } from '@/lib/constants';
+import * as WebBrowser from 'expo-web-browser';
 
 type Row = {
   id: string;
@@ -179,6 +180,14 @@ function Cash({ business }: { business: Business }) {
               <Text>{formatPrice(monthSum[m.id])}</Text>
             </View>
           ))}
+          {/* Dosya paylaşımı yerel modül ister (yeni APK); döküm web panelden indirilir. */}
+          <Button
+            title="Excel dökümü (web panel)"
+            icon="download-outline"
+            variant="secondary"
+            size="sm"
+            onPress={() => WebBrowser.openBrowserAsync(`${WEB_URL}/panel/kasa?ay=${month.slice(0, 7)}`)}
+          />
         </Card>
 
         <Card style={{ gap: 10 }}>

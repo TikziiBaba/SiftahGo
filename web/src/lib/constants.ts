@@ -48,6 +48,23 @@ export function isShowcase(b: { business_type?: BusinessType | null }) {
   return b.business_type === "showcase";
 }
 
+const BADGE_MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+
+/**
+ * "Mahallenin gözdesi" rozeti geçerliyse ayın adı ("Ekim 2026"), değilse null. Rozet kazanıldığı aydan sonraki ay boyunca
+ * (İstanbul saatiyle) gösterilir; award_monthly_badges ile aynı kural.
+ */
+export function badgeLabel(b: { badge_month?: string | null }, now = new Date()) {
+  if (!b.badge_month) return null;
+  const [y, m] = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Istanbul", year: "numeric", month: "2-digit" })
+    .format(now)
+    .split("-")
+    .map(Number);
+  const prev = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`;
+  if (b.badge_month.slice(0, 7) !== prev) return null;
+  return `${BADGE_MONTHS[Number(prev.slice(5, 7)) - 1]} ${prev.slice(0, 4)}`;
+}
+
 /** Menü sayfasının adı: yemek-içmede "Menü", diğerlerinde "Ürünler". */
 export function menuLabel(category: string): "Menü" | "Ürünler" {
   return category === "lokanta" || category === "kafe" || category === "firin" ? "Menü" : "Ürünler";

@@ -13,6 +13,7 @@ drop trigger if exists on_auth_user_confirmed on auth.users;
 
 drop table if exists
   public.birthday_gifts,
+  public.badge_runs,
   public.staff_commissions,
   public.expenses,
   public.billing_profiles,
@@ -94,7 +95,8 @@ begin
         'loyalty_stamps', 'my_loyalty', 'business_loyalty', 'give_loyalty_reward', 'payments_fill_billing', 'admin_set_invoice',
         'appointments_payment', 'default_rebook_days', 'businesses_rebook_default', 'queue_rebook_reminders',
         'next_birthday', 'claim_birthday_gifts', 'business_birthday_summary',
-        'email_hash', 'handle_user_confirmed', 'reattach_deleted_account', 'session_packages_bind', 'appointments_drop_review'
+        'email_hash', 'handle_user_confirmed', 'reattach_deleted_account', 'session_packages_bind', 'appointments_drop_review',
+        'award_monthly_badges'
       )
   loop
     execute 'drop function if exists ' || r.sig || ' cascade';
@@ -259,6 +261,9 @@ create table public.businesses (
   -- Doğum günü kuponu (paketinde kupon olan işletme); boşsa kapalı (claim_birthday_gifts).
   birthday_discount_type  text check (birthday_discount_type in ('percent', 'fixed')),
   birthday_discount_value numeric(10, 2),
+  -- "Mahallenin gözdesi" rozetinin ait olduğu ay (ayın 1'i). Rozet o aydan sonraki ay boyunca gösterilir.
+  -- Yalnızca award_monthly_badges yazar.
+  badge_month        date,
   created_at         timestamptz not null default now(),
   constraint businesses_location_check check ((latitude is null) = (longitude is null)),
   constraint businesses_loyalty_check check (loyalty_target is null or length(trim(loyalty_reward)) > 0),
@@ -1786,6 +1791,7 @@ begin
       new.referral_code := upper(substr(md5(gen_random_uuid()::text), 1, 8));
       new.referred_by := null;
       new.referral_rewarded_at := null;
+      new.badge_month := null;
       new.approval_status := 'pending';
       new.approval_note := '';
       new.submitted_at := now();
@@ -1804,6 +1810,7 @@ begin
       new.referral_code := old.referral_code;
       new.referred_by := old.referred_by;
       new.referral_rewarded_at := old.referral_rewarded_at;
+      new.badge_month := old.badge_month;
       new.business_type := old.business_type;
       if old.approval_status = 'rejected' and new.approval_status = 'pending' then
         new.submitted_at := now();
@@ -5346,6 +5353,63 @@ begin
   );
 end;
 $$;
+
+-- "Mahallenin gözdesi": her ayın ilk çalışmasında bir önceki ay için hesaplanır (sunucu dakikada bir çağırır; ay başına
+-- bir kez, badge_runs). Aynı il, ilçe ve kategoride yayında en az 2 randevulu işletme olan gruplarda, puanı en az 4,5
+-- ve en az 5 yorumu olan işletmeler arasından o ay en çok farklı müşteriye hizmet veren kazanır (eşitlikte puan, sonra
+-- yorum sayısı). Sayılan randevu: hesapla alınmış, gerçekleşmiş (tamamlandı ya da saati geçmiş onaylı), sahibin kendisi
+-- değil. Kazanan sayısını döner.
+create table public.badge_runs (
+  month   date primary key,
+  ran_at  timestamptz not null default now(),
+  winners int not null default 0
+);
+alter table public.badge_runs enable row level security;
+
+create function public.award_monthly_badges()
+returns int
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  v_month date := (date_trunc('month', now() at time zone 'Europe/Istanbul') - interval '1 month')::date;
+  v_n     int;
+begin
+  if exists (select 1 from public.badge_runs where month = v_month) then return 0; end if;
+  with candidates as (
+    select b.id, b.city, coalesce(b.district, '') district, b.category, b.rating_avg, b.rating_count,
+           count(distinct a.customer_id) customers
+    from public.businesses b
+    join public.appointments a on a.business_id = b.id
+    where b.business_type = 'appointment' and public.is_bookable(b.id)
+      and b.rating_count >= 5 and b.rating_avg >= 4.5
+      and a.customer_id is not null and a.customer_id <> b.owner_id
+      and a.starts_at >= (v_month::timestamp at time zone b.timezone)
+      and a.starts_at < ((v_month + interval '1 month')::timestamp at time zone b.timezone)
+      and a.starts_at <= now()
+      and (a.status = 'completed' or (a.status = 'confirmed' and a.ends_at <= now()))
+    group by b.id
+    having count(distinct a.customer_id) >= 10
+  ),
+  groups as (
+    select b.city, coalesce(b.district, '') district, b.category
+    from public.businesses b
+    where b.business_type = 'appointment' and public.is_bookable(b.id)
+    group by 1, 2, 3
+    having count(*) >= 2
+  ),
+  winners as (
+    select distinct on (c.city, c.district, c.category) c.id
+    from candidates c
+    join groups g on g.city = c.city and g.district = c.district and g.category = c.category
+    order by c.city, c.district, c.category, c.customers desc, c.rating_avg desc, c.rating_count desc
+  )
+  update public.businesses b set badge_month = v_month from winners w where b.id = w.id;
+  get diagnostics v_n = row_count;
+  insert into public.badge_runs (month, winners) values (v_month, v_n);
+  return v_n;
+end;
+$$;
+revoke execute on function public.award_monthly_badges() from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------
 -- 5) Canlı güncelleme (panelde yeni randevular ve bildirimler anında görünür)

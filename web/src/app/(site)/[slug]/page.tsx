@@ -6,7 +6,7 @@ import { cache, Suspense, ViewTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { createClient as createSupabase, type SupabaseClient } from "@supabase/supabase-js";
-import { ChevronRight, Clock, Globe, MapPin, Megaphone, Phone, Sparkles, Star } from "lucide-react";
+import { Award, ChevronRight, Clock, Globe, MapPin, Megaphone, Phone, Sparkles, Star } from "lucide-react";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
 import { BookingWidget } from "@/components/booking-widget";
 import { BusinessSkeleton } from "@/components/skeletons";
@@ -19,7 +19,7 @@ import { ShopShortcuts } from "@/components/shop-shortcuts";
 import { StickyBooking } from "@/components/sticky-booking";
 import { TrackRecent } from "@/components/track-recent";
 import { createClient } from "@/lib/supabase/server";
-import { accentVars, categoryLabel, isShowcase, isSubscribed, menuLabel, SITE_NAME, SITE_URL, WEEKDAYS } from "@/lib/constants";
+import { accentVars, badgeLabel, categoryLabel, isShowcase, isSubscribed, menuLabel, SITE_NAME, SITE_URL, WEEKDAYS } from "@/lib/constants";
 import { formatDate, isoWeekday, todayStr } from "@/lib/format";
 import type { Business, Review, Service, Staff, StaffService, WorkingHour } from "@/lib/types";
 
@@ -184,6 +184,7 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
 
   const { business, services, staff: staffList, staffServices, hours: hourList, reviews: reviewList, features } = data;
   const location = [business.address, business.district, business.city].filter(Boolean).join(", ");
+  const badge = badgeLabel(business);
   const mapsUrl = location ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${business.name} ${location}`)}` : null;
 
   // Paketteki özelliğe göre görünen özelleştirmeler; paket düşerse ayarlar saklanır ama gösterilmez.
@@ -310,6 +311,11 @@ async function BusinessView({ params }: { params: PageProps<"/[slug]">["params"]
               ) : (
                 <span className="chip ml-1 gap-1 bg-brand-400/10 text-accent">
                   <Sparkles className="size-3.5" /> Yeni işletme
+                </span>
+              )}
+              {badge && (
+                <span className="chip ml-1 gap-1 bg-amber-400/15 text-amber-700" title={`${badge} ayında bölgesinde en çok müşteriye hizmet veren, yüksek puanlı işletme`}>
+                  <Award className="size-3.5" /> Mahallenin gözdesi · {badge}
                 </span>
               )}
             </p>

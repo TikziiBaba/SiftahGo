@@ -43,6 +43,9 @@ export async function GET(request: Request) {
 
   const { error: liftError } = await supabase.rpc("lift_due_suspensions");
   if (liftError) console.error("Süresi dolan askılar kaldırılamadı", liftError.message);
+  // Ay başında bir kez: geçen ayın "Mahallenin gözdesi" rozetleri.
+  const { error: badgeError } = await supabase.rpc("award_monthly_badges");
+  if (badgeError) console.error("Aylık rozetler hesaplanamadı", badgeError.message);
 
   const { data: reminders, error: queueError } = await supabase.rpc("queue_due_reminders");
   if (queueError) console.error("Hatırlatmalar kuyruğa eklenemedi", queueError.message);

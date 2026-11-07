@@ -16,7 +16,7 @@ import { Avatar, Badge, Button, Card, Chip, Empty, IconButton, Loading, SectionT
 import { ShopLoyalty } from '@/components/shop-loyalty';
 import { AccentProvider } from '@/lib/accent';
 import { useAuth } from '@/lib/auth';
-import { categoryIcon, categoryLabel, isShowcase, isSubscribed, WEB_URL, WEEKDAYS, type IconName } from '@/lib/constants';
+import { badgeLabel, categoryIcon, categoryLabel, isShowcase, isSubscribed, WEB_URL, WEEKDAYS, type IconName } from '@/lib/constants';
 import { addDays, errorMessage, formatDate, formatDuration, formatPrice, formatTime, isoWeekday, mapsLink, todayStr, whatsappLink } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 import { supabase } from '@/lib/supabase';
@@ -310,6 +310,9 @@ export default function BusinessScreen() {
               ) : (
                 <Badge label="Yeni işletme" fg={accentText(accent)} bg={alpha(accent.base, 0.12)} icon="sparkles-outline" />
               )}
+              {badgeLabel(business) ? (
+                <Badge label={`Mahallenin gözdesi · ${badgeLabel(business)}`} fg={colors.gold} bg={alpha(colors.gold, 0.14)} icon="ribbon-outline" />
+              ) : null}
             </View>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.shortcuts} style={{ marginHorizontal: -16, marginTop: 4 }}>

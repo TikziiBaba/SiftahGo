@@ -73,6 +73,8 @@ export type Business = {
   // Doğum günü kuponu indirimi (boşsa kapalı).
   birthday_discount_type: "percent" | "fixed" | null;
   birthday_discount_value: number | null;
+  // "Mahallenin gözdesi" rozetinin ayı (ayın 1'i, YYYY-MM-DD); rozet sonraki ay boyunca gösterilir (badgeLabel).
+  badge_month: string | null;
 };
 
 // Kasa: randevuya işlenen ödeme şekli.

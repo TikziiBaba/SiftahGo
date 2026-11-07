@@ -7,7 +7,7 @@ import { QrCode } from '@/components/qr-code';
 import { useToast } from '@/components/toast';
 import { Button, Card, styles, Text } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
-import { isShowcase, WEB_URL } from '@/lib/constants';
+import { badgeLabel, isShowcase, WEB_URL } from '@/lib/constants';
 import { colors, radius } from '@/lib/theme';
 
 // Bağlantılar ?kaynak= ile etiketlidir: ziyaretlerin nereden geldiği istatistikte görünür (web ile aynı).
@@ -63,6 +63,14 @@ export default function QrScreen() {
       </Card>
 
       <Button title="Cam afişini yazdır" icon="print-outline" size="lg" onPress={() => WebBrowser.openBrowserAsync(`${link}/afis`)} />
+
+      {!showcase && badgeLabel(business) ? (
+        <Card style={{ gap: 8 }}>
+          <Text variant="bodyStrong">Tebrikler, {badgeLabel(business)} ayının mahallenin gözdesi sizsiniz!</Text>
+          <Text tone="muted">Rozet bu ay boyunca sayfanızda görünür. Görseli açıp kaydedin, Instagram'da paylaşın ya da camınıza asın.</Text>
+          <Button title="Rozet görselini aç" icon="ribbon-outline" variant="secondary" onPress={() => WebBrowser.openBrowserAsync(`${link}/rozet`)} />
+        </Card>
+      ) : null}
 
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <Button

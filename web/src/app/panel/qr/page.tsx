@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Check, Copy, Download, ImagePlus, Loader2, Printer } from "lucide-react";
+import { Award, Check, Copy, Download, ImagePlus, Loader2, Printer } from "lucide-react";
 import { useBusiness } from "@/components/panel-context";
 import { QrPoster, QrSvg } from "@/components/qr-poster";
-import { isShowcase, SITE_URL } from "@/lib/constants";
+import { badgeLabel, isShowcase, SITE_URL } from "@/lib/constants";
 import { QR_COLOR, qrMatrix } from "@/lib/qr";
 
 export default function QrPage() {
@@ -103,8 +103,38 @@ export default function QrPage() {
         </section>
       </div>
 
+      {!isShowcase(business) && <BadgeCard slug={business.slug} month={badgeLabel(business)} />}
+
       <ShareLinks url={url} showcase={isShowcase(business)} />
     </div>
+  );
+}
+
+// "Mahallenin gözdesi": kazanan esnaf görseli indirip Instagram'da ve camında paylaşır; kazanmayana kural anlatılır.
+function BadgeCard({ slug, month }: { slug: string; month: string | null }) {
+  return (
+    <section className="card mt-4 flex flex-wrap items-center gap-5 p-5">
+      {month ? (
+        <img src={`/${slug}/rozet`} alt={`Mahallenin gözdesi rozeti, ${month}`} className="size-40 rounded-xl ring-1 ring-line" />
+      ) : (
+        <div className="grid size-16 place-items-center rounded-2xl bg-amber-400/15 text-amber-500">
+          <Award className="size-8" />
+        </div>
+      )}
+      <div className="min-w-0 flex-1">
+        <h2 className="font-semibold">{month ? `Tebrikler, ${month} ayının mahallenin gözdesi sizsiniz!` : "Mahallenin gözdesi rozeti"}</h2>
+        <p className="mt-1 text-sm text-ink-3">
+          {month
+            ? "Rozet bu ay boyunca sayfanızda görünür. Görseli indirip Instagram'da paylaşın ya da camınıza asın."
+            : "Her ay aynı ilçe ve kategorideki işletmeler arasında en çok farklı müşteriye hizmet veren kazanır. Şartlar: puan en az 4,5 ve en az 5 değerlendirme, ayda en az 10 farklı müşteri. Kazanan rozeti bir ay boyunca sayfasında gösterir."}
+        </p>
+        {month && (
+          <a href={`/${slug}/rozet`} download={`mahallenin-gozdesi-${slug}.png`} className="btn btn-primary mt-3">
+            <Download className="size-4" /> Görseli indir
+          </a>
+        )}
+      </div>
+    </section>
   );
 }
 
