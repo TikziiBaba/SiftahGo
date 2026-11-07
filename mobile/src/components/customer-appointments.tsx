@@ -55,10 +55,12 @@ export function CustomerAppointments({ userId, header = true }: { userId: string
     const reviewed = new Set((reviews ?? []).map((r: { appointment_id: string }) => r.appointment_id));
     const rows = (data ?? []) as Row[];
     const now = new Date().toISOString();
+    // İşletmenin işaretlemediği randevu bittikten 2 saat sonra değerlendirilir (add_review ile aynı kural).
+    const reviewAfter = new Date(Date.now() - 2 * 3600e3).toISOString();
     setReviewable(
       new Set(
         rows
-          .filter((r) => !reviewed.has(r.id) && (r.status === 'completed' || (r.status === 'confirmed' && r.ends_at <= now)))
+          .filter((r) => !reviewed.has(r.id) && ((r.status === 'completed' && r.starts_at <= now) || (r.status === 'confirmed' && r.ends_at <= reviewAfter)))
           .map((r) => r.id),
       ),
     );

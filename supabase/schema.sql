@@ -9,6 +9,7 @@
 -- 0) Eski şemayı temizle
 -- ---------------------------------------------------------------------
 drop trigger if exists on_auth_user_created on auth.users;
+drop trigger if exists on_auth_user_confirmed on auth.users;
 
 drop table if exists
   public.birthday_gifts,
@@ -27,6 +28,7 @@ drop table if exists
   public.error_logs,
   public.waitlist,
   public.session_packages,
+  public.deleted_accounts,
   public.favorites,
   public.customer_notes,
   public.staff_hours,
@@ -91,7 +93,8 @@ begin
         'enforce_menu_limit', 'enforce_working_hours', 'add_coupon_review', 'claim_coupon_review_requests', 'claim_coupon_review_notices',
         'loyalty_stamps', 'my_loyalty', 'business_loyalty', 'give_loyalty_reward', 'payments_fill_billing', 'admin_set_invoice',
         'appointments_payment', 'default_rebook_days', 'businesses_rebook_default', 'queue_rebook_reminders',
-        'next_birthday', 'claim_birthday_gifts', 'business_birthday_summary'
+        'next_birthday', 'claim_birthday_gifts', 'business_birthday_summary',
+        'email_hash', 'handle_user_confirmed', 'reattach_deleted_account', 'session_packages_bind', 'appointments_drop_review'
       )
   loop
     execute 'drop function if exists ' || r.sig || ' cascade';
@@ -343,6 +346,11 @@ create table public.session_packages (
   total         int not null check (total between 1 and 500),
   used          int not null default 0 check (used >= 0),
   created_at    timestamptz not null default now(),
+  -- Paketin sahibi olan hesap: satışta bu telefonla gerçekleşmiş son hesaplı randevudan, yoksa ilk hesaplı kullanımda
+  -- yazılır (session_packages_bind, use_package_session). Sonra başka hesap aynı telefonu yazarak paketten seans düşemez.
+  customer_id   uuid references public.profiles (id) on delete set null,
+  -- Hesap silinince bağ yeni hesaba taşınabilsin diye e-postanın özeti (delete_my_account, reattach_deleted_account).
+  former_email_hash text,
   check (used <= total)
 );
 create index session_packages_customer_idx on public.session_packages (business_id, phone_key);
@@ -387,6 +395,10 @@ create table public.appointments (
   business_delay_minutes int check (business_delay_minutes in (10, 15, 30, 45)),
   business_delay_at      timestamptz,
   business_delay_count   smallint not null default 0,
+  -- Müşterinin saat değiştirme sayısı (reschedule_appointment; en fazla 3). İşletmenin değişikliği sayılmaz.
+  reschedule_count smallint not null default 0,
+  -- Hesap silinince geçmiş (iptal, gelmedi) yeni hesaba taşınsın diye e-postanın özeti (delete_my_account).
+  former_email_hash text,
   -- Kasa: esnafın işaretlediği ödeme (appointments_payment tamamlar). Boşsa ödeme girilmemiş.
   payment_method text check (payment_method in ('cash', 'card', 'transfer')),
   paid_amount    numeric(10, 2) check (paid_amount >= 0),
@@ -457,6 +469,8 @@ create table public.coupon_claims (
   appointment_id uuid references public.appointments (id) on delete set null,
   -- Vitrinde kasada kullanımdan 2 saat sonra müşteriye "Nasıldı?" haberi gittiği an (claim_coupon_review_requests).
   review_requested_at timestamptz,
+  -- Hesap silinince kupon hakkı yeni hesaba taşınsın diye e-postanın özeti: aynı adresle açılan hesap kuponu yeniden alamaz.
+  former_email_hash text,
   created_at     timestamptz not null default now(),
   unique (coupon_id, customer_id),
   unique (business_id, code)
@@ -615,13 +629,25 @@ create index inbox_push_pending_idx on public.inbox (created_at) where push_stat
 create table public.blocked_customers (
   id            uuid primary key default gen_random_uuid(),
   business_id   uuid not null references public.businesses (id) on delete cascade,
-  customer_id   uuid references public.profiles (id) on delete cascade,
+  customer_id   uuid references public.profiles (id) on delete set null,
   phone_key     text check (phone_key ~ '^[0-9]{10}$'),
   customer_name text not null default '',
+  -- Hesap silinince engel yeni hesaba taşınsın diye e-postanın özeti (delete_my_account).
+  former_email_hash text,
   created_at    timestamptz not null default now(),
-  check (customer_id is not null or phone_key is not null)
+  check (customer_id is not null or phone_key is not null or former_email_hash is not null)
 );
 create index blocked_customers_business_idx on public.blocked_customers (business_id);
+
+-- Silinen müşteri hesaplarının e-posta özeti (sha256, adresin kendisi değil) ve silinme anı. Aynı adresle 1 yıl içinde
+-- açılan hesap eski hesabın kupon haklarını, iptal/gelmedi geçmişini, engellerini ve paketlerini devralır: yoksa hesabı
+-- silip yeniden açmak bunları sıfırlardı. 1 yıldan eski kayıtlar ve özetler silinir (delete_my_account).
+-- Politika yok: yalnızca fonksiyonlar erişir.
+create table public.deleted_accounts (
+  email_hash text primary key,
+  deleted_at timestamptz not null default now()
+);
+alter table public.deleted_accounts enable row level security;
 
 -- Personelin kendi çalışma saatleri. Bir gün için kaydı yoksa işletme saatleri geçerlidir.
 create table public.staff_hours (
@@ -807,6 +833,41 @@ as $$
   );
 $$;
 
+-- E-posta adresinin özeti (küçük harf, boşluksuz); silinen hesapları adresi saklamadan tanımak için.
+create function public.email_hash(p_email text)
+returns text
+language sql immutable set search_path = ''
+as $$
+  select case when nullif(trim(coalesce(p_email, '')), '') is null then null
+              else encode(sha256(convert_to(lower(trim(p_email)), 'UTF8')), 'hex') end;
+$$;
+revoke execute on function public.email_hash(text) from public, anon, authenticated;
+
+-- Aynı adresle son 1 yılda silinmiş hesap varsa kayıtları (kupon hakkı, randevu geçmişi, engel, paket) yeni hesaba
+-- bağlar. E-posta onaylanınca çalışır: onaysız kayıtla başkasının eski haklarına ulaşılamasın.
+create function public.reattach_deleted_account(p_user uuid, p_email text)
+returns void
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  v_hash text := public.email_hash(p_email);
+begin
+  if v_hash is null or not exists (
+    select 1 from public.deleted_accounts d where d.email_hash = v_hash and d.deleted_at > now() - interval '1 year'
+  ) then
+    return;
+  end if;
+  update public.coupon_claims cl set customer_id = p_user, former_email_hash = null
+  where cl.former_email_hash = v_hash
+    and not exists (select 1 from public.coupon_claims x where x.coupon_id = cl.coupon_id and x.customer_id = p_user);
+  update public.appointments set customer_id = p_user, former_email_hash = null where former_email_hash = v_hash;
+  update public.blocked_customers set customer_id = p_user, former_email_hash = null where former_email_hash = v_hash;
+  update public.session_packages set customer_id = p_user, former_email_hash = null where former_email_hash = v_hash;
+  delete from public.deleted_accounts where email_hash = v_hash;
+end;
+$$;
+revoke execute on function public.reattach_deleted_account(uuid, text) from public, anon, authenticated;
+
 -- Yeni kullanıcı kaydında profil oluştur.
 create function public.handle_new_user()
 returns trigger
@@ -822,6 +883,10 @@ begin
     case when new.raw_user_meta_data ->> 'role' = 'business' then 'business' else 'customer' end
   )
   on conflict (id) do nothing;
+  -- Google ile girişte adres kayıtta onaylıdır; e-postayla kayıtta onay handle_user_confirmed'da gelir.
+  if new.email_confirmed_at is not null then
+    perform public.reattach_deleted_account(new.id, new.email);
+  end if;
   return new;
 end;
 $$;
@@ -829,6 +894,21 @@ $$;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
+
+create function public.handle_user_confirmed()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  perform public.reattach_deleted_account(new.id, new.email);
+  return new;
+end;
+$$;
+
+create trigger on_auth_user_confirmed
+  after update of email_confirmed_at on auth.users
+  for each row when (old.email_confirmed_at is null and new.email_confirmed_at is not null)
+  execute function public.handle_user_confirmed();
 
 -- Kullanıcı profilinin kimliğini ve kayıt tarihini değiştiremez: kayıt tarihi işletmeye müşteri kartında
 -- "üyelik tarihi" olarak gösterilir (customer_card); geriye alınarak eski üye gibi görünülmesin.
@@ -1070,6 +1150,8 @@ begin
       new.business_delay_minutes := null;
       new.business_delay_at := null;
       new.business_delay_count := 0;
+      new.reschedule_count := 0;
+      new.former_email_hash := null;
     else
       new.business_id := old.business_id;
       new.customer_id := old.customer_id;
@@ -1084,6 +1166,8 @@ begin
       new.business_delay_minutes := old.business_delay_minutes;
       new.business_delay_at := old.business_delay_at;
       new.business_delay_count := old.business_delay_count;
+      new.reschedule_count := old.reschedule_count;
+      new.former_email_hash := old.former_email_hash;
       if old.customer_id is not null then
         new.customer_phone := old.customer_phone;
         -- Hesapla alınan yaklaşan randevu "gelmedi" yapılamaz, saati de geçmişe alınamaz: müşterinin gelmeme sayısı
@@ -1125,7 +1209,9 @@ as $$
 declare
   v_pkg uuid;
 begin
-  -- Kuponlu randevu paketten seans düşmez.
+  -- Kuponlu randevu paketten seans düşmez. Hesapla alınan randevu yalnızca o hesabın ya da henüz hesaba bağlanmamış
+  -- paketten düşer (telefon doğrulanmaz: başkasının telefonunu yazan onun paketini kullanamasın); ilk kullanımda paket
+  -- o hesaba bağlanır. İşletmenin elle eklediği (hesapsız) randevu telefonla eşleşir.
   if new.status = 'completed' and old.status is distinct from 'completed' and new.service_id is not null
      and new.coupon_claim_id is null then
     select p.id into v_pkg
@@ -1134,11 +1220,14 @@ begin
       and p.service_id = new.service_id
       and p.phone_key = right(regexp_replace(new.customer_phone, '\D', '', 'g'), 10)
       and p.used < p.total
-    order by p.created_at
+      and (new.customer_id is null or p.customer_id is null or p.customer_id = new.customer_id)
+    order by (p.customer_id is not null) desc, p.created_at
     limit 1
     for update;
     if v_pkg is not null then
-      update public.session_packages set used = used + 1 where id = v_pkg;
+      update public.session_packages
+      set used = used + 1, customer_id = coalesce(customer_id, new.customer_id)
+      where id = v_pkg;
       new.package_id := v_pkg;
     end if;
   elsif old.status = 'completed' and new.status is distinct from 'completed' and old.package_id is not null then
@@ -1152,6 +1241,31 @@ $$;
 create trigger appointments_use_package_session
   before update of status on public.appointments
   for each row execute function public.use_package_session();
+
+-- Paket satılırken bu telefonla bu işletmede gerçekleşmiş son hesaplı randevunun hesabına bağlanır (işletme kendisi
+-- yazmadıysa). Daha önce hesapla gelmemiş müşterinin paketi ilk hesaplı kullanımda bağlanır (use_package_session).
+create function public.session_packages_bind()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  if new.customer_id is null then
+    select a.customer_id into new.customer_id
+    from public.appointments a
+    where a.business_id = new.business_id and a.customer_id is not null
+      and right(regexp_replace(a.customer_phone, '\D', '', 'g'), 10) = new.phone_key
+      and a.starts_at <= now() and (a.status = 'completed' or (a.status = 'confirmed' and a.ends_at <= now()))
+    order by a.starts_at desc
+    limit 1;
+  end if;
+  new.former_email_hash := null;
+  return new;
+end;
+$$;
+
+create trigger session_packages_bind
+  before insert on public.session_packages
+  for each row execute function public.session_packages_bind();
 
 -- Müşterinin randevusu (veya saat değişikliği) işletme onayına düşer mü: elle onayda her zaman; "yalnızca tanıdık
 -- müşteriyi otomatik onayla" seçiliyse bu işletmede daha önce tamamlanmış randevusu olmayanda. Sık iptal eden
@@ -1443,11 +1557,33 @@ returns void
 language plpgsql volatile security definer set search_path = ''
 as $$
 declare
-  v_uid uuid := auth.uid();
+  v_uid  uuid := auth.uid();
+  v_hash text;
+  v_old  text[];
 begin
   if v_uid is null then raise exception 'Giriş yapmalısınız.'; end if;
   if exists (select 1 from public.businesses b where b.owner_id = v_uid) then
     raise exception 'İşletme hesabı buradan silinemez. Lütfen destek adresimize yazın.';
+  end if;
+  -- 1 yıldan eski silinmiş hesap izleri kaldırılır.
+  with d as (delete from public.deleted_accounts where deleted_at < now() - interval '1 year' returning email_hash)
+  select array_agg(email_hash) into v_old from d;
+  if v_old is not null then
+    update public.coupon_claims set former_email_hash = null where former_email_hash = any (v_old);
+    update public.appointments set former_email_hash = null where former_email_hash = any (v_old);
+    delete from public.blocked_customers where former_email_hash = any (v_old) and customer_id is null and phone_key is null;
+    update public.blocked_customers set former_email_hash = null where former_email_hash = any (v_old);
+    update public.session_packages set former_email_hash = null where former_email_hash = any (v_old);
+  end if;
+  -- Aynı adresle açılacak hesap kupon haklarını, geçmişi, engelleri ve paketleri devralsın (reattach_deleted_account).
+  select public.email_hash(u.email) into v_hash from auth.users u where u.id = v_uid;
+  if v_hash is not null then
+    insert into public.deleted_accounts (email_hash) values (v_hash)
+    on conflict (email_hash) do update set deleted_at = now();
+    update public.coupon_claims set former_email_hash = v_hash where customer_id = v_uid;
+    update public.appointments set former_email_hash = v_hash where customer_id = v_uid;
+    update public.blocked_customers set former_email_hash = v_hash where customer_id = v_uid;
+    update public.session_packages set former_email_hash = v_hash where customer_id = v_uid;
   end if;
   update public.appointments set status = 'cancelled'
   where customer_id = v_uid and status in ('pending', 'confirmed') and starts_at > now();
@@ -1483,6 +1619,9 @@ begin
      or a.starts_at <= now() then
     raise exception 'Bu randevunun saati değiştirilemiyor.';
   end if;
+  if not v_owner and a.reschedule_count >= 3 then
+    raise exception 'Bu randevunun saatini en fazla 3 kez değiştirebilirsiniz. Yeni saat için işletmeyi arayın ya da randevuyu iptal edin.';
+  end if;
 
   select duration_minutes into v_mins from public.services where id = a.service_id;
   if v_mins is null then
@@ -1515,7 +1654,8 @@ begin
   set starts_at = p_starts_at,
       ends_at = p_starts_at + make_interval(mins => v_mins),
       staff_id = v_staff,
-      status = case when not v_owner and public.needs_confirmation(b, a.customer_id) then 'pending' else a.status end
+      status = case when not v_owner and public.needs_confirmation(b, a.customer_id) then 'pending' else a.status end,
+      reschedule_count = a.reschedule_count + case when v_owner then 0 else 1 end
   where id = a.id;
 exception
   when exclusion_violation then
@@ -1527,6 +1667,8 @@ $$;
 -- (işletme "Tamamlandı" işaretlemese de). İptal ve gelmedi değerlendirilemez.
 -- İşletme sahibi kendi işletmesini değerlendiremez. Saati başlamamış randevu "Tamamlandı" işaretlense de (erken gelen
 -- müşteri) değerlendirme saati gelince açılır: yoksa sahip ikinci hesapla randevu alıp hemen tamamlayarak puan yazabilirdi.
+-- İşletme işaretlemediyse değerlendirme randevu bittikten 2 saat sonra açılır ("Hizmet nasıldı?" de o an gider): esnafa
+-- gelmeyen müşteriyi "Gelmedi" işaretleme süresi kalır. Sonradan gelmedi/iptal denirse yorum silinir (appointments_drop_review).
 create function public.add_review(p_appointment_id uuid, p_rating int, p_comment text default '')
 returns void
 language plpgsql volatile security definer set search_path = ''
@@ -1537,7 +1679,7 @@ declare
 begin
   select * into a from public.appointments
   where id = p_appointment_id and customer_id = auth.uid()
-    and (status = 'completed' or (status = 'confirmed' and ends_at <= now()));
+    and (status = 'completed' or (status = 'confirmed' and ends_at <= now() - interval '2 hours'));
   if not found then
     raise exception 'Sadece tamamlanan randevularınızı değerlendirebilirsiniz.';
   end if;
@@ -1583,6 +1725,24 @@ $$;
 create trigger reviews_refresh_rating
   after insert or delete on public.reviews
   for each row execute function public.refresh_business_rating();
+
+-- İşletmenin "Tamamlandı" demediği randevu sonradan gelmedi ya da iptal işaretlenirse yorumu silinir (puan yeniden
+-- hesaplanır): gelmeyen hesap, esnaf işaretlemeden önce yazdığı yorumla puan düşüremesin. İşletmenin tamamladığı
+-- randevunun yorumu kalır.
+create function public.appointments_drop_review()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  delete from public.reviews r where r.appointment_id = new.id;
+  return null;
+end;
+$$;
+
+create trigger appointments_drop_review
+  after update of status on public.appointments
+  for each row when (new.status in ('no_show', 'cancelled') and old.status in ('pending', 'confirmed'))
+  execute function public.appointments_drop_review();
 
 -- İşletme sahibi değerlendirmeye herkese açık cevap yazar; boş cevap cevabı kaldırır.
 create function public.reply_review(p_id uuid, p_reply text)
@@ -5124,6 +5284,10 @@ begin
         where g.business_id = b.id and g.customer_id = p.id
           and (g.year = extract(year from public.next_birthday(p.birth_month, p.birth_day, t.today))::int
                or g.created_at > now() - interval '300 days')
+      )
+      and not exists (
+        select 1 from public.coupon_claims cl join public.coupons c on c.id = cl.coupon_id
+        where cl.business_id = b.id and cl.customer_id = p.id and c.is_birthday and cl.created_at > now() - interval '300 days'
       )
     limit p_limit
   loop

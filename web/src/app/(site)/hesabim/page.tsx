@@ -93,7 +93,7 @@ function AccountView() {
   const [favorites, setFavorites] = useState<Favorite[] | null>(null);
   // Ekibin yanıtladığı destek talepleri (sekme rozeti)
   const [answered, setAnswered] = useState(0);
-  // Değerlendirilebilecek randevular: tamamlanan veya saati geçmiş onaylı, henüz değerlendirilmemiş.
+  // Değerlendirilebilecek randevular: saati gelmiş tamamlanan veya bitişinden 2 saat geçmiş onaylı, henüz değerlendirilmemiş.
   const [reviewable, setReviewable] = useState<Set<string>>(new Set());
   // Kuponlu randevu kartında kupon adı için: kod kimliği -> kupon adı
   const [couponNames, setCouponNames] = useState<Map<string, string>>(new Map());
@@ -134,10 +134,12 @@ function AccountView() {
     const reviewed = new Set((r.data ?? []).map((x: { appointment_id: string }) => x.appointment_id));
     const rows = (a.data ?? []) as Row[];
     const now = new Date().toISOString();
+    // İşletmenin işaretlemediği randevu bittikten 2 saat sonra değerlendirilir (add_review ile aynı kural).
+    const reviewAfter = new Date(Date.now() - 2 * 3600e3).toISOString();
     setReviewable(
       new Set(
         rows
-          .filter((x) => !reviewed.has(x.id) && (x.status === "completed" || (x.status === "confirmed" && x.ends_at <= now)))
+          .filter((x) => !reviewed.has(x.id) && ((x.status === "completed" && x.starts_at <= now) || (x.status === "confirmed" && x.ends_at <= reviewAfter)))
           .map((x) => x.id),
       ),
     );

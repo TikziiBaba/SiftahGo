@@ -2221,5 +2221,96 @@ ok((await db.query(`select role from profiles where id = $1`, [UP2])).rows[0].ro
   ok((await db.query(`select * from claim_birthday_gifts(50)`)).rows.length === 0, '300 gün dolmadan aynı işletmeden ikinci kupon üretilmez');
 }
 
+// Kötüye kullanım: gelmeyen müşterinin yorumu, başkasının seans paketi, hesap silip yeniden açma, sınırsız erteleme
+{
+  const KO = '11111111-0000-0000-0000-0000000000e1'; // işletme sahibi
+  const KX = '11111111-0000-0000-0000-0000000000e2'; // gelmeyen / başkasının telefonunu yazan
+  const KY = '11111111-0000-0000-0000-0000000000e3'; // paketi alan müşteri
+  const KZ = '11111111-0000-0000-0000-0000000000e4'; // hesabını silip yeniden açan
+  await db.query(`insert into auth.users (id, email, raw_user_meta_data) values
+    ($1, 'ko@x.com', '{"full_name":"Kemal Usta","role":"business"}'), ($2, 'kx@x.com', '{"full_name":"Rakip"}'),
+    ($3, 'ky@x.com', '{"full_name":"Yeliz"}'), ($4, 'KZ@x.com', '{"full_name":"Zeki"}')`, [KO, KX, KY, KZ]);
+  const kb = (await as(KO, `insert into businesses (owner_id, slug, name, city, category) values ($1, 'kemal-kuafor', 'Kemal Kuaför', 'Sivas', 'kuafor') returning id`, [KO])).rows[0].id;
+  await db.query(`update businesses set approval_status = 'approved', is_published = true, plan_id = 'pro', subscription_ends_at = now() + interval '1 year' where id = $1`, [kb]);
+  const ks = (await as(KO, `insert into services (business_id, name, duration_minutes, price) values ($1, 'Fön', 30, 200) returning id`, [kb])).rows[0].id;
+  const kday = (n) => { const x = new Date(Date.now() + n * 864e5); while (x.getUTCDay() === 0) x.setTime(x.getTime() + 864e5); return x.toISOString().slice(0, 10); };
+  const kbook = async (u, t, name, phone) => (await as(u, `select b->>'id' id from book_appointment($1, $2, null, $3, $4, $5) b`, [kb, ks, t, name, phone])).rows[0].id;
+  const ago = (id, h) => db.query(`update appointments set starts_at = now() - make_interval(hours => $2), ends_at = now() - make_interval(hours => $2) + interval '30 minutes' where id = $1`, [id, h]);
+  const rating = async () => (await db.query(`select rating_count from businesses where id = $1`, [kb])).rows[0].rating_count;
+
+  // 1) Gelmeyen müşteri: esnafa işaretleme süresi kalır, sonradan "Gelmedi" denirse yorumu silinir.
+  let k1 = await kbook(KX, `${kday(3)}T07:00:00Z`, 'Rakip Kişi', '05550000001');
+  await ago(k1, 1);
+  await expectError(() => as(KX, `select add_review($1, 1, 'Berbat')`, [k1]), /tamamlanan/, 'işaretlenmemiş randevu bitişten 2 saat geçmeden değerlendirilemez');
+  await ago(k1, 3);
+  await as(KX, `select add_review($1, 1, 'Berbat')`, [k1]);
+  ok(await rating() === 1, '2 saat sonra işaretlenmemiş randevu değerlendirilebilir');
+  await as(KO, `update appointments set status = 'no_show' where id = $1`, [k1]);
+  ok(await rating() === 0 && (await db.query(`select * from reviews where appointment_id = $1`, [k1])).rows.length === 0,
+    'esnaf sonradan "Gelmedi" deyince yorum silinir, puan yeniden hesaplanır');
+  const k2 = await kbook(KY, `${kday(3)}T08:00:00Z`, 'Yeliz', '05551234567');
+  await ago(k2, 26);
+  await as(KO, `update appointments set status = 'completed' where id = $1`, [k2]);
+  await as(KY, `select add_review($1, 2, 'İdare eder')`, [k2]);
+  await as(KO, `update appointments set status = 'cancelled' where id = $1`, [k2]);
+  ok(await rating() === 1, 'esnafın tamamladığı randevunun yorumu sonradan iptalle silinemez');
+  await as(KO, `update appointments set status = 'completed' where id = $1`, [k2]);
+
+  // 2) Seans paketi: satışta Yeliz'in hesabına bağlanır; başkası onun telefonunu yazarak kullanamaz.
+  await as(KO, `insert into session_packages (business_id, phone_key, customer_name, service_id, name, total) values ($1, '5551234567', 'Yeliz', $2, '10 Fön', 10)`, [kb, ks]);
+  ok((await db.query(`select customer_id from session_packages where business_id = $1`, [kb])).rows[0].customer_id === KY,
+    'paket satışta bu telefonla gelmiş hesaba bağlanır');
+  const k3 = await kbook(KX, `${kday(4)}T07:00:00Z`, 'Rakip Kişi', '0555 123 45 67');
+  await ago(k3, 3);
+  await as(KO, `update appointments set status = 'completed' where id = $1`, [k3]);
+  ok((await db.query(`select used from session_packages where business_id = $1`, [kb])).rows[0].used === 0
+    && (await db.query(`select package_id from appointments where id = $1`, [k3])).rows[0].package_id === null,
+    'başkasının telefonunu yazan hesap onun paketinden seans düşemez');
+  const k4 = await kbook(KY, `${kday(4)}T08:00:00Z`, 'Yeliz', '05551234567');
+  await ago(k4, 2);
+  await as(KO, `update appointments set status = 'completed' where id = $1`, [k4]);
+  ok((await db.query(`select used from session_packages where business_id = $1`, [kb])).rows[0].used === 1, 'paketin sahibi seans kullanır');
+  await as(KO, `insert into session_packages (business_id, phone_key, name, total, service_id) values ($1, '5559990000', 'Yeni müşteri', 5, $2)`, [kb, ks]);
+  const k5 = await kbook(KX, `${kday(5)}T07:00:00Z`, 'Rakip Kişi', '05559990000');
+  await ago(k5, 2);
+  await as(KO, `update appointments set status = 'completed' where id = $1`, [k5]);
+  ok((await db.query(`select customer_id from session_packages where phone_key = '5559990000'`)).rows[0].customer_id === KX,
+    'bağsız paket ilk hesaplı kullanımda o hesaba bağlanır');
+  const k6 = await kbook(KY, `${kday(5)}T08:00:00Z`, 'Yeliz', '05559990000');
+  await ago(k6, 1);
+  await as(KO, `update appointments set status = 'completed' where id = $1`, [k6]);
+  ok((await db.query(`select used from session_packages where phone_key = '5559990000'`)).rows[0].used === 1, 'bağlanan paketi başka hesap kullanamaz');
+
+  // 3) Sınırsız erteleme: müşteri en fazla 3 kez, işletme sınırsız.
+  const k7 = await kbook(KY, `${kday(6)}T07:00:00Z`, 'Yeliz', '05551234567');
+  for (const h of ['08', '09', '10']) await as(KY, `select reschedule_appointment($1, $2)`, [k7, `${kday(6)}T${h}:00:00Z`]);
+  await expectError(() => as(KY, `select reschedule_appointment($1, $2)`, [k7, `${kday(6)}T11:00:00Z`]), /en fazla 3 kez/, 'müşteri 4. kez saat değiştiremez');
+  await as(KO, `select reschedule_appointment($1, $2)`, [k7, `${kday(6)}T11:00:00Z`]);
+  ok((await db.query(`select reschedule_count from appointments where id = $1`, [k7])).rows[0].reschedule_count === 3, 'işletmenin değişikliği sayılmaz');
+  await as(KO, `update appointments set reschedule_count = 0 where id = $1`, [k7]);
+  ok((await db.query(`select reschedule_count from appointments where id = $1`, [k7])).rows[0].reschedule_count === 3, 'sayaç istemciden sıfırlanamaz');
+
+  // 4) Hesabı silip aynı e-postayla açan kupon hakkını, geçmişini ve engelini devralır.
+  const kc = (await db.query(`insert into coupons (business_id, title, discount_type, discount_value, starts_on, ends_on) values ($1, 'Hoş geldin', 'percent', 30, current_date, current_date + 30) returning id`, [kb])).rows[0].id;
+  await as(KZ, `select claim_coupon($1)`, [kc]);
+  const k8 = await kbook(KZ, `${kday(7)}T07:00:00Z`, 'Zeki', '05557776655');
+  await ago(k8, 5);
+  await as(KO, `update appointments set status = 'no_show' where id = $1`, [k8]);
+  await as(KO, `select block_customer($1)`, [k8]);
+  await as(KZ, `select delete_my_account()`);
+  await db.query(`delete from auth.users where id = $1`, [KZ]);
+  ok((await db.query(`select count(*)::int c from deleted_accounts where email_hash = email_hash('kz@x.com')`)).rows[0].c === 1
+    && !(await db.query(`select * from deleted_accounts where email_hash like '%@%'`)).rows.length, 'silinen hesabın yalnızca e-posta özeti saklanır');
+  const KZ2 = '11111111-0000-0000-0000-0000000000e5';
+  await db.query(`insert into auth.users (id, email, raw_user_meta_data, email_confirmed_at) values ($1, 'kz@x.com', '{"full_name":"Zeki"}', null)`, [KZ2]);
+  ok((await db.query(`select count(*)::int c from coupon_claims where customer_id = $1`, [KZ2])).rows[0].c === 0, 'onaysız hesap eski hakları devralmaz');
+  await db.query(`update auth.users set email_confirmed_at = now() where id = $1`, [KZ2]);
+  await expectError(() => as(KZ2, `select claim_coupon($1)`, [kc]), /zaten aldınız/, 'aynı e-postayla açılan hesap kuponu yeniden alamaz (büyük/küçük harf fark etmez)');
+  ok((await db.query(`select no_shows from customer_history($1, null, $2)`, [KZ2, kb])).rows[0].no_shows === 1, 'gelmedi geçmişi yeni hesaba taşınır');
+  await expectError(() => as(KZ2, `select book_appointment($1, $2, null, $3, 'Zeki', '05001112233')`, [kb, ks, `${kday(8)}T07:00:00Z`]),
+    /alamıyorsunuz/, 'engel yeni hesaba taşınır (telefon değişse de)');
+  ok((await db.query(`select count(*)::int c from deleted_accounts where email_hash = email_hash('kz@x.com')`)).rows[0].c === 0, 'devralınınca silinmiş hesap kaydı kalkar');
+}
+
 console.log(failures ? `\n${failures} TEST BAŞARISIZ` : '\nTÜM TESTLER GEÇTİ');
 process.exit(failures ? 1 : 0);
