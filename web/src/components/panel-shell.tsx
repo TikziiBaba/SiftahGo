@@ -26,6 +26,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import { BranchSwitcher, type Branch } from "@/components/branch-switcher";
 import { InboxBell } from "@/components/inbox-bell";
 import { Logo } from "@/components/site-header";
 import { BusinessContext, SetupContext } from "@/components/panel-context";
@@ -121,6 +122,8 @@ export function PanelShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [business, setBusiness] = useState<Business | null | undefined>(undefined);
+  // Hesabın işletmeleri (şubeler); panel seçili olanla (my_business_id) çalışır.
+  const [branches, setBranches] = useState<Branch[]>([]);
   // Abonelik durumu veri yüklenirken hesaplanır (render sırasında saat okunmaz).
   const [sub, setSub] = useState({ subscribed: false, trial: false, daysLeft: 0 });
   const [badges, setBadges] = useState({ pending: 0, reviews: 0, support: 0 });
@@ -134,8 +137,13 @@ export function PanelShell({ children }: { children: React.ReactNode }) {
       data: { session },
     } = await supabase.auth.getSession();
     if (!session) return router.replace("/giris?next=/panel");
-    const { data } = await supabase.from("businesses").select("*").eq("owner_id", session.user.id).maybeSingle();
+    const [{ data: activeId }, { data: list }] = await Promise.all([
+      supabase.rpc("my_business_id"),
+      supabase.from("businesses").select("id, name, approval_status").eq("owner_id", session.user.id).order("created_at"),
+    ]);
+    const { data } = activeId ? await supabase.from("businesses").select("*").eq("id", activeId).maybeSingle() : { data: null };
     const b = (data as Business) ?? null;
+    setBranches((list ?? []) as Branch[]);
     setSub({
       subscribed: b ? isSubscribed(b) : false,
       trial: b ? isTrial(b) : false,
@@ -183,17 +191,35 @@ export function PanelShell({ children }: { children: React.ReactNode }) {
   }, [businessId, showcase, pathname]);
 
   // İşletmesi olmayan ya da başvurusu onaylanmamış hesap yalnızca kurulum (başvuru) sayfasını görür.
+  // /panel/sube-ekle: onaylı işletmesi olan hesap yeni şube başvurusu yapar (aynı form, boş başlar).
   const approved = business?.approval_status === "approved";
+  const addingBranch = pathname === "/panel/sube-ekle";
   useEffect(() => {
+    if (addingBranch) return;
     if (business !== undefined && !approved && pathname !== "/panel/kurulum") router.replace("/panel/kurulum");
     if (approved && pathname === "/panel/kurulum") router.replace("/panel");
     if (approved && !sub.subscribed && !OPEN_WITHOUT_PLAN.includes(pathname)) router.replace("/panel/abonelik");
     // Doğrudan adresle girilen, türüne uymayan sayfa panele döner.
     if (approved && (showcase ? APPOINTMENT_ONLY : SHOWCASE_ONLY).includes(pathname)) router.replace("/panel");
-  }, [business, approved, showcase, sub.subscribed, pathname, router]);
+  }, [business, approved, addingBranch, showcase, sub.subscribed, pathname, router]);
 
-  if (pathname === "/panel/kurulum" && business !== undefined && !approved) {
-    return <SetupContext.Provider value={{ business, refresh }}>{children}</SetupContext.Provider>;
+  if ((pathname === "/panel/kurulum" && business !== undefined && !approved) || (addingBranch && business !== undefined)) {
+    return (
+      <SetupContext.Provider value={{ business: addingBranch ? null : business, refresh }}>
+        {/* Şubesi olan hesap başvuru ekranından da diğer şubesine geçebilir. */}
+        {(branches.length > 1 || addingBranch) && (
+          <div className="flex justify-end gap-2 p-4 print:hidden">
+            {addingBranch && business && (
+              <Link href="/panel" className="btn btn-ghost py-2 text-sm">
+                Panele dön
+              </Link>
+            )}
+            {branches.length > 1 && <BranchSwitcher branches={branches} currentId={business?.id ?? null} onSwitched={refresh} />}
+          </div>
+        )}
+        {children}
+      </SetupContext.Provider>
+    );
   }
 
   const { subscribed, trial, daysLeft } = sub;
@@ -299,6 +325,7 @@ export function PanelShell({ children }: { children: React.ReactNode }) {
               <p className="truncate font-semibold">{current?.label ?? "Panel"}</p>
             </div>
             <div className="flex items-center gap-1">
+              <BranchSwitcher branches={branches} currentId={business.id} onSwitched={refresh} />
               <InboxBell showcase={showcase} />
               <Link href={`/${business.slug}`} target="_blank" className="btn btn-secondary py-2">
                 <ExternalLink className="size-4" /> <span className="hidden sm:inline">Sayfamı gör</span>

@@ -2432,5 +2432,42 @@ ok((await db.query(`select role from profiles where id = $1`, [UP2])).rows[0].ro
   ok((await slots([sakal], 1)).rows.length === 0 && (await slots([], 1)).rows.length > 0, 'ek hizmeti yapmayan personelin saati önerilmez');
 }
 
+// Çoklu şube
+{
+  const BO = '11111111-0000-0000-0000-0000000000d1';
+  const BX = '11111111-0000-0000-0000-0000000000d2';
+  const BA = '11111111-0000-0000-0000-0000000000d3';
+  await db.query(`insert into auth.users (id, email, raw_user_meta_data) values ($1, 'sube@x.com', '{"role":"business"}'), ($2, 'sube-x@x.com', '{}'), ($3, 'sube-admin@x.com', '{}')`, [BO, BX, BA]);
+  await db.query(`insert into admins (email) values ('sube-admin@x.com') on conflict do nothing`);
+  const open = (slug) => as(BO, `insert into businesses (owner_id, slug, name, city, category) values ($1, $2, $2, 'Sivas', 'kuafor') returning id`, [BO, slug]);
+  const main = (await open('sube-ana')).rows[0].id;
+  const mine = async () => (await as(BO, `select my_business_id() id`)).rows[0].id;
+  ok(await mine() === main, 'tek işletmede seçili işletme odur');
+  await expectError(() => open('sube-iki'), /ücretli Pro/, 'Pro paketi olmadan şube açılamaz');
+  await as(BA, `select admin_review_business($1, true)`, [main]);
+  ok((await db.query(`select trial_ends_at from businesses where id = $1`, [main])).rows[0].trial_ends_at !== null, 'ilk işletmeye deneme verilir');
+  await expectError(() => open('sube-iki'), /ücretli Pro/, 'Pro denemesindeyken şube açılamaz');
+  await db.query(`update businesses set plan_id = 'pro', trial_ends_at = null, subscription_ends_at = now() + interval '30 days' where id = $1`, [main]);
+  const second = (await open('sube-iki')).rows[0].id;
+  ok(await mine() === second, 'yeni şube seçili olur');
+  await as(BA, `select admin_review_business($1, true)`, [second]);
+  const s2 = (await db.query(`select plan_id, subscription_ends_at, trial_ends_at from businesses where id = $1`, [second])).rows[0];
+  ok(s2.plan_id === null && s2.subscription_ends_at === null && s2.trial_ends_at === null, 'şubeye ücretsiz deneme verilmez');
+  await as(BO, `select set_active_business($1)`, [main]);
+  ok(await mine() === main, 'şube değiştirilir');
+  await expectError(() => as(BX, `select set_active_business($1)`, [main]), /bulunamadı/, 'başkasının işletmesi seçilemez');
+  await as(BO, `update profiles set active_business_id = $2 where id = $1`, [BO, second]);
+  ok(await mine() === main, 'seçili şube istemciden doğrudan yazılamaz');
+  ok((await as(BO, `select id from businesses where owner_id = $1`, [BO])).rows.length === 2, 'sahip iki şubesini de görür');
+  const code = (await db.query(`select referral_code from businesses where id = $1`, [main])).rows[0].referral_code;
+  await as(BO, `select set_active_business($1)`, [second]);
+  await expectError(() => as(BO, `select apply_referral($1)`, [code]), /geçersiz/, 'kendi şubesinin davet kodu girilemez');
+  await as(BO, `select * from create_payment('pro')`);
+  ok((await db.query(`select business_id from payments where business_id = any($1) order by created_at desc limit 1`, [[main, second]])).rows[0]?.business_id === second, 'ödeme seçili şube için başlar');
+  for (const n of ['sube-uc', 'sube-dort', 'sube-bes']) await open(n);
+  await expectError(() => open('sube-alti'), /en fazla 5/, 'en fazla 5 şube');
+  ok((await as(BA, `select * from admin_users($1)`, [BO])).rows.length === 1, 'yönetimde şubeli hesap tek satır');
+}
+
 console.log(failures ? `\n${failures} TEST BAŞARISIZ` : '\nTÜM TESTLER GEÇTİ');
 process.exit(failures ? 1 : 0);

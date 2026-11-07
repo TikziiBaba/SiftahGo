@@ -53,7 +53,9 @@ export async function POST(request: Request) {
   if (kind !== "review") {
     const target = new URL(request.url).searchParams.get("business");
     if (target && !(await supabase.rpc("is_admin")).data) return NextResponse.json({ error: "Yetkiniz yok." }, { status: 403 });
-    const { data: business } = await supabase.from("businesses").select("id").eq(target ? "id" : "owner_id", target ?? userId).maybeSingle();
+    // Şubesi olan hesapta görsel seçili şubeye yüklenir (my_business_id).
+    const ownId = target ? null : (await supabase.rpc("my_business_id")).data;
+    const { data: business } = await supabase.from("businesses").select("id").eq("id", target ?? ownId ?? "").maybeSingle();
     if (!business) return NextResponse.json({ error: "İşletme bulunamadı." }, { status: 403 });
     folder = `businesses/${business.id}/${kind}`;
   }

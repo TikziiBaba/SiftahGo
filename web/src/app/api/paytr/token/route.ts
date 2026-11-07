@@ -23,7 +23,10 @@ export async function POST(request: Request) {
   const { planId, months = 1 } = input;
   const [{ data: pay, error }, { data: business }, { data: profile }] = await Promise.all([
     supabase.rpc("create_payment", { p_plan_id: planId, p_months: months }).single<{ merchant_oid: string; amount: number; plan_name: string }>(),
-    supabase.from("businesses").select("name, phone, address, district, city").eq("owner_id", auth.user.id).maybeSingle(),
+    // Şubesi olan hesapta ödeme seçili şube içindir (create_payment ile aynı: my_business_id).
+    supabase.rpc("my_business_id").then(async ({ data: id }) =>
+      id ? supabase.from("businesses").select("name, phone, address, district, city").eq("id", id).maybeSingle() : { data: null },
+    ),
     supabase.from("profiles").select("full_name, phone").eq("id", auth.user.id).maybeSingle(),
   ]);
   if (error || !pay || !business) {

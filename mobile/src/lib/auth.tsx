@@ -6,28 +6,40 @@ import { unregisterPushToken } from './notifications';
 import { supabase } from './supabase';
 import type { Business, Profile } from './types';
 
-type AuthState = { session: Session | null; profile: Profile | null; business: Business | null; loading: boolean };
-type AuthContextValue = AuthState & { refresh: () => Promise<void> };
+export type Branch = { id: string; name: string; approval_status: string };
+// business: seçili şube (my_business_id); branches: hesabın tüm işletmeleri.
+type AuthState = { session: Session | null; profile: Profile | null; business: Business | null; branches: Branch[]; loading: boolean };
+type AuthContextValue = AuthState & { refresh: () => Promise<void>; switchBusiness: (id: string) => Promise<string | null> };
 
 const AuthContext = createContext<AuthContextValue>({
   session: null,
   profile: null,
   business: null,
+  branches: [],
   loading: true,
   refresh: async () => {},
+  switchBusiness: async () => null,
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<AuthState>({ session: null, profile: null, business: null, loading: true });
+  const [state, setState] = useState<AuthState>({ session: null, profile: null, business: null, branches: [], loading: true });
 
   // Profil ve işletme birlikte yüklenir; giriş sonrası ekranlar yarım veriyle açılmaz.
   const apply = useCallback(async (session: Session | null) => {
-    if (!session) return setState({ session: null, profile: null, business: null, loading: false });
-    const [{ data: profile }, { data: business }] = await Promise.all([
+    if (!session) return setState({ session: null, profile: null, business: null, branches: [], loading: false });
+    const [{ data: profile }, { data: activeId }, { data: branches }] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle(),
-      supabase.from('businesses').select('*').eq('owner_id', session.user.id).maybeSingle(),
+      supabase.rpc('my_business_id'),
+      supabase.from('businesses').select('id, name, approval_status').eq('owner_id', session.user.id).order('created_at'),
     ]);
-    setState({ session, profile: profile as Profile | null, business: business as Business | null, loading: false });
+    const { data: business } = activeId ? await supabase.from('businesses').select('*').eq('id', activeId).maybeSingle() : { data: null };
+    setState({
+      session,
+      profile: profile as Profile | null,
+      business: business as Business | null,
+      branches: (branches ?? []) as Branch[],
+      loading: false,
+    });
   }, []);
 
   useEffect(() => {
@@ -44,7 +56,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await apply(data.session);
   }, [apply]);
 
-  return <AuthContext.Provider value={{ ...state, refresh }}>{children}</AuthContext.Provider>;
+  // Şube değiştirir; hata varsa iletisini döner.
+  const switchBusiness = useCallback(
+    async (id: string) => {
+      const { error } = await supabase.rpc('set_active_business', { p_id: id });
+      if (error) return error.message;
+      await refresh();
+      return null;
+    },
+    [refresh],
+  );
+
+  return <AuthContext.Provider value={{ ...state, refresh, switchBusiness }}>{children}</AuthContext.Provider>;
 }
 
 export const useAuth = () => useContext(AuthContext);

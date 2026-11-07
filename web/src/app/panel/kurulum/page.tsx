@@ -32,6 +32,7 @@ export default function SetupPage() {
 }
 
 function ApplicationForm({ business, done }: { business: Business | null; done: () => Promise<void> }) {
+  const router = useRouter();
   // Tür başvuruda seçilir; sonradan yalnızca yönetici değiştirir, bu yüzden yeniden başvuruda kilitlidir.
   const [type, setType] = useState<BusinessType>(business?.business_type ?? "appointment");
   const [form, setForm] = useState({
@@ -100,6 +101,8 @@ function ApplicationForm({ business, done }: { business: Business | null; done: 
       } catch {}
     }
     await done();
+    // Yeni şube (/panel/sube-ekle) seçili olur ve inceleme ekranına geçilir.
+    if (!business) router.replace("/panel/kurulum");
   }
 
   return (

@@ -97,7 +97,8 @@ begin
         'appointments_payment', 'default_rebook_days', 'businesses_rebook_default', 'queue_rebook_reminders',
         'next_birthday', 'claim_birthday_gifts', 'business_birthday_summary',
         'email_hash', 'handle_user_confirmed', 'reattach_deleted_account', 'session_packages_bind', 'appointments_drop_review',
-        'award_monthly_badges', 'attach_review_photo', 'admin_moderate_review_photo', 'booking_minutes'
+        'award_monthly_badges', 'attach_review_photo', 'admin_moderate_review_photo', 'booking_minutes',
+        'my_business_id', 'set_active_business', 'enforce_branch_rules'
       )
   loop
     execute 'drop function if exists ' || r.sig || ' cascade';
@@ -183,7 +184,8 @@ insert into public.plans (id, name, price, staff_limit, features, sort_order) va
 
 create table public.businesses (
   id                 uuid primary key default gen_random_uuid(),
-  owner_id           uuid not null unique references public.profiles (id) on delete cascade,
+  -- Bir hesabın birden çok işletmesi (şube) olabilir: ikincisi Pro paket ister, en fazla 5 (enforce_branch_rules).
+  owner_id           uuid not null references public.profiles (id) on delete cascade,
   slug               text not null unique
                      check (slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$' and length(slug) between 3 and 50)
                      -- Web sitesindeki sayfa adlarıyla çakışmasın.
@@ -280,6 +282,10 @@ create table public.businesses (
   )
 );
 create index businesses_city_category_idx on public.businesses (city, category);
+create index businesses_owner_idx on public.businesses (owner_id);
+
+-- Panelde ve uygulamada çalışılan şube (my_business_id). Yalnızca set_active_business ve yeni şube açılışı yazar.
+alter table public.profiles add column active_business_id uuid references public.businesses (id) on delete set null;
 create index businesses_pending_idx on public.businesses (submitted_at) where approval_status = 'pending';
 
 create table public.services (
@@ -818,6 +824,56 @@ create index support_emails_pending_idx on public.support_emails (created_at) wh
 -- ---------------------------------------------------------------------
 -- 2) Yardımcı fonksiyonlar ve tetikleyiciler
 -- ---------------------------------------------------------------------
+-- Oturumdaki hesabın çalıştığı işletme: seçili şube (profiles.active_business_id) hâlâ onunsa o, değilse ilk açtığı işletme.
+-- "Benim işletmem" diyen fonksiyonlar (ödeme, davet, dondurma, kupon, destek) bunu kullanır.
+create function public.my_business_id()
+returns uuid
+language sql stable security definer set search_path = ''
+as $$
+  select coalesce(
+    (select b.id from public.profiles p join public.businesses b on b.id = p.active_business_id and b.owner_id = p.id
+     where p.id = auth.uid()),
+    (select b.id from public.businesses b where b.owner_id = auth.uid() order by b.created_at, b.id limit 1)
+  );
+$$;
+
+-- İkinci ve sonraki işletme (şube): hesapta ücretli (deneme değil) Pro aboneliği olan onaylı bir işletme olmalı;
+-- en fazla 5 işletme. Şubeye ücretsiz deneme verilmez (admin_review_business).
+-- Çağıranın yetkisiyle çalışır (security definer içinde current_user her zaman sahip olurdu); sahip kendi işletmelerini okur.
+create function public.enforce_branch_rules()
+returns trigger
+language plpgsql set search_path = ''
+as $$
+declare
+  v_n int;
+begin
+  -- Başkası adına açma girişimini satır güvenliği reddeder.
+  if current_user not in ('anon', 'authenticated') or new.owner_id is distinct from auth.uid() then return new; end if;
+  select count(*) into v_n from public.businesses where owner_id = new.owner_id;
+  if v_n = 0 then return new; end if;
+  if v_n >= 5 then raise exception 'Bir hesapla en fazla 5 şube açılabilir.'; end if;
+  if not exists (
+    select 1 from public.businesses b
+    where b.owner_id = new.owner_id and b.approval_status = 'approved' and b.plan_id = 'pro'
+      and b.subscription_ends_at > now() and b.subscription_ends_at is distinct from b.trial_ends_at
+  ) then
+    raise exception 'Şube eklemek için ücretli Pro paketiniz olmalı.';
+  end if;
+  return new;
+end;
+$$;
+
+-- Panelde şube değiştirir.
+create function public.set_active_business(p_id uuid)
+returns void
+language plpgsql volatile security definer set search_path = ''
+as $$
+begin
+  if not public.is_business_owner(p_id) then raise exception 'Şube bulunamadı.'; end if;
+  update public.profiles set active_business_id = p_id where id = auth.uid();
+end;
+$$;
+
 create function public.is_business_owner(bid uuid)
 returns boolean
 language sql stable security definer set search_path = ''
@@ -945,6 +1001,7 @@ begin
   if current_user in ('anon', 'authenticated') then
     new.id := old.id;
     new.created_at := old.created_at;
+    new.active_business_id := old.active_business_id;
   end if;
   return new;
 end;
@@ -984,10 +1041,15 @@ begin
     values (new.id, coalesce(v_owner_name, new.name));
   end if;
 
-  update public.profiles set role = 'business' where id = new.owner_id;
+  -- Yeni açılan işletme (şube) panelde seçili olur.
+  update public.profiles set role = 'business', active_business_id = new.id where id = new.owner_id;
   return new;
 end;
 $$;
+
+create trigger businesses_branch_rules
+  before insert on public.businesses
+  for each row execute function public.enforce_branch_rules();
 
 create trigger businesses_after_insert
   after insert on public.businesses
@@ -1943,7 +2005,7 @@ declare
   v_oid text;
   v_amount numeric;
 begin
-  select id, approval_status, business_type into v_business, v_status, v_type from public.businesses where owner_id = auth.uid();
+  select id, approval_status, business_type into v_business, v_status, v_type from public.businesses where id = public.my_business_id();
   if v_business is null then raise exception 'Önce işletmenizi oluşturun.'; end if;
   -- Reddedilebilecek başvurudan para alınmaz.
   if v_status <> 'approved' then raise exception 'Başvurunuz onaylanınca paket seçebilirsiniz.'; end if;
@@ -2058,14 +2120,15 @@ declare
   b   public.businesses;
   ref public.businesses;
 begin
-  select * into b from public.businesses where owner_id = auth.uid() for update;
+  select * into b from public.businesses where id = public.my_business_id() for update;
   if not found then raise exception 'Önce işletmenizi oluşturun.'; end if;
   if b.referred_by is not null then raise exception 'Davet kodu zaten girilmiş.'; end if;
   if exists (select 1 from public.payments p where p.business_id = b.id and p.status = 'paid') then
     raise exception 'Davet kodu ilk ödemeden önce girilebilir.';
   end if;
   select * into ref from public.businesses where referral_code = upper(trim(coalesce(p_code, '')));
-  if not found or ref.id = b.id then raise exception 'Davet kodu geçersiz.'; end if;
+  -- Kendi kodu ya da kendi başka şubesinin kodu geçmez.
+  if not found or ref.id = b.id or ref.owner_id = b.owner_id then raise exception 'Davet kodu geçersiz.'; end if;
 
   update public.businesses set referred_by = ref.id where id = b.id;
   return ref.name;
@@ -2080,7 +2143,7 @@ as $$
   select r.name, r.created_at, r.referral_rewarded_at
   from public.businesses r
   join public.businesses me on me.id = r.referred_by
-  where me.owner_id = auth.uid()
+  where me.id = public.my_business_id()
   order by r.created_at desc;
 $$;
 
@@ -2733,7 +2796,7 @@ declare
   b    public.businesses;
   v_id uuid;
 begin
-  select * into b from public.businesses where owner_id = auth.uid();
+  select * into b from public.businesses where id = public.my_business_id();
   if not found or b.approval_status <> 'approved' then raise exception 'Talep için onaylı bir işletmeniz olmalı.'; end if;
   if b.is_suspended then raise exception 'İşletmeniz zaten askıda.'; end if;
   if length(trim(coalesce(p_reason, ''))) not between 3 and 500 then
@@ -2817,7 +2880,7 @@ begin
   if (select count(*) from public.support_tickets where user_id = v_uid and status <> 'closed') >= 5 then
     raise exception 'En fazla 5 açık talebiniz olabilir. Var olan talebinizden yazabilirsiniz.';
   end if;
-  select * into b from public.businesses where owner_id = v_uid;
+  select * into b from public.businesses where id = public.my_business_id();
   insert into public.support_tickets (user_id, business_id, audience, category, subject)
   values (v_uid, b.id, case when b.approval_status = 'approved' then 'business' else 'customer' end, p_category, v_subject)
   returning id into v_id;
@@ -2945,19 +3008,25 @@ language plpgsql volatile security definer set search_path = ''
 as $$
 declare
   v_status text;
+  v_trial  boolean;
 begin
   if not public.is_admin() then raise exception 'Yetkiniz yok.'; end if;
   select approval_status into v_status from public.businesses where id = p_business_id for update;
   if not found then raise exception 'İşletme bulunamadı.'; end if;
   if v_status = 'approved' then raise exception 'İşletme zaten onaylı.'; end if;
+  -- Ücretsiz deneme yalnızca hesabın ilk işletmesine; şube onaylanınca paket alınması gerekir.
+  select not exists (
+    select 1 from public.businesses o join public.businesses b on b.id = p_business_id
+    where o.owner_id = b.owner_id and o.id <> b.id and (o.created_at, o.id) < (b.created_at, b.id)
+  ) into v_trial;
 
   if p_approve then
     update public.businesses
     set approval_status = 'approved', approval_note = '', reviewed_at = now(), reviewed_by = auth.uid(),
-        plan_id = case when subscription_ends_at is null
+        plan_id = case when subscription_ends_at is null and v_trial
                        then (case when business_type = 'showcase' then 'vitrin' else 'pro' end) else plan_id end,
-        trial_ends_at = case when subscription_ends_at is null then now() + interval '2 months' else trial_ends_at end,
-        subscription_ends_at = coalesce(subscription_ends_at, now() + interval '2 months')
+        trial_ends_at = case when subscription_ends_at is null and v_trial then now() + interval '2 months' else trial_ends_at end,
+        subscription_ends_at = case when v_trial then coalesce(subscription_ends_at, now() + interval '2 months') else subscription_ends_at end
     where id = p_business_id;
   else
     if length(trim(coalesce(p_note, ''))) < 3 then raise exception 'Ret sebebini yazın.'; end if;
@@ -3052,7 +3121,8 @@ begin
     (select count(*) from public.appointments ap where ap.customer_id = u.id)
   from auth.users u
   left join public.profiles p on p.id = u.id
-  left join public.businesses b on b.owner_id = u.id
+  -- Şubesi olan hesap tek satır: ilk açtığı işletme.
+  left join lateral (select x.id, x.name, x.slug from public.businesses x where x.owner_id = u.id order by x.created_at, x.id limit 1) b on true
   where p_id is null or u.id = p_id
   order by u.created_at desc;
 end;
@@ -3360,7 +3430,7 @@ begin
       )
       from auth.users u
       left join public.profiles p on p.id = u.id
-      left join public.businesses b on b.owner_id = u.id
+      left join lateral (select x.* from public.businesses x where x.owner_id = u.id order by x.created_at, x.id limit 1) b on true
       where u.created_at >= v_start and u.created_at < v_end and (p.role = 'business' or b.id is not null)
     ),
     -- Müşteri hunisi: dönemde üye olan müşteriler.
@@ -4133,7 +4203,7 @@ declare
   v_id       uuid;
   v_value    numeric := round(p_value, 2);
 begin
-  select * into b from public.businesses where owner_id = auth.uid();
+  select * into b from public.businesses where id = public.my_business_id();
   if not found then raise exception 'Bu işlem için yetkiniz yok.'; end if;
   if b.approval_status <> 'approved' or not public.plan_has_feature(b.id, 'coupons') then
     raise exception '%', case when b.business_type = 'showcase' then 'Kupon açmak için Vitrin paketinizin geçerli olması gerekir.'

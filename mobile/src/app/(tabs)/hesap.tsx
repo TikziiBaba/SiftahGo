@@ -1,9 +1,12 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
+import { useState } from 'react';
 import { Alert, Linking, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Glow, LogoMark } from '@/components/brand';
+import { Sheet } from '@/components/sheet';
 import { TopBar, useScrollY } from '@/components/top-bar';
 import { Avatar, Badge, Button, Card, Group, ListRow, ScreenHeader, SectionTitle, styles, Text } from '@/components/ui';
 import { signOut, useAuth } from '@/lib/auth';
@@ -17,7 +20,9 @@ const PERKS: { icon: IconName; text: string }[] = [
 ];
 
 export default function AccountScreen() {
-  const { session, profile, business } = useAuth();
+  const { session, profile, business, branches, switchBusiness } = useAuth();
+  // Şube seçme penceresi (Android uyarısı 3 düğmeden fazlasını göstermez).
+  const [branchOpen, setBranchOpen] = useState(false);
   const { y, scroll } = useScrollY();
   const version = Constants.expoConfig?.version;
 
@@ -115,6 +120,14 @@ export default function AccountScreen() {
           {!isBusiness ? (
             <ListRow icon="storefront-outline" title="İşletmeni ekle" subtitle="Aynı hesapla işletme başvurusu yapın" onPress={() => router.push('/kurulum')} />
           ) : null}
+          {isBusiness && business ? (
+            <ListRow
+              icon="git-branch-outline"
+              title={branches.length > 1 ? `Şube: ${business.name}` : 'Şube ekle'}
+              subtitle={branches.length > 1 ? `${branches.length} işletme · değiştirmek için dokunun` : 'Pro pakette başka dükkânınızı da yönetin'}
+              onPress={() => (branches.length < 2 ? void WebBrowser.openBrowserAsync(`${WEB_URL}/panel/sube-ekle`) : setBranchOpen(true))}
+            />
+          ) : null}
           <ListRow icon="ticket-outline" title="Kuponlarım" subtitle="Aldığınız kuponlar ve kodları" onPress={() => router.push('/kuponlarim')} />
           <ListRow
             icon="help-buoy-outline"
@@ -130,6 +143,32 @@ export default function AccountScreen() {
         </Group>
         {version ? <Version version={version} /> : null}
       </ScrollView>
+      <Sheet visible={branchOpen} onClose={() => setBranchOpen(false)} title="Şube seçin" subtitle="Panel ve bildirimler seçtiğiniz şubeyle çalışır.">
+        <Group>
+          {branches.map((b) => (
+            <ListRow
+              key={b.id}
+              icon={b.id === business?.id ? 'checkmark-circle' : 'storefront-outline'}
+              title={b.name}
+              subtitle={b.approval_status === 'approved' ? undefined : 'Onay bekliyor'}
+              chevron={false}
+              onPress={async () => {
+                setBranchOpen(false);
+                const error = b.id === business?.id ? null : await switchBusiness(b.id);
+                if (error) Alert.alert('Şube değiştirilemedi', error);
+              }}
+            />
+          ))}
+          <ListRow
+            icon="add-circle-outline"
+            title="Yeni şube ekle"
+            onPress={() => {
+              setBranchOpen(false);
+              void WebBrowser.openBrowserAsync(`${WEB_URL}/panel/sube-ekle`);
+            }}
+          />
+        </Group>
+      </Sheet>
       <TopBar y={y} title="Hesap" />
     </View>
   );
