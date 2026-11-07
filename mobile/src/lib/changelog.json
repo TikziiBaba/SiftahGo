@@ -112,5 +112,15 @@
       "Değerlendirme, işletme randevuyu tamamlandı olarak işaretlemediyse randevu bittikten 2 saat sonra açılır.",
       "Seans paketiniz hesabınıza bağlanır; başkası sizin telefonunuzu yazarak paketinizi kullanamaz."
     ]
+  },
+  {
+    "id": 15,
+    "date": "2026-11-07",
+    "items": [
+      "Tek randevuda birden çok hizmet (saç + sakal) ve en fazla 4 kişi (anne + çocuk) seçebilirsiniz; süre ve fiyat toplanır.",
+      "Yorumunuza sonuç fotoğrafı ekleyebilirsiniz; incelendikten sonra yorumla birlikte görünür.",
+      "Mahallenin gözdesi: her ay bölgesinde en çok tercih edilen, yüksek puanlı işletmeler rozet alır.",
+      "Esnaflar için: birden çok dükkânınızı tek hesaptan yönetin (Hesap > Şube) ve kasa dökümünü Excel olarak indirin."
+    ]
   }
 ]
