@@ -67,7 +67,7 @@ export default function QrScreen() {
       {!showcase && badgeLabel(business) ? (
         <Card style={{ gap: 8 }}>
           <Text variant="bodyStrong">Tebrikler, {badgeLabel(business)} ayının mahallenin gözdesi sizsiniz!</Text>
-          <Text tone="muted">Rozet bu ay boyunca sayfanızda görünür. Görseli açıp kaydedin, Instagram'da paylaşın ya da camınıza asın.</Text>
+          <Text tone="muted">Rozet bu ay boyunca sayfanızda görünür. Görseli açıp kaydedin, Instagram’da paylaşın ya da camınıza asın.</Text>
           <Button title="Rozet görselini aç" icon="ribbon-outline" variant="secondary" onPress={() => WebBrowser.openBrowserAsync(`${link}/rozet`)} />
         </Card>
       ) : null}

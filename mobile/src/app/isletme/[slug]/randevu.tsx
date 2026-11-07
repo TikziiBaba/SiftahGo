@@ -19,10 +19,18 @@ import { supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
 import type { Business, Service } from '@/lib/types';
 
-type Data = { business: Business; service: Service; staffName: string | null; couponsEnabled: boolean };
+// service: gösterim için birleşik (ad, süre ve fiyat toplam); base: ana hizmet (kupon yalnızca ona, bir kişiye uygulanır).
+type Data = { business: Business; service: Service; base: Service; extraIds: string[]; party: number; staffName: string | null; couponsEnabled: boolean };
 
 export default function BookingScreen() {
-  const { slug, service: serviceId, staff: staffId, time } = useLocalSearchParams<{ slug: string; service: string; staff?: string; time: string }>();
+  const { slug, service: serviceId, staff: staffId, time, extra, party: partyParam } = useLocalSearchParams<{
+    slug: string;
+    service: string;
+    staff?: string;
+    time: string;
+    extra?: string;
+    party?: string;
+  }>();
   const { session, profile } = useAuth();
   const insets = useSafeAreaInsets();
   const [data, setData] = useState<Data | null | undefined>(undefined);
@@ -49,13 +57,26 @@ export default function BookingScreen() {
       if (isShowcase(business)) return router.replace({ pathname: '/isletme/[slug]', params: { slug: business.slug } });
       const { data: service } = await supabase.from('services').select('*').eq('id', serviceId).eq('business_id', business.id).maybeSingle();
       if (!service) return setData(null);
+      const extraIds = (extra ?? '').split(',').filter(Boolean);
+      const party = Math.min(Math.max(Number(partyParam) || 1, 1), 4);
+      const { data: extras } = extraIds.length
+        ? await supabase.from('services').select('*').in('id', extraIds).eq('business_id', business.id)
+        : { data: [] as Service[] };
+      if ((extras ?? []).length !== extraIds.length) return setData(null);
+      const all = [service as Service, ...extraIds.map((id) => (extras as Service[]).find((x) => x.id === id)!)];
+      const combined: Service = {
+        ...service,
+        name: all.map((x) => x.name).join(' + ') + (party > 1 ? ` · ${party} kişi` : ''),
+        duration_minutes: all.reduce((t, x) => t + x.duration_minutes, 0) * party,
+        price: all.reduce((t, x) => t + Number(x.price), 0) * party,
+      };
       const { data: staff } = staffId ? await supabase.from('staff').select('name').eq('id', staffId).maybeSingle() : { data: null };
       // Kuponlar paketle gelir; paket düşerse sunulmaz.
       const { data: plan } = await supabase.from('plans').select('features').eq('id', business.plan_id ?? '').maybeSingle();
       const couponsEnabled = isSubscribed(business) && (plan?.features ?? []).includes('coupons');
-      setData({ business, service, staffName: staff?.name ?? null, couponsEnabled });
+      setData({ business, service: combined, base: service, extraIds, party, staffName: staff?.name ?? null, couponsEnabled });
     })();
-  }, [slug, serviceId, staffId]);
+  }, [slug, serviceId, staffId, extra, partyParam]);
 
   if (data === undefined) return <Loading full />;
   if (data === null) {
@@ -68,7 +89,9 @@ export default function BookingScreen() {
     );
   }
 
-  const { business, service } = data;
+  const { business, service, base, extraIds, party } = data;
+  // İndirim bir kişinin ana hizmetine uygulanır (book_appointment ile aynı).
+  const discounted = (c: Parameters<typeof couponPrice>[1]) => Number(service.price) - Number(base.price) + couponPrice(Number(base.price), c);
   // Seçilen hizmet ve saate uyan kuponlar (gösterim için; asıl denetim sunucuda). Kullanılmış ya da başka randevuya
   // bağlı kod, hakkı biten kupon ve fiyatsız hizmet sunulmaz.
   // Durdurulmuş kuponu önceden alan müşterinin kodu hâlâ geçerli: açık kuponlara alınmış (active) kodlar da eklenir.
@@ -77,7 +100,7 @@ export default function BookingScreen() {
     ...claims.filter((x) => x.state === 'active' && !coupons.some((c) => c.id === x.coupon_id)).map((x) => ({ ...x, id: x.coupon_id })),
   ];
   const offers =
-    session && Number(service.price) > 0
+    session && Number(base.price) > 0
       ? candidates.filter((c) => {
           if (!couponFits(c, service.id, time)) return false;
           const mine = claims.find((x) => x.coupon_id === c.id);
@@ -106,6 +129,8 @@ export default function BookingScreen() {
       p_customer_phone: form.phone.trim(),
       p_note: form.note.trim(),
       ...(chosen && { p_coupon_id: chosen.id }),
+      ...(extraIds.length ? { p_extra_service_ids: extraIds } : {}),
+      ...(party > 1 ? { p_party_size: party } : {}),
     });
     setBusy(false);
     if (error) {
@@ -176,7 +201,7 @@ export default function BookingScreen() {
   return (
     <KeyboardScreen>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Summary data={data} time={time} ends={ends} onChange={() => router.back()} discounted={chosen ? couponPrice(Number(service.price), chosen) : null} />
+        <Summary data={data} time={time} ends={ends} onChange={() => router.back()} discounted={chosen ? discounted(chosen) : null} />
 
         {taken ? (
           <Banner tone="danger" icon="time-outline" title="Bu saat az önce doldu" text="Başka bir saat seçmek için dokunun." onPress={() => router.back()} />
@@ -261,7 +286,7 @@ export default function BookingScreen() {
         <Button
           title={
             Number(service.price) > 0
-              ? `Randevuyu onayla · ${chosen ? formatMoney(couponPrice(Number(service.price), chosen)) : formatPrice(service.price)}`
+              ? `Randevuyu onayla · ${chosen ? formatMoney(discounted(chosen)) : formatPrice(service.price)}`
               : 'Randevuyu onayla'
           }
           size="lg"

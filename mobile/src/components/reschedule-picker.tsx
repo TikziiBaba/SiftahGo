@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase';
 import type { Appointment, WorkingHour } from '@/lib/types';
 
 type Props = {
-  appointment: Pick<Appointment, 'id' | 'business_id' | 'service_id' | 'staff_id' | 'starts_at'>;
+  appointment: Pick<Appointment, 'id' | 'business_id' | 'service_id' | 'staff_id' | 'starts_at' | 'extra_service_ids' | 'party_size'>;
   /** Saat değişti; yeni başlangıç */
   onDone: (startsAt: string) => void;
 };
@@ -45,7 +45,16 @@ export function ReschedulePicker({ appointment: a, onDone }: Props) {
     let active = true;
     const key = `${day}|${reload}`;
     supabase
-      .rpc('get_available_slots', { p_business_id: a.business_id, p_service_id: a.service_id, p_day: day, p_staff_id: a.staff_id, p_ignore: a.id })
+      .rpc('get_available_slots', {
+        p_business_id: a.business_id,
+        p_service_id: a.service_id,
+        p_day: day,
+        p_staff_id: a.staff_id,
+        p_ignore: a.id,
+        // Çoklu hizmet / grup randevusu kendi toplam süresiyle aranır.
+        ...(a.extra_service_ids?.length ? { p_extra_service_ids: a.extra_service_ids } : {}),
+        ...((a.party_size ?? 1) > 1 ? { p_party_size: a.party_size } : {}),
+      })
       .then(({ data }) => {
         if (!active) return;
         const current = new Date(a.starts_at).getTime();
@@ -55,7 +64,7 @@ export function ReschedulePicker({ appointment: a, onDone }: Props) {
     return () => {
       active = false;
     };
-  }, [a.id, a.business_id, a.service_id, a.staff_id, a.starts_at, day, reload]);
+  }, [a.id, a.business_id, a.service_id, a.staff_id, a.starts_at, a.extra_service_ids, a.party_size, day, reload]);
 
   async function save() {
     if (!time) return;

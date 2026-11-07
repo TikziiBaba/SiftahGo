@@ -97,7 +97,7 @@ begin
         'appointments_payment', 'default_rebook_days', 'businesses_rebook_default', 'queue_rebook_reminders',
         'next_birthday', 'claim_birthday_gifts', 'business_birthday_summary',
         'email_hash', 'handle_user_confirmed', 'reattach_deleted_account', 'session_packages_bind', 'appointments_drop_review',
-        'award_monthly_badges', 'attach_review_photo', 'admin_moderate_review_photo'
+        'award_monthly_badges', 'attach_review_photo', 'admin_moderate_review_photo', 'booking_minutes'
       )
   loop
     execute 'drop function if exists ' || r.sig || ' cascade';
@@ -403,6 +403,10 @@ create table public.appointments (
   business_delay_count   smallint not null default 0,
   -- Müşterinin saat değiştirme sayısı (reschedule_appointment; en fazla 3). İşletmenin değişikliği sayılmaz.
   reschedule_count smallint not null default 0,
+  -- Aynı randevuda ana hizmete ek hizmetler ("saç + sakal") ve kişi sayısı ("anne + çocuk"): süre ve fiyat toplanır,
+  -- iş aynı personele arka arkaya yazılır (booking_minutes). service_name hepsini yazar.
+  extra_service_ids uuid[] not null default '{}' check (cardinality(extra_service_ids) <= 3),
+  party_size       smallint not null default 1 check (party_size between 1 and 4),
   -- Hesap silinince geçmiş (iptal, gelmedi) yeni hesaba taşınsın diye e-postanın özeti (delete_my_account).
   former_email_hash text,
   -- Kasa: esnafın işaretlediği ödeme (appointments_payment tamamlar). Boşsa ödeme girilmemiş.
@@ -993,14 +997,40 @@ create trigger businesses_after_insert
 -- 3) Randevu mantığı (web ve mobil aynı fonksiyonları kullanır)
 -- ---------------------------------------------------------------------
 
+-- Randevunun toplam süresi (dakika): ana hizmet + ek hizmetler (en fazla 3, tekrarsız, ana hizmet dışında), kişi
+-- sayısıyla çarpılır (1-4). Hizmetlerden biri işletmenin etkin hizmeti değilse ya da kural bozuksa boş döner.
+create function public.booking_minutes(p_business_id uuid, p_service_id uuid, p_extra uuid[] default '{}', p_party int default 1)
+returns int
+language plpgsql stable set search_path = ''
+as $$
+declare
+  v_extra uuid[] := coalesce(p_extra, '{}');
+  v_sum   int;
+  v_n     int;
+begin
+  if coalesce(p_party, 1) not between 1 and 4 or cardinality(v_extra) > 3 or p_service_id = any (v_extra)
+     or cardinality(v_extra) <> (select count(distinct x) from unnest(v_extra) x) then
+    return null;
+  end if;
+  select sum(sv.duration_minutes), count(*) into v_sum, v_n
+  from public.services sv
+  where sv.business_id = p_business_id and sv.is_active and (sv.id = p_service_id or sv.id = any (v_extra));
+  if v_n <> 1 + cardinality(v_extra) then return null; end if;
+  return v_sum * coalesce(p_party, 1);
+end;
+$$;
+
 -- Belirli bir gün için boş saatler. p_staff_id boşsa tüm personel.
 -- p_ignore: ertelenen randevu; müşterisi veya işletmesi soruyorsa o randevunun saati boş sayılır.
+-- p_extra_service_ids / p_party_size: ek hizmetler ve kişi sayısı (booking_minutes); personel hepsini yapabilmeli.
 create function public.get_available_slots(
   p_business_id uuid,
   p_service_id  uuid,
   p_day         date,
   p_staff_id    uuid default null,
-  p_ignore      uuid default null
+  p_ignore      uuid default null,
+  p_extra_service_ids uuid[] default '{}',
+  p_party_size  int default 1
 )
 returns table (slot_start timestamptz, staff_id uuid)
 language plpgsql stable security definer set search_path = ''
@@ -1016,9 +1046,7 @@ begin
   where id = p_business_id and public.is_bookable(id);
   if not found then return; end if;
 
-  select make_interval(mins => s.duration_minutes) into v_duration
-  from public.services s
-  where s.id = p_service_id and s.business_id = p_business_id and s.is_active;
+  v_duration := make_interval(mins => public.booking_minutes(p_business_id, p_service_id, p_extra_service_ids, p_party_size));
   if v_duration is null then return; end if;
 
   v_today := (now() at time zone b.timezone)::date;
@@ -1044,7 +1072,10 @@ begin
     and (p_staff_id is null or st.id = p_staff_id)
     and (
       not exists (select 1 from public.staff_services ss where ss.staff_id = st.id)
-      or exists (select 1 from public.staff_services ss where ss.staff_id = st.id and ss.service_id = p_service_id)
+      or not exists (
+        select 1 from unnest(array[p_service_id] || coalesce(p_extra_service_ids, '{}')) sv(id)
+        where not exists (select 1 from public.staff_services ss where ss.staff_id = st.id and ss.service_id = sv.id)
+      )
     )
     and g.s >= now() + make_interval(mins => b.min_notice_minutes)
     and not exists (
@@ -1188,6 +1219,8 @@ begin
       new.business_delay_at := old.business_delay_at;
       new.business_delay_count := old.business_delay_count;
       new.reschedule_count := old.reschedule_count;
+      new.extra_service_ids := old.extra_service_ids;
+      new.party_size := old.party_size;
       new.former_email_hash := old.former_email_hash;
       if old.customer_id is not null then
         new.customer_phone := old.customer_phone;
@@ -1316,7 +1349,9 @@ create function public.book_appointment(
   p_customer_phone text,
   p_note           text default '',
   p_customer_email text default null,
-  p_coupon_id      uuid default null
+  p_coupon_id      uuid default null,
+  p_extra_service_ids uuid[] default '{}',
+  p_party_size     int default 1
 )
 returns jsonb
 language plpgsql volatile security definer set search_path = ''
@@ -1335,6 +1370,11 @@ declare
   v_status text;
   v_phone  text := trim(coalesce(p_customer_phone, ''));
   v_email  text;
+  v_mins   int;
+  v_total  numeric(10, 2);
+  v_names  text;
+  v_extra  uuid[] := coalesce(p_extra_service_ids, '{}');
+  v_party  int := coalesce(p_party_size, 1);
 begin
   if v_uid is null then
     raise exception 'Randevu almak için giriş yapın.';
@@ -1381,6 +1421,16 @@ begin
   select * into s from public.services
   where id = p_service_id and business_id = p_business_id and is_active;
   if not found then raise exception 'Hizmet bulunamadı.'; end if;
+  if v_party not between 1 and 4 then raise exception 'Bir randevuda en fazla 4 kişi olabilir.'; end if;
+  v_mins := public.booking_minutes(b.id, s.id, v_extra, v_party);
+  if v_mins is null then raise exception 'Seçtiğiniz hizmetler birlikte alınamıyor; en fazla 3 ek hizmet seçin.'; end if;
+  -- Fiyat ve ad: hizmetlerin toplamı, kişi sayısıyla.
+  select (s.price + coalesce(sum(x.price), 0)) * v_party,
+         left(concat_ws(' + ', s.name, string_agg(x.name, ' + ' order by array_position(v_extra, x.id)))
+              || case when v_party > 1 then ' · ' || v_party || ' kişi' else '' end, 200)
+  into v_total, v_names
+  from public.services x
+  where x.id = any (v_extra) and x.business_id = b.id;
 
   -- Kupon: işletmenin kuponu, paketinde kupon varken, bu hizmette ve bu saatte geçerli; kod müşterinin elinde kullanılabilir.
   -- Kupon fiyatı hizmetin güncel fiyatı üzerinden sunucuda hesaplanır.
@@ -1403,7 +1453,7 @@ begin
 
   select x.staff_id into v_staff
   from public.get_available_slots(
-    p_business_id, p_service_id, (p_starts_at at time zone b.timezone)::date, p_staff_id
+    p_business_id, p_service_id, (p_starts_at at time zone b.timezone)::date, p_staff_id, null, v_extra, v_party
   ) x
   where x.slot_start = p_starts_at
   limit 1;
@@ -1412,22 +1462,25 @@ begin
     raise exception 'Bu saat artık müsait değil, lütfen başka bir saat seçin.';
   end if;
 
-  v_price := s.price;
+  v_price := v_total;
   if p_coupon_id is not null then
     -- Henüz alınmamış kupon randevuyla birlikte alınır (sınır ve durdurma kuralları claim_coupon'da).
     if cl.id is null then cl := public.claim_coupon(c.id); end if;
-    v_price := public.coupon_price(s.price, c.discount_type, c.discount_value);
+    -- İndirim yalnızca bir kişinin ana hizmetine uygulanır; ek hizmet ve diğer kişiler liste fiyatından.
+    v_price := v_total - s.price + public.coupon_price(s.price, c.discount_type, c.discount_value);
   end if;
 
   insert into public.appointments (
     business_id, service_id, staff_id, customer_id, service_name,
-    customer_name, customer_phone, customer_email, note, price, list_price, coupon_claim_id, starts_at, ends_at, status
+    customer_name, customer_phone, customer_email, note, price, list_price, coupon_claim_id, starts_at, ends_at, status,
+    extra_service_ids, party_size
   ) values (
-    b.id, s.id, v_staff, v_uid, s.name,
+    b.id, s.id, v_staff, v_uid, v_names,
     trim(p_customer_name), v_phone, v_email, left(coalesce(p_note, ''), 500), v_price,
-    case when p_coupon_id is not null then s.price end, cl.id,
-    p_starts_at, p_starts_at + make_interval(mins => s.duration_minutes),
-    case when public.needs_confirmation(b, v_uid) then 'pending' else 'confirmed' end
+    case when p_coupon_id is not null then v_total end, cl.id,
+    p_starts_at, p_starts_at + make_interval(mins => v_mins),
+    case when public.needs_confirmation(b, v_uid) then 'pending' else 'confirmed' end,
+    v_extra, v_party
   )
   returning id, status into v_id, v_status;
 
@@ -1644,7 +1697,7 @@ begin
     raise exception 'Bu randevunun saatini en fazla 3 kez değiştirebilirsiniz. Yeni saat için işletmeyi arayın ya da randevuyu iptal edin.';
   end if;
 
-  select duration_minutes into v_mins from public.services where id = a.service_id;
+  v_mins := public.booking_minutes(a.business_id, a.service_id, a.extra_service_ids, a.party_size);
   if v_mins is null then
     raise exception 'Bu hizmet artık sunulmuyor; saati değiştirmek için işletmeyle görüşün.';
   end if;
@@ -1662,7 +1715,7 @@ begin
 
   select x.staff_id into v_staff
   from public.get_available_slots(
-    a.business_id, a.service_id, (p_starts_at at time zone b.timezone)::date, p_staff_id, a.id
+    a.business_id, a.service_id, (p_starts_at at time zone b.timezone)::date, p_staff_id, a.id, a.extra_service_ids, a.party_size
   ) x
   where x.slot_start = p_starts_at
   limit 1;

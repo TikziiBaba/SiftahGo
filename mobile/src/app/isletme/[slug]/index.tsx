@@ -51,6 +51,9 @@ export default function BusinessScreen() {
   const scrollToBooking = useRef(!!rebookService);
 
   const [serviceId, setServiceId] = useState<string | null>(null);
+  // Aynı randevuya ek hizmetler ("saç + sakal") ve kişi sayısı ("anne + çocuk"); süre ve fiyat toplanır.
+  const [extraIds, setExtraIds] = useState<string[]>([]);
+  const [party, setParty] = useState(1);
   const [staffId, setStaffId] = useState('');
   // Bu işletmeden daha önce alınan hizmetler (giriş yapmışsa): en yeni randevu önce
   const [past, setPast] = useState<{ service_id: string; staff_id: string | null; starts_at: string }[]>([]);
@@ -137,15 +140,22 @@ export default function BusinessScreen() {
     }, []),
   );
 
-  const slotKey = `${serviceId}|${staffId}|${day}|${reload}`;
+  const slotKey = `${serviceId}|${extraIds.join(',')}|${party}|${staffId}|${day}|${reload}`;
   const times = slotResult?.key === slotKey ? slotResult.times : null;
 
   useEffect(() => {
     if (!data || !serviceId) return;
     let active = true;
-    const key = `${serviceId}|${staffId}|${day}|${reload}`;
+    const key = `${serviceId}|${extraIds.join(',')}|${party}|${staffId}|${day}|${reload}`;
     supabase
-      .rpc('get_available_slots', { p_business_id: data.business.id, p_service_id: serviceId, p_day: day, p_staff_id: staffId || null })
+      .rpc('get_available_slots', {
+        p_business_id: data.business.id,
+        p_service_id: serviceId,
+        p_day: day,
+        p_staff_id: staffId || null,
+        ...(extraIds.length ? { p_extra_service_ids: extraIds } : {}),
+        ...(party > 1 ? { p_party_size: party } : {}),
+      })
       .then(({ data: rows }) => {
         if (!active) return;
         setSlotResult({ key, times: [...new Set(((rows ?? []) as { slot_start: string }[]).map((r) => r.slot_start))] });
@@ -153,7 +163,7 @@ export default function BusinessScreen() {
     return () => {
       active = false;
     };
-  }, [data, serviceId, staffId, day, reload]);
+  }, [data, serviceId, extraIds, party, staffId, day, reload]);
 
   const isOpen = useCallback((d: string) => data?.hours.find((h) => h.weekday === isoWeekday(d))?.is_open ?? false, [data]);
 
@@ -198,9 +208,13 @@ export default function BusinessScreen() {
     );
   }
   const service = services.find((x) => x.id === serviceId);
-  // Kaydı olmayan personel tüm hizmetleri verir.
+  const chosen = service ? [service, ...extraIds.flatMap((id) => services.filter((x) => x.id === id))] : [];
+  const totalMinutes = chosen.reduce((t, x) => t + x.duration_minutes, 0) * party;
+  const totalPrice = chosen.reduce((t, x) => t + Number(x.price), 0) * party;
+  const summary = chosen.map((x) => x.name).join(' + ') + (party > 1 ? ` · ${party} kişi` : '');
+  // Kaydı olmayan personel tüm hizmetleri verir; seçilen hizmetlerin hepsini yapabilen personel listelenir.
   const staff = data.staff.filter(
-    (p) => !links.some((l) => l.staff_id === p.id) || links.some((l) => l.staff_id === p.id && l.service_id === serviceId),
+    (p) => !links.some((l) => l.staff_id === p.id) || chosen.every((c) => links.some((l) => l.staff_id === p.id && l.service_id === c.id)),
   );
   const location = [business.address, business.district, business.city].filter(Boolean).join(', ');
   const today = isoWeekday(todayStr());
@@ -265,6 +279,7 @@ export default function BusinessScreen() {
 
   function selectService(id: string) {
     setServiceId(id === serviceId ? null : id);
+    setExtraIds([]);
     setStaffId('');
     setTime(null);
     // Seçili gün kapalıysa ilk açık güne geç.
@@ -412,6 +427,54 @@ export default function BusinessScreen() {
                   scrollToBooking.current = false;
                   scrollRef.current?.scrollTo({ y: bodyY.current + e.nativeEvent.layout.y - insets.top - 64, animated: true });
                 }}>
+                <Card style={{ gap: 12 }}>
+                  {services.length > 1 && (
+                    <>
+                      <Text variant="bodyStrong">Aynı randevuya ekle</Text>
+                      <View style={styles.wrap}>
+                        {services
+                          .filter((x) => x.id !== service.id)
+                          .map((x) => {
+                            const on = extraIds.includes(x.id);
+                            return (
+                              <Chip
+                                key={x.id}
+                                label={`${x.name}${Number(x.price) > 0 ? ` · ${formatPrice(x.price)}` : ''}`}
+                                icon={on ? 'checkmark' : 'add'}
+                                selected={on}
+                                disabled={!on && extraIds.length >= 3}
+                                onPress={() => {
+                                  setExtraIds((l) => (on ? l.filter((v) => v !== x.id) : [...l, x.id]));
+                                  setStaffId('');
+                                  setTime(null);
+                                }}
+                              />
+                            );
+                          })}
+                      </View>
+                    </>
+                  )}
+                  <View style={[styles.rowCenter, { justifyContent: 'space-between' }]}>
+                    <View style={{ flex: 1 }}>
+                      <Text variant="bodyStrong">Kaç kişi?</Text>
+                      <Text variant="caption" tone="muted">
+                        Arka arkaya aynı personele yazılır
+                      </Text>
+                    </View>
+                    <IconButton icon="remove" label="Kişi azalt" disabled={party <= 1} onPress={() => { setParty((n) => n - 1); setTime(null); }} />
+                    <Text variant="bodyStrong" style={{ width: 24, textAlign: 'center' }}>
+                      {party}
+                    </Text>
+                    <IconButton icon="add" label="Kişi artır" disabled={party >= 4} onPress={() => { setParty((n) => n + 1); setTime(null); }} />
+                  </View>
+                  {extraIds.length > 0 || party > 1 ? (
+                    <Text tone="secondary">
+                      Toplam: {formatDuration(totalMinutes)}
+                      {totalPrice > 0 ? ` · ${formatPrice(totalPrice)}` : ''}
+                    </Text>
+                  ) : null}
+                </Card>
+
                 {staff.length > 1 && (
                   <>
                     <SectionTitle title="Personel" />
@@ -565,11 +628,11 @@ export default function BusinessScreen() {
           <Animated.View entering={FadeInDown.duration(220)} style={[s.bar, { paddingBottom: Math.max(insets.bottom, 12) + 4 }]}>
             <View style={{ flex: 1, gap: 2 }}>
               <Text variant="bodyStrong" numberOfLines={1}>
-                {service.name}
+                {summary}
               </Text>
               <Text variant="caption" tone={time ? 'brand' : 'muted'} numberOfLines={1}>
-                {time ? `${formatDate(time)} · ${formatTime(time)}` : `${formatDuration(service.duration_minutes)} · saat seçin`}
-                {Number(service.price) > 0 ? ` · ${formatPrice(service.price)}` : ''}
+                {time ? `${formatDate(time)} · ${formatTime(time)}` : `${formatDuration(totalMinutes)} · saat seçin`}
+                {totalPrice > 0 ? ` · ${formatPrice(totalPrice)}` : ''}
               </Text>
             </View>
             <Button
@@ -579,7 +642,7 @@ export default function BusinessScreen() {
               onPress={() =>
                 router.push({
                   pathname: '/isletme/[slug]/randevu',
-                  params: { slug: business.slug, service: service.id, staff: staffId, time: time! },
+                  params: { slug: business.slug, service: service.id, staff: staffId, time: time!, extra: extraIds.join(','), party: String(party) },
                 })
               }
             />

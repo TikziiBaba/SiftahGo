@@ -4,7 +4,7 @@ import Link from "next/link";
 import posthog from "posthog-js";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { BellRing, ChevronLeft, Loader2 } from "lucide-react";
+import { BellRing, ChevronLeft, Loader2, Minus, Plus, Users } from "lucide-react";
 import { AddToCalendar } from "@/components/add-to-calendar";
 import { AppointmentTicket } from "@/components/appointment-ticket";
 import { bookableDays, DayStrip, SlotGrid } from "@/components/slot-picker";
@@ -57,6 +57,9 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
   // Sunucunun hesapladığı ödenecek tutar (kuponluysa indirimli)
   const [bookedPrice, setBookedPrice] = useState<number | null>(null);
   const [couponId, setCouponId] = useState("");
+  // Aynı randevuya ek hizmetler ("saç + sakal") ve kişi sayısı ("anne + çocuk"); süre ve fiyat toplanır (booking_minutes).
+  const [extraIds, setExtraIds] = useState<string[]>([]);
+  const [party, setParty] = useState(1);
   const { coupons, claims, refresh: refreshCoupons } = useShopCoupons(business.id, couponsEnabled);
   const [reload, setReload] = useState(0);
   // Bekleme listesine yazıldığı günler (giriş yapmışsa)
@@ -67,16 +70,23 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
   const [past, setPast] = useState<{ service_id: string; staff_id: string | null; starts_at: string }[]>([]);
 
   const service = services.find((s) => s.id === serviceId);
+  const extras = extraIds.flatMap((id) => services.filter((s) => s.id === id));
+  const chosenServices = service ? [service, ...extras] : [];
+  const totalMinutes = chosenServices.reduce((t, s) => t + s.duration_minutes, 0) * party;
+  const totalPrice = chosenServices.reduce((t, s) => t + Number(s.price), 0) * party;
+  const summary = chosenServices.map((s) => s.name).join(" + ") + (party > 1 ? ` · ${party} kişi` : "");
   // Hizmet başına en son randevu; artık sunulmayan hizmet gösterilmez.
   const previous = past.flatMap((v, i) => {
     const s = services.find((x) => x.id === v.service_id);
     return s && past.findIndex((o) => o.service_id === v.service_id) === i ? [{ ...v, service: s }] : [];
   });
-  // Kaydı olmayan personel tüm hizmetleri verir.
+  // Kaydı olmayan personel tüm hizmetleri verir; seçilen hizmetlerin hepsini yapabilen personel listelenir.
   const staff = allStaff.filter(
-    (p) => !staffServices.some((l) => l.staff_id === p.id) || staffServices.some((l) => l.staff_id === p.id && l.service_id === serviceId),
+    (p) =>
+      !staffServices.some((l) => l.staff_id === p.id) ||
+      chosenServices.every((c) => staffServices.some((l) => l.staff_id === p.id && l.service_id === c.id)),
   );
-  const slotKey = `${serviceId}|${staffId}|${day}|${reload}`;
+  const slotKey = `${serviceId}|${extraIds.join(",")}|${party}|${staffId}|${day}|${reload}`;
   const times = slotResult?.key === slotKey ? slotResult.times : null;
   // Seçilen hizmet ve saate uyan kuponlar (gösterim için; asıl denetim sunucuda). Kullanılmış ya da başka randevuya
   // bağlı kod, hakkı biten kupon ve fiyatsız hizmet sunulmaz.
@@ -123,13 +133,15 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
   useEffect(() => {
     if (!serviceId) return;
     let active = true;
-    const key = `${serviceId}|${staffId}|${day}|${reload}`;
+    const key = `${serviceId}|${extraIds.join(",")}|${party}|${staffId}|${day}|${reload}`;
     supabase
       .rpc("get_available_slots", {
         p_business_id: business.id,
         p_service_id: serviceId,
         p_day: day,
         p_staff_id: staffId || null,
+        ...(extraIds.length > 0 && { p_extra_service_ids: extraIds }),
+        ...(party > 1 && { p_party_size: party }),
       })
       .then(({ data }) => {
         if (!active) return;
@@ -139,7 +151,7 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
     return () => {
       active = false;
     };
-  }, [supabase, business.id, serviceId, staffId, day, reload]);
+  }, [supabase, business.id, serviceId, extraIds, party, staffId, day, reload]);
 
   async function joinWaitlist() {
     setWaitBusy(true);
@@ -173,6 +185,8 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
       p_customer_phone: form.phone,
       p_note: form.note,
       ...(chosen && { p_coupon_id: chosen.id }),
+      ...(extraIds.length > 0 && { p_extra_service_ids: extraIds }),
+      ...(party > 1 && { p_party_size: party }),
     });
     setBusy(false);
     if (error) {
@@ -183,8 +197,8 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
       }
       return;
     }
-    posthog.capture("randevu_alindi", { isletme: business.slug, hizmet: service.name });
-    setBookedPrice(Number((data as { price?: number } | null)?.price ?? service.price));
+    posthog.capture("randevu_alindi", { isletme: business.slug, hizmet: service.name, ek_hizmet: extraIds.length, kisi: party });
+    setBookedPrice(Number((data as { price?: number } | null)?.price ?? totalPrice));
     if (chosen) refreshCoupons();
     setBooked((data as { status: "pending" | "confirmed" } | null)?.status ?? (business.auto_confirm ? "confirmed" : "pending"));
   }
@@ -202,11 +216,11 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
       <section className="py-2 text-center">
         <AppointmentTicket
           businessName={business.name}
-          serviceName={service.name}
+          serviceName={summary}
           staffName={allStaff.find((p) => p.id === staffId)?.name}
           startsAt={time}
-          durationMinutes={service.duration_minutes}
-          price={bookedPrice ?? Number(service.price)}
+          durationMinutes={totalMinutes}
+          price={bookedPrice ?? totalPrice}
           place={[business.address, business.district, business.city].filter(Boolean).join(", ")}
           confirmed={booked === "confirmed"}
         />
@@ -215,9 +229,9 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
         </p>
         <div className="mt-5 flex flex-wrap justify-center gap-3">
           <AddToCalendar
-            title={`${business.name} — ${service.name}`}
+            title={`${business.name} — ${summary}`}
             startsAt={time}
-            endsAt={new Date(new Date(time).getTime() + service.duration_minutes * 60000).toISOString()}
+            endsAt={new Date(new Date(time).getTime() + totalMinutes * 60000).toISOString()}
             location={[business.name, business.address, business.district, business.city].filter(Boolean).join(", ")}
             className="btn btn-secondary"
           />
@@ -259,6 +273,7 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
                     className="btn btn-secondary shrink-0"
                     onClick={() => {
                       setServiceId(v.service.id);
+                      setExtraIds([]);
                       const offers = !staffServices.some((l) => l.staff_id === v.staff_id) || staffServices.some((l) => l.staff_id === v.staff_id && l.service_id === v.service.id);
                       setStaffId(v.staff_id && offers && allStaff.some((p) => p.id === v.staff_id) ? v.staff_id : "");
                       setTime(null);
@@ -278,6 +293,7 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
                 type="button"
                 onClick={() => {
                   setServiceId(s.id);
+                  setExtraIds([]);
                   setStaffId("");
                   setTime(null);
                 }}
@@ -297,6 +313,86 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
             </li>
           ))}
         </ul>
+        {service && (
+          <div className="mt-4 space-y-3 rounded-xl border border-line p-3.5">
+            {services.length > 1 && (
+              <div>
+                <p className="text-sm font-medium">Aynı randevuya ekle</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {services
+                    .filter((s) => s.id !== service.id)
+                    .map((s) => {
+                      const on = extraIds.includes(s.id);
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          aria-pressed={on}
+                          disabled={!on && extraIds.length >= 3}
+                          onClick={() => {
+                            setExtraIds((l) => (on ? l.filter((x) => x !== s.id) : [...l, s.id]));
+                            setStaffId("");
+                            setTime(null);
+                          }}
+                          className={`rounded-full border px-3 py-1.5 text-sm transition disabled:opacity-40 ${
+                            on ? "border-brand-400 bg-brand-400/10 font-medium text-accent" : "border-line-strong hover:bg-tint/5"
+                          }`}
+                        >
+                          {on ? "✓ " : "+ "}
+                          {s.name}
+                          {Number(s.price) > 0 && <span className="text-ink-3"> · {formatPrice(s.price)}</span>}
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="flex items-center gap-2 text-sm font-medium">
+                <Users className="size-4 text-ink-3" /> Kaç kişi?
+                <span className="font-normal text-ink-3">Arka arkaya aynı personele yazılır</span>
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  aria-label="Kişi azalt"
+                  disabled={party <= 1}
+                  onClick={() => {
+                    setParty((n) => n - 1);
+                    setTime(null);
+                  }}
+                  className="btn btn-ghost p-1.5"
+                >
+                  <Minus className="size-4" />
+                </button>
+                <span className="w-6 text-center font-semibold tabular-nums">{party}</span>
+                <button
+                  type="button"
+                  aria-label="Kişi artır"
+                  disabled={party >= 4}
+                  onClick={() => {
+                    setParty((n) => n + 1);
+                    setTime(null);
+                  }}
+                  className="btn btn-ghost p-1.5"
+                >
+                  <Plus className="size-4" />
+                </button>
+              </div>
+            </div>
+            {(extraIds.length > 0 || party > 1) && (
+              <p className="text-sm text-ink-2">
+                Toplam: <span className="font-semibold">{formatDuration(totalMinutes)}</span>
+                {totalPrice > 0 && (
+                  <>
+                    {" · "}
+                    <span className="font-semibold">{formatPrice(totalPrice)}</span>
+                  </>
+                )}
+              </p>
+            )}
+          </div>
+        )}
       </Step>
 
       {service && staff.length > 1 && (
@@ -373,7 +469,7 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
             <ChevronLeft className="size-4" /> Saati değiştir
           </button>
           <p className="font-medium">
-            {formatDate(time)}, {formatTime(time)} · {service.name}
+            {formatDate(time)}, {formatTime(time)} · {summary}
           </p>
           <p className="mt-2 text-sm text-ink-3">
             Randevuyu tamamlamak için giriş yapın. Hesabınızla randevularınızı takip eder, gerekirse erteler veya iptal edersiniz.
@@ -391,8 +487,14 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
             <ChevronLeft className="size-4" /> Saati değiştir
           </button>
           <p className="font-medium">
-            {formatDate(time)}, {formatTime(time)} · {service.name}
+            {formatDate(time)}, {formatTime(time)} · {summary}
           </p>
+          {(extraIds.length > 0 || party > 1) && (
+            <p className="mt-1 text-sm text-ink-3">
+              {formatDuration(totalMinutes)}
+              {totalPrice > 0 && ` · ${formatPrice(totalPrice)}`}
+            </p>
+          )}
           {offers.length > 0 && (
             <fieldset className="mt-4">
               <legend className="label">Kupon</legend>
@@ -414,8 +516,9 @@ export function BookingWidget({ business, services, staff: allStaff, staffServic
           {chosen && service && (
             <p className="mt-3 text-sm">
               Ödenecek tutar:{" "}
-              <span className="text-ink-3 line-through">{formatMoney(Number(service.price))}</span>{" "}
-              <span className="font-semibold">{formatMoney(couponPrice(Number(service.price), chosen))}</span>
+              <span className="text-ink-3 line-through">{formatMoney(totalPrice)}</span>{" "}
+              <span className="font-semibold">{formatMoney(totalPrice - Number(service.price) + couponPrice(Number(service.price), chosen))}</span>
+              {(extraIds.length > 0 || party > 1) && <span className="block text-xs text-ink-3">İndirim bir kişinin {service.name} hizmetine uygulanır.</span>}
             </p>
           )}
           <div className="mt-4 grid gap-3 sm:grid-cols-2">

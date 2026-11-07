@@ -306,6 +306,9 @@ export type Appointment = {
   customer_flagged: boolean;
   // Seansı düşülen paket (tamamlanınca)
   package_id: string | null;
+  // Aynı randevudaki ek hizmetler ve kişi sayısı (süre ve fiyat bunlarla toplanır)
+  extra_service_ids?: string[];
+  party_size?: number;
   // Gecikme haberi: son haberin dakikası/zamanı ve verilen haber sayısı (randevu saati değişmez)
   customer_late_minutes: number | null;
   customer_late_at: string | null;

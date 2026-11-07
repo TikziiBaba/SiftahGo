@@ -8,7 +8,7 @@ import { dayOf, errorMessage, formatDate, formatTime } from "@/lib/format";
 import type { Appointment, WorkingHour } from "@/lib/types";
 
 type Props = {
-  appointment: Pick<Appointment, "id" | "business_id" | "service_id" | "staff_id" | "starts_at" | "service_name">;
+  appointment: Pick<Appointment, "id" | "business_id" | "service_id" | "staff_id" | "starts_at" | "service_name" | "extra_service_ids" | "party_size">;
   onClose: () => void;
   onDone: () => void;
 };
@@ -42,6 +42,9 @@ export function RescheduleDialog({ appointment: a, onClose, onDone }: Props) {
         p_day: day,
         p_staff_id: a.staff_id,
         p_ignore: a.id,
+        // Çoklu hizmet / grup randevusu kendi toplam süresiyle aranır.
+        ...(a.extra_service_ids?.length && { p_extra_service_ids: a.extra_service_ids }),
+        ...((a.party_size ?? 1) > 1 && { p_party_size: a.party_size }),
       })
       .then(({ data }) => {
         if (!active) return;
@@ -52,7 +55,7 @@ export function RescheduleDialog({ appointment: a, onClose, onDone }: Props) {
     return () => {
       active = false;
     };
-  }, [supabase, a.id, a.business_id, a.service_id, a.staff_id, a.starts_at, day, reload]);
+  }, [supabase, a.id, a.business_id, a.service_id, a.staff_id, a.starts_at, a.extra_service_ids, a.party_size, day, reload]);
 
   async function save() {
     if (!time) return;

@@ -2391,5 +2391,46 @@ ok((await db.query(`select role from profiles where id = $1`, [UP2])).rows[0].ro
   await expectError(() => as(PC, `select attach_review_photo($1, $2)`, [url, pa]), /7 gün/, '7 günden eski yoruma fotoğraf eklenemez');
 }
 
+// Çoklu hizmet ("saç + sakal") ve grup ("anne + çocuk") randevusu
+{
+  const MO = '11111111-0000-0000-0000-0000000000a1';
+  const MC = '11111111-0000-0000-0000-0000000000a2';
+  await db.query(`insert into auth.users (id, email, raw_user_meta_data) values ($1, 'coklu@x.com', '{"role":"business"}'), ($2, 'coklu-m@x.com', '{}')`, [MO, MC]);
+  const mb = (await as(MO, `insert into businesses (owner_id, slug, name, city, category) values ($1, 'coklu-berber', 'Çoklu Berber', 'Sivas', 'berber') returning id`, [MO])).rows[0].id;
+  await db.query(`update businesses set approval_status = 'approved', is_published = true, plan_id = 'pro', subscription_ends_at = now() + interval '1 year' where id = $1`, [mb]);
+  const svc = async (name, mins, price) => (await as(MO, `insert into services (business_id, name, duration_minutes, price) values ($1, $2, $3, $4) returning id`, [mb, name, mins, price])).rows[0].id;
+  const sac = await svc('Saç', 30, 200);
+  const sakal = await svc('Sakal', 20, 100);
+  const yikama = await svc('Yıkama', 10, 50);
+  const other = (await db.query(`select id from services where business_id <> $1 limit 1`, [mb])).rows[0].id;
+  const md = (() => { const x = new Date(Date.now() + 3 * 864e5); while (x.getUTCDay() === 0) x.setTime(x.getTime() + 864e5); return x.toISOString().slice(0, 10); })();
+  const mbook = (t, extra, party) => as(MC, `select b from book_appointment($1, $2, null, $3, 'Ayşe Kaya', '05551230000', '', null, null, $4, $5) b`, [mb, sac, t, extra, party]);
+  const minutes = async (extra, party) => (await db.query(`select booking_minutes($1, $2, $3, $4) m`, [mb, sac, extra, party])).rows[0].m;
+  ok(await minutes([sakal], 2) === 100 && await minutes([], 1) === 30, 'süre hizmetlerin toplamı x kişi sayısı');
+  ok(await minutes([sac], 1) === null && await minutes([other], 1) === null && await minutes([sakal, sakal], 1) === null, 'ana hizmet tekrarı, başka işletmenin hizmeti ve aynı ek hizmet iki kez reddedilir');
+  const slots = (extra, party) => as(MC, `select slot_start from get_available_slots($1, $2, $3, null, null, $4, $5)`, [mb, sac, md, extra, party]);
+  const lastShort = (await slots([], 1)).rows.at(-1).slot_start;
+  const lastLong = (await slots([sakal], 2)).rows.at(-1).slot_start;
+  ok(lastLong < lastShort, 'uzun randevu kapanıştan önce sığacak saatlere kadar önerilir');
+  const r = (await mbook(`${md}T07:00:00Z`, [sakal, yikama], 2)).rows[0].b;
+  const row = (await db.query(`select service_name, price::text, extract(epoch from ends_at - starts_at)::int / 60 mins, party_size, extra_service_ids from appointments where id = $1`, [r.id])).rows[0];
+  ok(row.service_name === 'Saç + Sakal + Yıkama · 2 kişi' && row.price === '700.00' && row.mins === 120 && row.party_size === 2,
+    `çoklu hizmet ve 2 kişi tek randevuda: ${row.service_name}, ${row.price}, ${row.mins} dk`);
+  ok(Number(r.price) === 700, 'dönen fiyat toplam');
+  ok(!(await slots([], 1)).rows.some((x) => new Date(x.slot_start) >= new Date(`${md}T07:00:00Z`) && new Date(x.slot_start) < new Date(`${md}T09:00:00Z`)),
+    'randevunun tüm süresi dolu sayılır');
+  await expectError(() => mbook(`${md}T12:00:00Z`, [], 5), /en fazla 4 kişi/, '5 kişilik randevu alınamaz');
+  await expectError(() => mbook(`${md}T12:00:00Z`, [other], 1), /birlikte alınamıyor/, 'başka işletmenin hizmeti eklenemez');
+  await as(MC, `select reschedule_appointment($1, $2)`, [r.id, `${md}T12:00:00Z`]);
+  const moved = (await db.query(`select extract(epoch from ends_at - starts_at)::int / 60 mins from appointments where id = $1`, [r.id])).rows[0].mins;
+  ok(moved === 120, 'ertelenen çoklu randevu süresini korur');
+  await as(MO, `update appointments set party_size = 1, extra_service_ids = '{}' where id = $1`, [r.id]);
+  ok((await db.query(`select party_size from appointments where id = $1`, [r.id])).rows[0].party_size === 2, 'kişi sayısı ve ek hizmetler sonradan değiştirilemez');
+  // Ek hizmeti yapamayan personel önerilmez.
+  const [st1] = (await db.query(`select id from staff where business_id = $1`, [mb])).rows.map((x) => x.id);
+  await as(MO, `insert into staff_services (staff_id, service_id) values ($1, $2)`, [st1, sac]);
+  ok((await slots([sakal], 1)).rows.length === 0 && (await slots([], 1)).rows.length > 0, 'ek hizmeti yapmayan personelin saati önerilmez');
+}
+
 console.log(failures ? `\n${failures} TEST BAŞARISIZ` : '\nTÜM TESTLER GEÇTİ');
 process.exit(failures ? 1 : 0);
