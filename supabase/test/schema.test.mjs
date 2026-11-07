@@ -498,10 +498,20 @@ const tuesday = new Date(new Date(`${monday}T12:00:00Z`).getTime() + 864e5).toIS
 const done = (await book(C, svc30, `${tuesday}T07:00:00Z`)).rows[0].id;
 await expectError(() => as(C, `select add_review($1, 5, 'x')`, [done]), /tamamlanan/, 'tamamlanmamış randevu değerlendirilemez');
 await as(A, `update appointments set status = 'completed' where id = $1`, [done]);
+await expectError(() => as(C, `select add_review($1, 5, 'x')`, [done]), /saatiniz geldikten/, 'saati gelmeden tamamlanan randevu hemen değerlendirilemez');
+await db.query(`update appointments set starts_at = now() - interval '1 hour', ends_at = now() - interval '30 minutes' where id = $1`, [done]);
+// İşletme sahibi kendi işletmesinden randevu alıp tamamlasa da kendine puan veremez.
+const selfAppt = (await book(A, svc30, `${tuesday}T08:00:00Z`)).rows[0].id;
+await as(A, `update appointments set status = 'completed' where id = $1`, [selfAppt]);
+await db.query(`update appointments set starts_at = now() - interval '3 hours', ends_at = now() - interval '150 minutes' where id = $1`, [selfAppt]);
+await expectError(() => as(A, `select add_review($1, 5, 'x')`, [selfAppt]), /Kendi işletmenizi/, 'işletme sahibi kendi işletmesini değerlendiremez');
+await db.query(`delete from appointments where id = $1`, [selfAppt]);
 await expectError(() => as(null, `select add_review($1, 5, 'x')`, [done]), /tamamlanan/, 'anonim değerlendiremez');
 await expectError(() => as(C, `select add_review($1, 6, 'x')`, [done]), /1 ile 5/, 'geçersiz puan reddedildi');
 await as(C, `select add_review($1, 4, 'Çok memnun kaldım')`, [done]);
 await expectError(() => as(C, `select add_review($1, 5, 'x')`, [done]), /zaten/, 'ikinci değerlendirme reddedildi');
+// Rapor ve sonraki testler randevuyu salı saatinde bekler.
+await db.query(`update appointments set starts_at = $2, ends_at = $3 where id = $1`, [done, `${tuesday}T07:00:00Z`, `${tuesday}T07:30:00Z`]);
 let rb = (await db.query(`select rating_avg::text, rating_count from businesses where id = $1`, [biz])).rows[0];
 ok(rb.rating_avg === '4.0' && rb.rating_count === 1, `işletme puanı güncellendi: ${rb.rating_avg} (${rb.rating_count})`);
 const rv = (await as(null, `select customer_name, rating from reviews`)).rows;
@@ -2205,7 +2215,10 @@ ok((await db.query(`select role from profiles where id = $1`, [UP2])).rows[0].ro
   await expectError(() => as(RO, `select set_coupon_active($1, true)`, [gifts[0].id]), /yetkiniz/, 'doğum günü kuponu herkese açılamaz');
   ok((await as(RO, `select business_birthday_summary($1) s`, [zb.id])).rows[0].s.sent === 1, 'esnaf özetinde gönderilen sayısı');
   await as(R3, `insert into favorites (customer_id, business_id) values ($1, $2)`, [R3, zb.id]);
-  ok((await db.query(`select * from claim_birthday_gifts(50)`)).rows.length === 1, 'işletmeyi favorileyen müşteriye de gider');
+  ok((await db.query(`select * from claim_birthday_gifts(50)`)).rows.length === 0, 'yalnızca favorileyen müşteriye gitmez (randevu gerekir)');
+  // Doğum gününü değiştirip "gelecek yılın" kuponunu hemen almak: 300 gün dolmadan ikinci kupon yok.
+  await db.query(`update birthday_gifts set year = year - 1 where customer_id = $1`, [R1]);
+  ok((await db.query(`select * from claim_birthday_gifts(50)`)).rows.length === 0, '300 gün dolmadan aynı işletmeden ikinci kupon üretilmez');
 }
 
 console.log(failures ? `\n${failures} TEST BAŞARISIZ` : '\nTÜM TESTLER GEÇTİ');

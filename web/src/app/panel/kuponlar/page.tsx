@@ -60,7 +60,7 @@ function BirthdayCoupon() {
             <Cake className="size-4 text-gold" /> Doğum günü kuponu {on && <span className="chip bg-emerald-400/10 text-ok">Açık</span>}
           </h2>
           <p className="mt-1 text-sm text-ink-3">
-            Doğum gününü hesabına ekleyen müşterilerinize (randevusu gerçekleşmiş ya da sizi favorilemiş) doğum gününe 3 gün kala kendine özel kupon
+            Doğum gününü hesabına ekleyen müşterilerinize (son 2 yılda randevusu gerçekleşmiş) doğum gününe 3 gün kala kendine özel kupon
             gider; doğum gününden 7 gün sonrasına kadar geçerlidir.
           </p>
           {summary && summary.sent > 0 && (

@@ -1525,6 +1525,8 @@ $$;
 
 -- Müşteri gerçekleşen randevusunu değerlendirir: tamamlanan veya saati geçmiş onaylı randevu
 -- (işletme "Tamamlandı" işaretlemese de). İptal ve gelmedi değerlendirilemez.
+-- İşletme sahibi kendi işletmesini değerlendiremez. Saati başlamamış randevu "Tamamlandı" işaretlense de (erken gelen
+-- müşteri) değerlendirme saati gelince açılır: yoksa sahip ikinci hesapla randevu alıp hemen tamamlayarak puan yazabilirdi.
 create function public.add_review(p_appointment_id uuid, p_rating int, p_comment text default '')
 returns void
 language plpgsql volatile security definer set search_path = ''
@@ -1538,6 +1540,12 @@ begin
     and (status = 'completed' or (status = 'confirmed' and ends_at <= now()));
   if not found then
     raise exception 'Sadece tamamlanan randevularınızı değerlendirebilirsiniz.';
+  end if;
+  if exists (select 1 from public.businesses b where b.id = a.business_id and b.owner_id = auth.uid()) then
+    raise exception 'Kendi işletmenizi değerlendiremezsiniz.';
+  end if;
+  if a.starts_at > now() then
+    raise exception 'Randevu saatiniz geldikten sonra değerlendirebilirsiniz.';
   end if;
   if p_rating not between 1 and 5 then
     raise exception 'Puan 1 ile 5 arasında olmalı.';
@@ -5069,7 +5077,9 @@ as $$
 $$;
 
 -- Sunucu dakikada bir çağırır: doğum gününe 3 gün kalan (ya da bugün doğum günü olan) müşterilere kuponu üretir ve
--- haber için döndürür. Müşteri bu işletmede son 2 yılda randevusu gerçekleşmiş ya da işletmeyi favorilemiş olmalı.
+-- haber için döndürür. Müşteri bu işletmede son 2 yılda randevusu gerçekleşmiş olmalı (favori yetmez: doğum günü
+-- her an değiştirilebildiği için herkes istediği işletmeden istediği gün kupon alabilirdi). Bir işletmeden bir
+-- müşteriye 300 günde en fazla bir kupon: doğum gününü ileri alıp aynı yıl ikinci kupon alınamaz.
 -- Kupon bugünden doğum gününden 7 gün sonrasına kadar geçerlidir. Bildirim tekrar denenmez; kupon "Kuponlarım"da kalır.
 create function public.claim_birthday_gifts(p_limit int default 50)
 returns table (
@@ -5104,15 +5114,16 @@ begin
       and public.is_bookable(b.id)
       and public.plan_has_feature(b.id, 'coupons')
       and public.next_birthday(p.birth_month, p.birth_day, t.today) - t.today <= 3
-      and (exists (select 1 from public.appointments a
-                   where a.business_id = b.id and a.customer_id = p.id and a.starts_at > now() - interval '2 years'
-                     and (a.status = 'completed' or (a.status = 'confirmed' and a.ends_at <= now())))
-           or exists (select 1 from public.favorites f where f.business_id = b.id and f.customer_id = p.id))
+      and exists (select 1 from public.appointments a
+                  where a.business_id = b.id and a.customer_id = p.id and a.starts_at > now() - interval '2 years'
+                    and a.starts_at <= now()
+                    and (a.status = 'completed' or (a.status = 'confirmed' and a.ends_at <= now())))
       and not exists (select 1 from public.blocked_customers k where k.business_id = b.id and k.customer_id = p.id)
       and not exists (
         select 1 from public.birthday_gifts g
         where g.business_id = b.id and g.customer_id = p.id
-          and g.year = extract(year from public.next_birthday(p.birth_month, p.birth_day, t.today))::int
+          and (g.year = extract(year from public.next_birthday(p.birth_month, p.birth_day, t.today))::int
+               or g.created_at > now() - interval '300 days')
       )
     limit p_limit
   loop

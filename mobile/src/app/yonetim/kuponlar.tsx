@@ -67,7 +67,7 @@ function BirthdayCoupon({ business }: { business: Business }) {
         {on && <Badge label="Açık" fg={colors.success} />}
       </View>
       <Text variant="caption" tone="muted">
-        Doğum gününü ekleyen müşterilerinize (randevusu gerçekleşmiş ya da sizi favorilemiş) doğum gününe 3 gün kala kendine özel kupon gider;
+        Doğum gününü ekleyen müşterilerinize (son 2 yılda randevusu gerçekleşmiş) doğum gününe 3 gün kala kendine özel kupon gider;
         doğum gününden 7 gün sonrasına kadar geçerlidir.
       </Text>
       {summary && summary.sent > 0 && (
