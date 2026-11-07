@@ -103,5 +103,14 @@
       "Kuponlarda doğum günü kuponu: doğum gününü ekleyen müşterilerinize kendine özel indirim hediye edin.",
       "Profilinize doğum gününüzü ekleyebilir, yaklaşan randevunuzu tek dokunuşla takviminize ekleyebilirsiniz."
     ]
+  },
+  {
+    "id": 14,
+    "date": "2026-11-07",
+    "items": [
+      "Randevunun saatini en fazla 3 kez değiştirebilirsiniz; daha fazlası için işletmeyi arayın.",
+      "Değerlendirme, işletme randevuyu tamamlandı olarak işaretlemediyse randevu bittikten 2 saat sonra açılır.",
+      "Seans paketiniz hesabınıza bağlanır; başkası sizin telefonunuzu yazarak paketinizi kullanamaz."
+    ]
   }
 ]
